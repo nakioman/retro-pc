@@ -54,6 +54,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
     };
 
     private readonly Func<CancellationToken, Task<Stream>> streamFactory;
+    private long nextRequestId;
 
     internal RetroBoxFloppyControlClient(Func<CancellationToken, Task<Stream>> streamFactory)
     {
@@ -71,26 +72,52 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         bool readOnly,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("Command serialization is added in Task 2.");
+        return SendAsync(
+            "floppy.insert",
+            new Dictionary<string, object?>
+            {
+                ["drive"] = drive,
+                ["path"] = imagePath,
+                ["read_only"] = readOnly
+            },
+            cancellationToken);
     }
 
     public Task<RetroBoxFloppyStatus> EjectAsync(
         int drive,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("Command serialization is added in Task 2.");
+        return SendAsync(
+            "floppy.eject",
+            new Dictionary<string, object?> { ["drive"] = drive },
+            cancellationToken);
     }
 
     public Task<RetroBoxFloppyStatus> StatusAsync(
         int drive,
         CancellationToken cancellationToken = default)
     {
-        return SendAsync(cancellationToken);
+        return SendAsync(
+            "floppy.status",
+            new Dictionary<string, object?> { ["drive"] = drive },
+            cancellationToken);
     }
 
-    private async Task<RetroBoxFloppyStatus> SendAsync(CancellationToken cancellationToken)
+    private async Task<RetroBoxFloppyStatus> SendAsync(
+        string command,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken cancellationToken)
     {
         await using var stream = await streamFactory(cancellationToken);
+        var request = new FloppyControlRequest(
+            $"req-{Interlocked.Increment(ref nextRequestId)}",
+            command,
+            parameters);
+
+        await JsonSerializer.SerializeAsync(stream, request, JsonOptions, cancellationToken);
+        await stream.WriteAsync("\n"u8.ToArray(), cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+
         using var reader = new StreamReader(stream, leaveOpen: true);
         var line = await reader.ReadLineAsync(cancellationToken);
         if (line is null)
@@ -121,4 +148,9 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         var detailsJson = error.TryGetProperty("details", out var details) ? details.GetRawText() : null;
         throw new RetroBoxFloppyControlException(code, message, detailsJson);
     }
+
+    private sealed record FloppyControlRequest(
+        string Id,
+        string Command,
+        IReadOnlyDictionary<string, object?> Params);
 }

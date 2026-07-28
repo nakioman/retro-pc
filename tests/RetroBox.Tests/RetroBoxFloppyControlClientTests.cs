@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using RetroBox.Core;
 
 namespace RetroBox.Tests;
@@ -40,6 +41,71 @@ public sealed class RetroBoxFloppyControlClientTests
         Assert.Equal("invalid_drive", error.Code);
         Assert.Equal("Drive must be an integer from 0 through 3.", error.Message);
         Assert.Equal("""{"drive":4}""", error.DetailsJson);
+    }
+
+    [Fact]
+    public async Task InsertAsync_writes_insert_request_as_one_json_line()
+    {
+        var server = new ScriptedFloppySocket(SuccessResponse());
+        var client = new RetroBoxFloppyControlClient(server.OpenAsync);
+
+        await client.InsertAsync(0, "/data/floppies/test.img", readOnly: true);
+
+        Assert.EndsWith("\n", server.RequestText);
+        Assert.Single(server.RequestText.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        using var document = JsonDocument.Parse(server.RequestText);
+        var root = document.RootElement;
+        Assert.Equal("floppy.insert", root.GetProperty("command").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("id").GetString()));
+        var parameters = root.GetProperty("params");
+        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+        Assert.Equal("/data/floppies/test.img", parameters.GetProperty("path").GetString());
+        Assert.True(parameters.GetProperty("read_only").GetBoolean());
+    }
+
+    [Fact]
+    public async Task EjectAsync_writes_eject_request_as_one_json_line()
+    {
+        var server = new ScriptedFloppySocket(SuccessResponse(inserted: false, path: null, readOnly: false));
+        var client = new RetroBoxFloppyControlClient(server.OpenAsync);
+
+        await client.EjectAsync(0);
+
+        Assert.EndsWith("\n", server.RequestText);
+        using var document = JsonDocument.Parse(server.RequestText);
+        var root = document.RootElement;
+        Assert.Equal("floppy.eject", root.GetProperty("command").GetString());
+        var parameters = root.GetProperty("params");
+        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+        Assert.False(parameters.TryGetProperty("path", out _));
+        Assert.False(parameters.TryGetProperty("read_only", out _));
+    }
+
+    [Fact]
+    public async Task StatusAsync_writes_status_request_as_one_json_line()
+    {
+        var server = new ScriptedFloppySocket(SuccessResponse());
+        var client = new RetroBoxFloppyControlClient(server.OpenAsync);
+
+        await client.StatusAsync(0);
+
+        Assert.EndsWith("\n", server.RequestText);
+        using var document = JsonDocument.Parse(server.RequestText);
+        var root = document.RootElement;
+        Assert.Equal("floppy.status", root.GetProperty("command").GetString());
+        var parameters = root.GetProperty("params");
+        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+    }
+
+    private static string SuccessResponse(
+        bool inserted = true,
+        string? path = "/data/floppies/test.img",
+        bool readOnly = true)
+    {
+        var insertedJson = JsonSerializer.Serialize(inserted);
+        var pathJson = path is null ? "null" : JsonSerializer.Serialize(path);
+        var readOnlyJson = JsonSerializer.Serialize(readOnly);
+        return $"{{\"id\":\"req-1\",\"ok\":true,\"result\":{{\"drive\":0,\"inserted\":{insertedJson},\"path\":{pathJson},\"read_only\":{readOnlyJson},\"busy\":false,\"changed\":true}}}}\n";
     }
 
     private sealed class ScriptedFloppySocket(string response) : Stream
