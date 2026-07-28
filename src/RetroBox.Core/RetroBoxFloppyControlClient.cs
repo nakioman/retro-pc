@@ -125,26 +125,44 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         object parameters,
         CancellationToken cancellationToken)
     {
-        await using var stream = await streamFactory(cancellationToken);
-        var request = new FloppyControlRequest(
-            $"req-{Interlocked.Increment(ref nextRequestId)}",
-            command,
-            parameters);
+        try
+        {
+            await using var stream = await streamFactory(cancellationToken);
+            var request = new FloppyControlRequest(
+                $"req-{Interlocked.Increment(ref nextRequestId)}",
+                command,
+                parameters);
 
-        await JsonSerializer.SerializeAsync(stream, request, JsonOptions, cancellationToken);
-        await stream.WriteAsync(NewLine, cancellationToken);
-        await stream.FlushAsync(cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, request, JsonOptions, cancellationToken);
+            await stream.WriteAsync(NewLine, cancellationToken);
+            await stream.FlushAsync(cancellationToken);
 
-        using var reader = new StreamReader(stream, leaveOpen: true);
-        var line = await reader.ReadLineAsync(cancellationToken);
-        if (line is null)
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            var line = await reader.ReadLineAsync(cancellationToken);
+            if (line is null)
+            {
+                throw new RetroBoxFloppyControlException(
+                    "internal_failure",
+                    "86Box floppy control socket closed without a response.");
+            }
+
+            try
+            {
+                return ParseResponse(line);
+            }
+            catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+            {
+                throw new RetroBoxFloppyControlException(
+                    "internal_failure",
+                    $"86Box floppy control response is malformed: {ex.Message}");
+            }
+        }
+        catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
         {
             throw new RetroBoxFloppyControlException(
                 "internal_failure",
-                "86Box floppy control socket closed without a response.");
+                $"86Box floppy control socket is unavailable: {ex.Message}");
         }
-
-        return ParseResponse(line);
     }
 
     private static RetroBoxFloppyStatus ParseResponse(string line)

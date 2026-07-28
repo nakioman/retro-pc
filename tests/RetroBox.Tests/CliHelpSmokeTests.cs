@@ -27,4 +27,42 @@ public sealed class CliHelpSmokeTests
 
         Assert.Equal(0, exitCode);
     }
+
+    [Fact]
+    public void Daemon_invokes_configured_runner_with_socket_override()
+    {
+        RetroBoxDaemonCommandRequest? request = null;
+        var command = CliCommandFactory.CreateRootCommand(daemonRunner: captured =>
+        {
+            request = captured;
+            return 0;
+        });
+
+        var exitCode = command.Parse([
+            "daemon",
+            "--config-root",
+            "/tmp/retrobox-config",
+            "--floppy-control-socket",
+            "/Users/nacho/Games/86Box/86box.socket",
+        ]).Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(request);
+        Assert.Equal("/tmp/retrobox-config", request.ConfigRoot);
+        Assert.Equal("/Users/nacho/Games/86Box/86box.socket", request.FloppyControlSocketPath);
+    }
+
+    [Fact]
+    public void Daemon_returns_failure_for_missing_catalog_root()
+    {
+        var command = CliCommandFactory.CreateRootCommand();
+
+        var exitCode = command.Parse([
+            "daemon",
+            "--config-root",
+            Path.Combine(Path.GetTempPath(), "retrobox-missing", Guid.NewGuid().ToString("N")),
+        ]).Invoke();
+
+        Assert.Equal(1, exitCode);
+    }
 }
