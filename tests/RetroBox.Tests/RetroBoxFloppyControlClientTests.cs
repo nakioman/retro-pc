@@ -97,6 +97,16 @@ public sealed class RetroBoxFloppyControlClientTests
         Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Constructor_rejects_empty_socket_path(string socketPath)
+    {
+        var error = Assert.Throws<ArgumentException>(() => new RetroBoxFloppyControlClient(socketPath));
+
+        Assert.Contains("socket path", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string SuccessResponse(
         bool inserted = true,
         string? path = "/data/floppies/test.img",

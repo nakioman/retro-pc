@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -63,7 +64,26 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
 
     public RetroBoxFloppyControlClient(string socketPath)
     {
-        streamFactory = _ => throw new NotImplementedException("Unix socket transport is added in Task 3.");
+        if (string.IsNullOrWhiteSpace(socketPath))
+        {
+            throw new ArgumentException("86Box floppy control socket path is required.", nameof(socketPath));
+        }
+
+        var endpoint = new UnixDomainSocketEndPoint(socketPath);
+        streamFactory = async cancellationToken =>
+        {
+            var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            try
+            {
+                await socket.ConnectAsync(endpoint, cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        };
     }
 
     public Task<RetroBoxFloppyStatus> InsertAsync(
