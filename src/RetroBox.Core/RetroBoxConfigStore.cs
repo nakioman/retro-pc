@@ -8,20 +8,6 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 {
     public const string DefaultRootPath = "/data/retrobox";
 
-    private static readonly HashSet<string> ValidFloppyModes = new(StringComparer.Ordinal)
-    {
-        "ro",
-        "rw",
-    };
-
-    private static readonly HashSet<string> ValidFloppySizes = new(StringComparer.Ordinal)
-    {
-        "360K",
-        "720K",
-        "1.2M",
-        "1.44M",
-    };
-
     private readonly string rootPath = string.IsNullOrWhiteSpace(rootPath)
             ? DefaultRootPath
             : Path.GetFullPath(rootPath);
@@ -104,7 +90,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     private static void Validate(RetroBoxCatalogData data)
     {
-        RequireId(data.Config.DefaultVm, "default VM");
+        data.Config.DefaultVm.RequireCatalogId("default VM");
         if (!data.Vms.ContainsKey(data.Config.DefaultVm))
         {
             throw new RetroBoxCatalogException($"Unknown default VM '{data.Config.DefaultVm}'.");
@@ -112,29 +98,29 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
         foreach (var (id, vm) in data.Vms)
         {
-            RequireId(id, "VM ID");
-            RequireValue(vm.Label, $"VM '{id}' label");
-            RequireValue(vm.Path, $"VM '{id}' path");
+            id.RequireCatalogId("VM ID");
+            vm.Label.RequireCatalogValue($"VM '{id}' label");
+            vm.Path.RequireCatalogValue($"VM '{id}' path");
         }
 
         foreach (var (id, floppy) in data.Floppies)
         {
-            RequireId(id, "floppy ID");
-            RequireValue(floppy.Label, $"Floppy '{id}' label");
-            RequireValue(floppy.Image, $"Floppy '{id}' image");
-            RequireValue(floppy.Size, $"Floppy '{id}' size");
+            id.RequireCatalogId("floppy ID");
+            floppy.Label.RequireCatalogValue($"Floppy '{id}' label");
+            floppy.Image.RequireCatalogValue($"Floppy '{id}' image");
+            floppy.Size.RequireCatalogValue($"Floppy '{id}' size");
 
             if (!File.Exists(floppy.Image))
             {
                 throw new RetroBoxCatalogException($"Floppy '{id}' image path '{floppy.Image}' does not exist.");
             }
 
-            if (!ValidFloppyModes.Contains(floppy.Mode))
+            if (!RetroBoxFloppyCatalogRules.IsValidMode(floppy.Mode))
             {
                 throw new RetroBoxCatalogException($"Invalid floppy mode '{floppy.Mode}' for floppy '{id}'.");
             }
 
-            if (!ValidFloppySizes.Contains(floppy.Size))
+            if (!RetroBoxFloppyCatalogRules.IsValidSize(floppy.Size))
             {
                 throw new RetroBoxCatalogException($"Invalid floppy size '{floppy.Size}' for floppy '{id}'.");
             }
@@ -142,8 +128,8 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
         foreach (var (id, game) in data.Games)
         {
-            RequireId(id, "game ID");
-            RequireValue(game.Label, $"Game '{id}' label");
+            id.RequireCatalogId("game ID");
+            game.Label.RequireCatalogValue($"Game '{id}' label");
 
             if (!string.IsNullOrWhiteSpace(game.DefaultVm) && !data.Vms.ContainsKey(game.DefaultVm))
             {
@@ -160,20 +146,4 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         }
     }
 
-    private static void RequireId(string value, string name)
-    {
-        RequireValue(value, name);
-        if (value.Contains(' ', StringComparison.Ordinal))
-        {
-            throw new RetroBoxCatalogException($"{name} '{value}' must not contain spaces.");
-        }
-    }
-
-    private static void RequireValue(string? value, string name)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new RetroBoxCatalogException($"{name} is required.");
-        }
-    }
 }

@@ -24,9 +24,9 @@ public sealed record RetroBoxFloppy
 
     public string Image { get; init; } = string.Empty;
 
-    public string Mode { get; init; } = "ro";
+    public string Mode { get; init; } = RetroBoxFloppyCatalogRules.ReadOnlyMode;
 
-    public string Size { get; init; } = string.Empty;
+    public string Size { get; init; } = RetroBoxFloppyCatalogRules.DefaultImportSize;
 }
 
 public sealed record RetroBoxGame

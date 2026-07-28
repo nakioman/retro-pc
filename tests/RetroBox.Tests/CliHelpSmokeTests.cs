@@ -14,6 +14,7 @@ public sealed class CliHelpSmokeTests
             new[] { "floppy", "--help" },
             new[] { "nfc", "--help" },
             new[] { "import", "--help" },
+            new[] { "import", "floppy", "--help" },
         };
 
     [Theory]
