@@ -60,18 +60,26 @@ public sealed class RetroBoxFloppyImporter
         Directory.CreateDirectory(catalogedRoot);
         MoveImage(sourcePath, targetPath);
 
-        var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal)
+        try
         {
-            [request.Id] = new()
+            var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal)
             {
-                Label = request.Label,
-                Image = targetPath,
-                Mode = request.Mode,
-                Size = request.Size,
-            },
-        };
+                [request.Id] = new()
+                {
+                    Label = request.Label,
+                    Image = targetPath,
+                    Mode = request.Mode,
+                    Size = request.Size,
+                },
+            };
 
-        store.Save(data with { Floppies = floppies });
+            store.Save(data with { Floppies = floppies });
+        }
+        catch
+        {
+            RestoreMovedImage(sourcePath, targetPath);
+            throw;
+        }
 
         return new RetroBoxFloppyImportResult(request.Id, targetPath);
     }
@@ -106,5 +114,15 @@ public sealed class RetroBoxFloppyImporter
         {
             throw new RetroBoxCatalogException($"Cataloged floppy image '{targetPath}' already exists.", ex);
         }
+    }
+
+    private static void RestoreMovedImage(string sourcePath, string targetPath)
+    {
+        if (File.Exists(sourcePath) || !File.Exists(targetPath))
+        {
+            return;
+        }
+
+        File.Move(targetPath, sourcePath, overwrite: false);
     }
 }

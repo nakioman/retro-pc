@@ -111,7 +111,42 @@ public sealed class RetroBoxFloppyImporterTests
     }
 
     [Fact]
-    public void Import_rejects_invalid_id_before_moving_image()
+    public void Import_restores_source_image_when_saving_catalog_fails()
+    {
+        var layout = CreateLayout();
+        var sourceImage = Path.Combine(layout.ScratchRoot, "rollback.img");
+        var targetImage = Path.Combine(layout.CatalogedRoot, "rollback.img");
+        File.WriteAllBytes(sourceImage, [0x33]);
+        File.SetAttributes(Path.Combine(layout.ConfigRoot, "games.yaml"), FileAttributes.ReadOnly);
+
+        var importer = new RetroBoxFloppyImporter();
+
+        var error = Assert.ThrowsAny<Exception>(() => importer.Import(new RetroBoxFloppyImportRequest
+        {
+            Id = "rollback",
+            Label = "Rollback",
+            ImagePath = sourceImage,
+            ConfigRoot = layout.ConfigRoot,
+            ScratchRoot = layout.ScratchRoot,
+            CatalogedRoot = layout.CatalogedRoot,
+        }));
+        Assert.IsNotType<RetroBoxCatalogException>(error);
+        Assert.True(File.Exists(sourceImage));
+        Assert.False(File.Exists(targetImage));
+    }
+
+    [Theory]
+    [InlineData("bad id")]
+    [InlineData("bad,id")]
+    [InlineData("bad/id")]
+    [InlineData("bad\\id")]
+    [InlineData("bad..id")]
+    [InlineData("bad_id")]
+    [InlineData("Bad-ID")]
+    [InlineData("-bad")]
+    [InlineData("bad-")]
+    [InlineData("bad\tid")]
+    public void Import_rejects_invalid_id_before_moving_image(string id)
     {
         var layout = CreateLayout();
         var sourceImage = Path.Combine(layout.ScratchRoot, "bad-id.img");
@@ -121,14 +156,14 @@ public sealed class RetroBoxFloppyImporterTests
 
         var error = Assert.Throws<RetroBoxCatalogException>(() => importer.Import(new RetroBoxFloppyImportRequest
         {
-            Id = "bad id",
+            Id = id,
             Label = "Bad ID",
             ImagePath = sourceImage,
             ConfigRoot = layout.ConfigRoot,
             ScratchRoot = layout.ScratchRoot,
             CatalogedRoot = layout.CatalogedRoot,
         }));
-        Assert.Contains("must not contain spaces", error.Message);
+        Assert.Contains("lowercase ASCII", error.Message);
         Assert.True(File.Exists(sourceImage));
     }
 
