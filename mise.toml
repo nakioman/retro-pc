@@ -1,0 +1,19 @@
+[tools]
+dotnet = "10"
+
+[tasks.restore]
+description = "Restore .NET dependencies"
+run = "dotnet restore RetroBox.slnx"
+
+[tasks.test]
+description = "Run the .NET test suite"
+run = "dotnet test RetroBox.slnx"
+
+[tasks.cli]
+description = "Run the retrobox CLI from source"
+raw_args = true
+run = "dotnet run --project src/RetroBox.Cli/RetroBox.Cli.csproj --"
+
+[tasks.publish-linux-x64]
+description = "Publish retrobox as a Linux x64 self-contained single-file binary"
+run = "dotnet publish src/RetroBox.Cli/RetroBox.Cli.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true"

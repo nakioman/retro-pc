@@ -1,1 +1,21 @@
 docs/superpowers/plans/
+
+# .NET build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Test and coverage outputs
+TestResults/
+*.trx
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# Local IDE/user files
+.vs/
+.vscode/
+*.user
+*.suo
+*.rsuser
