@@ -1,20 +1,23 @@
 using System.CommandLine;
 using RetroBox.Core;
+using RetroBox.Daemon;
 
 namespace RetroBox.Cli;
 
+public sealed record RetroBoxDaemonCommandRequest(
+    string ConfigRoot,
+    string? FloppyControlSocketPath);
+
 public static class CliCommandFactory
 {
-    public static RootCommand CreateRootCommand()
+    public static RootCommand CreateRootCommand(Func<RetroBoxDaemonCommandRequest, int>? daemonRunner = null)
     {
         var rootCommand = new RootCommand("Retro PC appliance control tool.");
 
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
             "boot",
             "Start the configured Retro PC boot flow."));
-        rootCommand.Subcommands.Add(CreatePlaceholderCommand(
-            "daemon",
-            "Run the long-lived Retro PC hardware integration daemon."));
+        rootCommand.Subcommands.Add(CreateDaemonCommand(daemonRunner));
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
             "vm",
             "Manage Retro PC virtual machine selections."));
@@ -29,6 +32,58 @@ public static class CliCommandFactory
         rootCommand.SetAction(_ => 0);
 
         return rootCommand;
+    }
+
+    private static Command CreateDaemonCommand(Func<RetroBoxDaemonCommandRequest, int>? daemonRunner)
+    {
+        var configRootOption = new Option<string>("--config-root")
+        {
+            Description = "RetroBox YAML catalog root.",
+            DefaultValueFactory = _ => RetroBoxConfigStore.DefaultRootPath,
+        };
+        var socketPathOption = new Option<string?>("--floppy-control-socket")
+        {
+            Description = "86Box floppy control Unix socket path.",
+        };
+
+        var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
+        {
+            configRootOption,
+            socketPathOption,
+        };
+
+        command.SetAction(parseResult =>
+        {
+            var request = new RetroBoxDaemonCommandRequest(
+                parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath,
+                parseResult.GetValue(socketPathOption));
+
+            if (daemonRunner is not null)
+            {
+                return daemonRunner(request);
+            }
+
+            try
+            {
+                var catalog = new RetroBoxConfigStore(request.ConfigRoot).Load();
+                var socketPath = RetroBoxDaemon.ResolveFloppyControlSocketPath(
+                    request.FloppyControlSocketPath,
+                    catalog.Config.FloppyControlSocketPath);
+                var daemon = new RetroBoxDaemon(
+                    catalog,
+                    new RetroBoxFloppyControlClient(socketPath),
+                    Console.In,
+                    Console.Out);
+
+                return daemon.RunAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                return WriteError(parseResult, ex);
+            }
+        });
+
+        return command;
     }
 
     private static Command CreatePlaceholderCommand(string name, string description)
@@ -123,23 +178,18 @@ public static class CliCommandFactory
 
                 return 0;
             }
-            catch (RetroBoxCatalogException ex)
+            catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
             {
-                parseResult.InvocationConfiguration.Error.WriteLine(ex.Message);
-                return 1;
-            }
-            catch (IOException ex)
-            {
-                parseResult.InvocationConfiguration.Error.WriteLine(ex.Message);
-                return 1;
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                parseResult.InvocationConfiguration.Error.WriteLine(ex.Message);
-                return 1;
+                return WriteError(parseResult, ex);
             }
         });
 
         return command;
+    }
+
+    private static int WriteError(ParseResult parseResult, Exception ex)
+    {
+        parseResult.InvocationConfiguration.Error.WriteLine(ex.Message);
+        return 1;
     }
 }

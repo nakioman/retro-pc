@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using RetroBox.Core;
@@ -99,6 +100,56 @@ public sealed class RetroBoxFloppyControlClientTests
         Assert.Contains("socket path", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task StatusAsync_wraps_socket_connection_failure_as_typed_exception()
+    {
+        var client = new RetroBoxFloppyControlClient(_ =>
+            throw new SocketException((int)SocketError.ConnectionRefused));
+
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+
+        Assert.Equal("internal_failure", error.Code);
+        Assert.Contains("unavailable", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StatusAsync_wraps_socket_io_failure_as_typed_exception()
+    {
+        var client = new RetroBoxFloppyControlClient(_ =>
+            Task.FromResult<Stream>(new FailingWriteStream()));
+
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+
+        Assert.Equal("internal_failure", error.Code);
+        Assert.Contains("unavailable", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StatusAsync_wraps_malformed_response_as_typed_exception()
+    {
+        var server = new ScriptedFloppySocket("not-json\n");
+        var client = new RetroBoxFloppyControlClient(server.OpenAsync);
+
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+
+        Assert.Equal("internal_failure", error.Code);
+        Assert.Contains("malformed", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("""{"id":"req-1","result":{}}""")]
+    [InlineData("""{"id":"req-1","ok":"yes","result":{}}""")]
+    public async Task StatusAsync_wraps_malformed_response_shape_as_typed_exception(string response)
+    {
+        var server = new ScriptedFloppySocket(response + "\n");
+        var client = new RetroBoxFloppyControlClient(server.OpenAsync);
+
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+
+        Assert.Equal("internal_failure", error.Code);
+        Assert.Contains("malformed", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string SuccessResponse(
         bool inserted = true,
         string? path = "/data/floppies/test.img",
@@ -184,6 +235,51 @@ public sealed class RetroBoxFloppyControlClientTests
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             return writeStream.WriteAsync(buffer, cancellationToken);
+        }
+    }
+
+    private sealed class FailingWriteStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => throw new IOException("socket write failed");
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            throw new IOException("socket flush failed");
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => 0;
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult(0);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new IOException("socket write failed");
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            throw new IOException("socket write failed");
         }
     }
 }

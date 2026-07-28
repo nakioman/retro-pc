@@ -9,6 +9,8 @@ public sealed record RetroBoxCatalogData(
 public sealed record RetroBoxConfig
 {
     public string DefaultVm { get; init; } = string.Empty;
+
+    public string? FloppyControlSocketPath { get; init; }
 }
 
 public sealed record RetroBoxVm

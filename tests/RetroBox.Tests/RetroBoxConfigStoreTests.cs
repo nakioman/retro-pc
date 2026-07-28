@@ -14,11 +14,30 @@ public sealed class RetroBoxConfigStoreTests
         var data = store.Load();
 
         Assert.Equal("pentium100", data.Config.DefaultVm);
+        Assert.Null(data.Config.FloppyControlSocketPath);
         Assert.Equal("Pentium 100", data.Vms["pentium100"].Label);
         Assert.Equal("ro", data.Floppies["monkey1-disk1"].Mode);
         Assert.Equal("720K", data.Floppies["monkey1-disk1"].Size);
         Assert.Equal("The Secret of Monkey Island", data.Games["monkey1"].Label);
         Assert.Equal(new[] { "monkey1-disk1" }, data.Games["monkey1"].FloppyIds);
+    }
+
+    [Fact]
+    public void Load_reads_optional_floppy_control_socket_path()
+    {
+        var root = CreateValidRoot();
+        File.WriteAllText(
+            Path.Combine(root, "config.yaml"),
+            """
+            defaultVm: pentium100
+            floppyControlSocketPath: /Users/nacho/Games/86Box/86box.socket
+            """);
+
+        var store = new RetroBoxConfigStore(root);
+
+        var data = store.Load();
+
+        Assert.Equal("/Users/nacho/Games/86Box/86box.socket", data.Config.FloppyControlSocketPath);
     }
 
     [Fact]
