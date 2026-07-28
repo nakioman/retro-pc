@@ -39,10 +39,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         Validate(data);
         Directory.CreateDirectory(rootPath);
 
-        SaveYaml("config.yaml", data.Config);
-        SaveYaml("vms.yaml", new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) });
-        SaveYaml("floppies.yaml", new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) });
-        SaveYaml("games.yaml", new RetroBoxGameCatalog { Games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal) });
+        SaveYamlSet([
+            ("config.yaml", serializer.Serialize(data.Config)),
+            ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
+            ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
+            ("games.yaml", serializer.Serialize(new RetroBoxGameCatalog { Games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal) })),
+        ]);
     }
 
     private T LoadYaml<T>(string fileName)
@@ -65,16 +67,30 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         }
     }
 
-    private void SaveYaml<T>(string fileName, T value)
+    private void SaveYamlSet((string FileName, string Yaml)[] files)
     {
-        var path = ResolvePath(fileName);
-        if (File.Exists(path))
-        {
-            File.Copy(path, CreateBackupPath(path), overwrite: false);
-        }
+        var backups = new List<(string OriginalPath, string BackupPath)>();
 
-        var yaml = serializer.Serialize(value);
-        File.WriteAllText(path, yaml);
+        try
+        {
+            foreach (var (fileName, yaml) in files)
+            {
+                var path = ResolvePath(fileName);
+                if (File.Exists(path))
+                {
+                    var backupPath = CreateBackupPath(path);
+                    File.Copy(path, backupPath, overwrite: false);
+                    backups.Add((path, backupPath));
+                }
+
+                File.WriteAllText(path, yaml);
+            }
+        }
+        catch
+        {
+            RestoreBackups(backups);
+            throw;
+        }
     }
 
     private string ResolvePath(string fileName)
@@ -86,6 +102,21 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
     {
         var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfffffff");
         return $"{path}.{timestamp}.bak";
+    }
+
+    private static void RestoreBackups(IEnumerable<(string OriginalPath, string BackupPath)> backups)
+    {
+        foreach (var (originalPath, backupPath) in backups.Reverse())
+        {
+            try
+            {
+                File.Copy(backupPath, originalPath, overwrite: true);
+            }
+            catch
+            {
+                // Continue restoring any other catalog files that may have already been replaced.
+            }
+        }
     }
 
     private static void Validate(RetroBoxCatalogData data)

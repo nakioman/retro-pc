@@ -133,6 +133,7 @@ public sealed class RetroBoxFloppyImporterTests
         Assert.IsNotType<RetroBoxCatalogException>(error);
         Assert.True(File.Exists(sourceImage));
         Assert.False(File.Exists(targetImage));
+        Assert.DoesNotContain("rollback", File.ReadAllText(Path.Combine(layout.ConfigRoot, "floppies.yaml")));
     }
 
     [Theory]
