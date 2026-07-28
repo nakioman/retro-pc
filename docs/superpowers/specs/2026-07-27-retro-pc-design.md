@@ -83,7 +83,7 @@ retrobox vm list
 retrobox vm default pentium100
 retrobox floppy list
 retrobox nfc write monkey1-disk1 --mode ro
-retrobox import floppy monkey1-disk1 --mode ro --size 720 --label "Monkey Island - Disk 1" --image "/data/floppies/scratch/monkey_island_disk_1.img"
+retrobox import floppy monkey1-disk1 --mode ro --size 720K --label "Monkey Island - Disk 1" --image "/data/floppies/scratch/monkey_island_disk_1.img"
 ```
 
 Responsibilities:
@@ -97,6 +97,8 @@ Responsibilities:
 - provide SSH administration commands
 - prepare for future VM creation, imports, and snapshots
 - import new floppies into the catalog
+
+Floppy sizes use canonical labels: `360K`, `720K`, `1.2M`, and `1.44M`.
 
 The .NET SDK does not need to be installed on the appliance. The binary should be published as a Linux self-contained single-file app, with Native AOT considered if dependencies allow it.
 
