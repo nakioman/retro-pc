@@ -1,0 +1,179 @@
+using YamlDotNet.Core;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+
+namespace RetroBox.Core;
+
+public sealed class RetroBoxConfigStore(string? rootPath = null)
+{
+    public const string DefaultRootPath = "/data/retrobox";
+
+    private static readonly HashSet<string> ValidFloppyModes = new(StringComparer.Ordinal)
+    {
+        "ro",
+        "rw",
+    };
+
+    private static readonly HashSet<string> ValidFloppySizes = new(StringComparer.Ordinal)
+    {
+        "360K",
+        "720K",
+        "1.2M",
+        "1.44M",
+    };
+
+    private readonly string rootPath = string.IsNullOrWhiteSpace(rootPath)
+            ? DefaultRootPath
+            : Path.GetFullPath(rootPath);
+
+    private readonly IDeserializer deserializer = new DeserializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .WithDuplicateKeyChecking()
+            .Build();
+            
+    private readonly ISerializer serializer = new SerializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+            .Build();
+
+    public RetroBoxCatalogData Load()
+    {
+        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        var vms = LoadYaml<RetroBoxVmCatalog>("vms.yaml").Vms;
+        var floppies = LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies;
+        var games = LoadYaml<RetroBoxGameCatalog>("games.yaml").Games;
+
+        var data = new RetroBoxCatalogData(config, vms, floppies, games);
+        Validate(data);
+        return data;
+    }
+
+    public void Save(RetroBoxCatalogData data)
+    {
+        Validate(data);
+        Directory.CreateDirectory(rootPath);
+
+        SaveYaml("config.yaml", data.Config);
+        SaveYaml("vms.yaml", new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) });
+        SaveYaml("floppies.yaml", new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) });
+        SaveYaml("games.yaml", new RetroBoxGameCatalog { Games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal) });
+    }
+
+    private T LoadYaml<T>(string fileName)
+    {
+        var path = ResolvePath(fileName);
+        if (!File.Exists(path))
+        {
+            throw new RetroBoxCatalogException($"Required YAML file '{path}' does not exist.");
+        }
+
+        try
+        {
+            var yaml = File.ReadAllText(path);
+            return deserializer.Deserialize<T>(yaml)
+                ?? throw new RetroBoxCatalogException($"YAML file '{path}' is empty.");
+        }
+        catch (YamlException ex)
+        {
+            throw new RetroBoxCatalogException($"YAML file '{path}' is invalid: {ex.Message}", ex);
+        }
+    }
+
+    private void SaveYaml<T>(string fileName, T value)
+    {
+        var path = ResolvePath(fileName);
+        if (File.Exists(path))
+        {
+            File.Copy(path, CreateBackupPath(path), overwrite: false);
+        }
+
+        var yaml = serializer.Serialize(value);
+        File.WriteAllText(path, yaml);
+    }
+
+    private string ResolvePath(string fileName)
+    {
+        return Path.Combine(rootPath, fileName);
+    }
+
+    private static string CreateBackupPath(string path)
+    {
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfffffff");
+        return $"{path}.{timestamp}.bak";
+    }
+
+    private static void Validate(RetroBoxCatalogData data)
+    {
+        RequireId(data.Config.DefaultVm, "default VM");
+        if (!data.Vms.ContainsKey(data.Config.DefaultVm))
+        {
+            throw new RetroBoxCatalogException($"Unknown default VM '{data.Config.DefaultVm}'.");
+        }
+
+        foreach (var (id, vm) in data.Vms)
+        {
+            RequireId(id, "VM ID");
+            RequireValue(vm.Label, $"VM '{id}' label");
+            RequireValue(vm.Path, $"VM '{id}' path");
+        }
+
+        foreach (var (id, floppy) in data.Floppies)
+        {
+            RequireId(id, "floppy ID");
+            RequireValue(floppy.Label, $"Floppy '{id}' label");
+            RequireValue(floppy.Image, $"Floppy '{id}' image");
+            RequireValue(floppy.Size, $"Floppy '{id}' size");
+
+            if (!File.Exists(floppy.Image))
+            {
+                throw new RetroBoxCatalogException($"Floppy '{id}' image path '{floppy.Image}' does not exist.");
+            }
+
+            if (!ValidFloppyModes.Contains(floppy.Mode))
+            {
+                throw new RetroBoxCatalogException($"Invalid floppy mode '{floppy.Mode}' for floppy '{id}'.");
+            }
+
+            if (!ValidFloppySizes.Contains(floppy.Size))
+            {
+                throw new RetroBoxCatalogException($"Invalid floppy size '{floppy.Size}' for floppy '{id}'.");
+            }
+        }
+
+        foreach (var (id, game) in data.Games)
+        {
+            RequireId(id, "game ID");
+            RequireValue(game.Label, $"Game '{id}' label");
+
+            if (!string.IsNullOrWhiteSpace(game.DefaultVm) && !data.Vms.ContainsKey(game.DefaultVm))
+            {
+                throw new RetroBoxCatalogException($"Game '{id}' references unknown default VM '{game.DefaultVm}'.");
+            }
+
+            foreach (var floppyId in game.FloppyIds)
+            {
+                if (!data.Floppies.ContainsKey(floppyId))
+                {
+                    throw new RetroBoxCatalogException($"Game '{id}' references unknown floppy '{floppyId}'.");
+                }
+            }
+        }
+    }
+
+    private static void RequireId(string value, string name)
+    {
+        RequireValue(value, name);
+        if (value.Contains(' ', StringComparison.Ordinal))
+        {
+            throw new RetroBoxCatalogException($"{name} '{value}' must not contain spaces.");
+        }
+    }
+
+    private static void RequireValue(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new RetroBoxCatalogException($"{name} is required.");
+        }
+    }
+}

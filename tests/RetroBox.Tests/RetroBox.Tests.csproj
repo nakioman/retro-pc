@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\RetroBox.Core\RetroBox.Core.csproj" />
     <ProjectReference Include="..\..\src\RetroBox.Cli\RetroBox.Cli.csproj" />
   </ItemGroup>
 
