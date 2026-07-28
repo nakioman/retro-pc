@@ -58,14 +58,8 @@ No desktop environment is installed. A minimal graphics stack is allowed if requ
   pentium100/
 
 /data/floppies/
-  lucasarts/
-  personal/
-  drivers/
+  cataloged/
   scratch/
-
-/data/inbox/
-  floppies/
-  games/
 
 /data/snapshots/
   386sx16/
@@ -74,9 +68,11 @@ No desktop environment is installed. A minimal graphics stack is allowed if requ
 
 YAML is the source of truth for configuration and catalogs. `retrobox` edits YAML in a structured way, but the files remain readable and manually editable over SSH.
 
+`/data/floppies/scratch/` is exposed over Samba as a network drop folder for floppy images copied from another machine. Imported floppy images are moved from `scratch` into `/data/floppies/cataloged/` and registered in the YAML catalog.
+
 ## Retrobox
 
-`retrobox` is a single .NET/C# project and single deployable binary with several modes and subcommands.
+`retrobox` is a single .NET 10/C# project and single deployable binary with several modes and subcommands.
 
 Examples:
 
@@ -87,6 +83,7 @@ retrobox vm list
 retrobox vm default pentium100
 retrobox floppy list
 retrobox nfc write monkey1-disk1 --mode ro
+retrobox import floppy monkey1-disk1 --mode ro --size 720 --label "Monkey Island - Disk 1" --image "/data/floppies/scratch/monkey_island_disk_1.img"
 ```
 
 Responsibilities:
@@ -99,6 +96,7 @@ Responsibilities:
 - talk to 86Box through a local control socket
 - provide SSH administration commands
 - prepare for future VM creation, imports, and snapshots
+- import new floppies into the catalog
 
 The .NET SDK does not need to be installed on the appliance. The binary should be published as a Linux self-contained single-file app, with Native AOT considered if dependencies allow it.
 
@@ -140,7 +138,7 @@ This machine is for early DOS games, old adventures, shareware, and pre-CD softw
 The later machine should represent a good but realistic middle or upper-middle-class Argentine home PC from the mid-1990s, not an imported maximum-spec fantasy.
 
 - CPU: Pentium 100
-- RAM: 8 MB base, with 16 MB allowed if important games justify it
+- RAM: 8 MB
 - HDD: approximately 2.1 GB, in the spirit of a Quantum Bigfoot
 - Video: Trident TGUI9440AGi 1 MB
 - Sound: Sound Blaster 16
@@ -178,7 +176,7 @@ The YAML catalog resolves the ID:
 floppies:
   monkey1-disk1:
     label: "Monkey Island - Disk 1"
-    image: "/data/floppies/lucasarts/monkey_island_disk_1.img"
+    image: "/data/floppies/cataloged/monkey_island_disk_1.img"
     mode: "ro"
     size: "720K"
 ```
@@ -238,7 +236,7 @@ The first release should include:
 
 - Debian minimal appliance with read-only root and mutable `/data`
 - SSH maintenance access
-- `retrobox` .NET single-binary CLI/daemon
+- `retrobox` .NET 10 single-binary CLI/daemon
 - default VM boot
 - Windows-key boot selector
 - fullscreen 86Box launch
@@ -265,6 +263,19 @@ These features should be considered in the design but not required for RTM:
 - modern maintenance UI
 
 Snapshots should initially require the VM to be powered off.
+
+## Possible Post-86Box Expansion
+
+After the 86Box PC appliance experience works reliably, the project may grow into a broader retro appliance with additional emulator families.
+
+Possible later targets:
+
+- Mac OS System 7
+- Mac OS System 8
+- Commodore 64
+- Commodore Amiga
+
+These are explicitly not part of the 86Box RTM. They should not influence the initial Linux, 86Box, floppy NFC, or VM profile design except where the choices are already neutral and reusable.
 
 ## Open Risks
 
