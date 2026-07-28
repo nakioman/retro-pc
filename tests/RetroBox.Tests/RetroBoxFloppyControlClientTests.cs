@@ -51,16 +51,12 @@ public sealed class RetroBoxFloppyControlClientTests
 
         await client.InsertAsync(0, "/data/floppies/test.img", readOnly: true);
 
-        Assert.EndsWith("\n", server.RequestText);
-        Assert.Single(server.RequestText.Split('\n', StringSplitOptions.RemoveEmptyEntries));
-        using var document = JsonDocument.Parse(server.RequestText);
-        var root = document.RootElement;
-        Assert.Equal("floppy.insert", root.GetProperty("command").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("id").GetString()));
-        var parameters = root.GetProperty("params");
-        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
-        Assert.Equal("/data/floppies/test.img", parameters.GetProperty("path").GetString());
-        Assert.True(parameters.GetProperty("read_only").GetBoolean());
+        AssertRequest(server, "floppy.insert", parameters =>
+        {
+            Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+            Assert.Equal("/data/floppies/test.img", parameters.GetProperty("path").GetString());
+            Assert.True(parameters.GetProperty("read_only").GetBoolean());
+        });
     }
 
     [Fact]
@@ -71,14 +67,12 @@ public sealed class RetroBoxFloppyControlClientTests
 
         await client.EjectAsync(0);
 
-        Assert.EndsWith("\n", server.RequestText);
-        using var document = JsonDocument.Parse(server.RequestText);
-        var root = document.RootElement;
-        Assert.Equal("floppy.eject", root.GetProperty("command").GetString());
-        var parameters = root.GetProperty("params");
-        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
-        Assert.False(parameters.TryGetProperty("path", out _));
-        Assert.False(parameters.TryGetProperty("read_only", out _));
+        AssertRequest(server, "floppy.eject", parameters =>
+        {
+            Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+            Assert.False(parameters.TryGetProperty("path", out _));
+            Assert.False(parameters.TryGetProperty("read_only", out _));
+        });
     }
 
     [Fact]
@@ -89,12 +83,10 @@ public sealed class RetroBoxFloppyControlClientTests
 
         await client.StatusAsync(0);
 
-        Assert.EndsWith("\n", server.RequestText);
-        using var document = JsonDocument.Parse(server.RequestText);
-        var root = document.RootElement;
-        Assert.Equal("floppy.status", root.GetProperty("command").GetString());
-        var parameters = root.GetProperty("params");
-        Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+        AssertRequest(server, "floppy.status", parameters =>
+        {
+            Assert.Equal(0, parameters.GetProperty("drive").GetInt32());
+        });
     }
 
     [Theory]
@@ -112,10 +104,37 @@ public sealed class RetroBoxFloppyControlClientTests
         string? path = "/data/floppies/test.img",
         bool readOnly = true)
     {
-        var insertedJson = JsonSerializer.Serialize(inserted);
-        var pathJson = path is null ? "null" : JsonSerializer.Serialize(path);
-        var readOnlyJson = JsonSerializer.Serialize(readOnly);
-        return $"{{\"id\":\"req-1\",\"ok\":true,\"result\":{{\"drive\":0,\"inserted\":{insertedJson},\"path\":{pathJson},\"read_only\":{readOnlyJson},\"busy\":false,\"changed\":true}}}}\n";
+        return JsonSerializer.Serialize(
+            new
+            {
+                id = "req-1",
+                ok = true,
+                result = new
+                {
+                    drive = 0,
+                    inserted,
+                    path,
+                    read_only = readOnly,
+                    busy = false,
+                    changed = true
+                }
+            }) + "\n";
+    }
+
+    private static void AssertRequest(
+        ScriptedFloppySocket server,
+        string expectedCommand,
+        Action<JsonElement> assertParameters)
+    {
+        var requestText = server.RequestText;
+        Assert.EndsWith("\n", requestText);
+        Assert.Single(requestText.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+        using var document = JsonDocument.Parse(requestText);
+        var root = document.RootElement;
+        Assert.Equal(expectedCommand, root.GetProperty("command").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("id").GetString()));
+        assertParameters(root.GetProperty("params"));
     }
 
     private sealed class ScriptedFloppySocket(string response) : Stream

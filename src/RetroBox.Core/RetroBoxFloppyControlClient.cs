@@ -48,6 +48,8 @@ public sealed class RetroBoxFloppyControlException : Exception
 
 public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
 {
+    private static readonly byte[] NewLine = [(byte)'\n'];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -94,12 +96,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
     {
         return SendAsync(
             "floppy.insert",
-            new Dictionary<string, object?>
-            {
-                ["drive"] = drive,
-                ["path"] = imagePath,
-                ["read_only"] = readOnly
-            },
+            new FloppyInsertParameters(drive, imagePath, readOnly),
             cancellationToken);
     }
 
@@ -109,7 +106,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
     {
         return SendAsync(
             "floppy.eject",
-            new Dictionary<string, object?> { ["drive"] = drive },
+            new FloppyDriveParameters(drive),
             cancellationToken);
     }
 
@@ -119,13 +116,13 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
     {
         return SendAsync(
             "floppy.status",
-            new Dictionary<string, object?> { ["drive"] = drive },
+            new FloppyDriveParameters(drive),
             cancellationToken);
     }
 
     private async Task<RetroBoxFloppyStatus> SendAsync(
         string command,
-        IReadOnlyDictionary<string, object?> parameters,
+        object parameters,
         CancellationToken cancellationToken)
     {
         await using var stream = await streamFactory(cancellationToken);
@@ -135,7 +132,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
             parameters);
 
         await JsonSerializer.SerializeAsync(stream, request, JsonOptions, cancellationToken);
-        await stream.WriteAsync("\n"u8.ToArray(), cancellationToken);
+        await stream.WriteAsync(NewLine, cancellationToken);
         await stream.FlushAsync(cancellationToken);
 
         using var reader = new StreamReader(stream, leaveOpen: true);
@@ -172,5 +169,12 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
     private sealed record FloppyControlRequest(
         string Id,
         string Command,
-        IReadOnlyDictionary<string, object?> Params);
+        object Params);
+
+    private sealed record FloppyInsertParameters(
+        int Drive,
+        string Path,
+        bool ReadOnly);
+
+    private sealed record FloppyDriveParameters(int Drive);
 }
