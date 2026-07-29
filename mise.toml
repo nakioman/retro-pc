@@ -1,5 +1,6 @@
 [tools]
 dotnet = "10"
+"aqua:arduino/arduino-cli" = "1.5.1"
 
 [tasks.restore]
 description = "Restore .NET dependencies"
@@ -17,3 +18,18 @@ run = "dotnet run --project src/RetroBox.Cli/RetroBox.Cli.csproj --"
 [tasks.publish-linux-x64]
 description = "Publish retrobox as a Linux x64 self-contained single-file binary"
 run = "dotnet publish src/RetroBox.Cli/RetroBox.Cli.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true"
+
+[tasks.firmware-bootstrap]
+description = "Install the Arduino ESP8266 core"
+run = "arduino-cli core update-index --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json && arduino-cli core install esp8266:esp8266 --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json"
+
+[tasks.firmware-compile]
+description = "Compile the ESP8266 firmware"
+depends = ["firmware-bootstrap"]
+run = "arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 firmware/retrofloppy-esp8266"
+
+[tasks.firmware-upload]
+description = "Compile and upload the ESP8266 firmware"
+depends = ["firmware-compile"]
+raw_args = true
+run = "arduino-cli upload --fqbn esp8266:esp8266:nodemcuv2 firmware/retrofloppy-esp8266 -p"
