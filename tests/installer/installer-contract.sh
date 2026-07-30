@@ -30,8 +30,23 @@ if grep -Eiq '(password|passwd|secret|token|credential|private[_-]?key)[[:space:
     fail "installer configuration must not contain credentials"
 fi
 
-if grep -Eq '^[[:space:]]*d-i[[:space:]]+partman-auto/disk[[:space:]]+' "$preseed_file"; then
+if awk '
+    $1 == "d-i" && $2 == "partman-auto/disk" &&
+        !($3 == "seen" && $4 == "false" && NF == 4) { found = 1 }
+    END { exit !found }
+' "$preseed_file"; then
     fail "preseed must leave target disk selection interactive"
+fi
+
+grep -Eq '^[[:space:]]*d-i[[:space:]]+partman-auto/disk[[:space:]]+seen[[:space:]]+false[[:space:]]*$' "$preseed_file" \
+    || fail "preseed must show the target disk selection prompt"
+
+if grep -Eq '^[[:space:]]*d-i[[:space:]]+(partman/confirm|partman/confirm_nooverwrite|partman-partitioning/confirm_write_new_label)[[:space:]]+' "$preseed_file"; then
+    fail "preseed must leave destructive partition confirmation interactive"
+fi
+
+if grep -Eq '^[[:space:]]*d-i[[:space:]]+partman/choose_partition[[:space:]]+select[[:space:]]+finish[[:space:]]*$' "$preseed_file"; then
+    fail "preseed must not finish partitioning without confirmation"
 fi
 
 if grep -Eiq '^[[:space:]]*d-i[[:space:]]+(passwd/|user-setup/.*password)' "$preseed_file"; then
@@ -47,6 +62,9 @@ grep -Eq '^[[:space:]]*d-i[[:space:]]+preseed/late_command[[:space:]]+string[[:s
 
 grep -Eq '^[[:space:]]*d-i[[:space:]]+partman-auto/expert_recipe[[:space:]]+string' "$preseed_file" \
     || fail "preseed must define an automatic partition recipe"
+
+grep -Eq '^[[:space:]]*d-i[[:space:]]+partman-auto/choose_recipe[[:space:]]+select[[:space:]]+retrobox[[:space:]]*$' "$preseed_file" \
+    || fail "preseed must select the retrobox partition recipe"
 
 grep -Eq 'mountpoint\{[[:space:]]*/[[:space:]]*\}' "$preseed_file" \
     || fail "preseed partition recipe must mount root"
