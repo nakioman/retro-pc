@@ -29,7 +29,10 @@ The installer configuration contract is defined in
 [`installer/install-retropc.conf`](installer/install-retropc.conf). Changing
 `86BOX_VERSION` is the supported release update mechanism; the installer must
 continue to use the explicitly configured x86_64 asset and must not embed
-credentials in this file.
+credentials in this file. Installer scripts load the file through
+[`read-install-retropc-conf.sh`](installer/read-install-retropc-conf.sh), which
+parses the editable keys without sourcing them as shell code and exposes safe
+variables such as `RETROBOX_86BOX_VERSION`.
 
 ## Accounts and permissions
 
