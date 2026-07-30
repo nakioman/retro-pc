@@ -32,7 +32,7 @@ jobs:
           {
             echo '## Debian appliance installer'
             echo
-            echo "- 86Box version: \`${86BOX_VERSION}\`"
+            echo "- 86Box version: \`$(printenv 86BOX_VERSION)\`"
             echo "- SHA-256: \`$(awk '{print $1}' build/retro-pc-installer.iso.sha256)\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

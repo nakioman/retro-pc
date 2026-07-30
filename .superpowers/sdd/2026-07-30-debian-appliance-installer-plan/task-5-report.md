@@ -34,3 +34,12 @@ Reviewed the complete workflow, documentation, and contract-test diff against
 the Task 5 brief. No actionable findings. The workflow delegates ISO creation
 and its checksum/metadata sidecars exclusively to `build-installer.sh`; no
 builder changes were required.
+
+## Fix round 1
+
+Replaced the invalid Bash parameter expansion for `86BOX_VERSION` in the
+workflow summary with `printenv 86BOX_VERSION`. The installer contract now
+extracts and executes the workflow summary block with `86BOX_VERSION=vtest.99`
+and a temporary `GITHUB_STEP_SUMMARY`, asserting both the selected version and
+the checksum. The new regression initially failed with the expected `bad
+substitution` error before the workflow fix was applied.

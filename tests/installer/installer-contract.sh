@@ -136,6 +136,30 @@ cleanup() {
 }
 trap cleanup EXIT
 
+summary_command=$(awk '
+    /^      - name: Publish build summary$/ { in_summary = 1; next }
+    in_summary && /^      - / { exit }
+    in_summary && /^        run: \|$/ { in_run = 1; next }
+    in_run {
+        sub(/^          /, "")
+        print
+    }
+' "$workflow_file")
+[[ -n "$summary_command" ]] || fail "workflow must define an executable build summary command"
+mkdir -p "$test_root/build"
+printf 'fixture-sha256  build/retro-pc-installer.iso\n' > "$test_root/build/retro-pc-installer.iso.sha256"
+summary_output="$test_root/github-step-summary.md"
+(
+    cd "$test_root"
+    env 86BOX_VERSION=vtest.99 \
+        GITHUB_STEP_SUMMARY="$summary_output" \
+        bash -c "$summary_command"
+)
+grep -Fqx -- '- 86Box version: `vtest.99`' "$summary_output" \
+    || fail "workflow summary must publish the selected 86Box version"
+grep -Fqx -- '- SHA-256: `fixture-sha256`' "$summary_output" \
+    || fail "workflow summary must publish the ISO checksum"
+
 mkdir -p \
     "$test_root/etc" \
     "$test_root/dev/disk/by-id" \
