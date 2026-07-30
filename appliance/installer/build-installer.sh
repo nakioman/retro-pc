@@ -118,11 +118,21 @@ curl --fail --location --retry 3 --output "$debian_iso" "$debian_netinst_url"
 
 iso_root="$work_dir/iso-root"
 xorriso -osirrox on -indev "$debian_iso" -extract / "$iso_root"
+chmod -R u+w "$iso_root"
 isolinux_dir="$iso_root/isolinux"
 [[ -f "$isolinux_dir/isolinux.bin" ]] \
     || die 'Debian netinst image is missing the BIOS isolinux boot image'
-[[ -f "$isolinux_dir/isohdpfx.bin" ]] \
-    || die 'Debian netinst image is missing the BIOS isohybrid MBR'
+isohybrid_mbr="$isolinux_dir/isohdpfx.bin"
+if [[ ! -f "$isohybrid_mbr" ]]; then
+    for candidate in /usr/lib/ISOLINUX/isohdpfx.bin /usr/lib/syslinux/isohdpfx.bin; do
+        if [[ -f "$candidate" ]]; then
+            isohybrid_mbr=$candidate
+            break
+        fi
+    done
+fi
+[[ -f "$isohybrid_mbr" ]] \
+    || die 'could not find a BIOS isohybrid MBR from the Debian image or ISOLINUX'
 boot_menu_count=0
 while IFS= read -r -d '' boot_menu; do
     updated_boot_menu="$boot_menu.updated"
@@ -155,7 +165,7 @@ xorriso -as mkisofs \
     -J \
     -joliet-long \
     -V 'Retro PC Installer' \
-    -isohybrid-mbr "$isolinux_dir/isohdpfx.bin" \
+    -isohybrid-mbr "$isohybrid_mbr" \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \
     -no-emul-boot \

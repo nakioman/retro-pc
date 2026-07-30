@@ -31,7 +31,7 @@ jobs:
       - name: Install ISO build tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xorriso
+          sudo apt-get install --yes isolinux xorriso
       - run: mise run test
       - run: ./appliance/installer/build-installer.sh
       - name: Publish build summary
