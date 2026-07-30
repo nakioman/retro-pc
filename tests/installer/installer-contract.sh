@@ -80,6 +80,7 @@ grep -Eq '^[[:space:]]*d-i[[:space:]]+partman/mount_style[[:space:]]+select[[:sp
 test_root=$(mktemp -d)
 test_payload=$(mktemp -d)
 test_bin=$(mktemp -d)
+canonical_test_root=$(cd "$test_root" && pwd -P)
 cleanup() {
     rm -rf "$test_root" "$test_payload" "$test_bin"
 }
@@ -102,7 +103,7 @@ cp "$repo_root/profiles/pentium100/86box.cfg" "$test_payload/profiles/pentium100
 cp "$repo_root/profiles/pentium100/shaders/syncmaster3.glsl" "$test_payload/profiles/pentium100/shaders/"
 cp "$repo_root/profiles/386sx16/86box.cfg" "$test_payload/profiles/386sx16/86box.cfg"
 cp "$repo_root/profiles/386sx16/shaders/syncmaster3.glsl" "$test_payload/profiles/386sx16/shaders/"
-touch "$test_payload/86Box.AppImage" "$test_root/dev/disk/by-id/ata-SONY_DVD_RW"
+touch "$test_payload/$RETROBOX_86BOX_ASSET" "$test_payload/profiles/pentium100/HDD.vhd" "$test_root/dev/disk/by-id/ata-SONY_DVD_RW"
 touch "$test_root/etc/fstab"
 printf 'administrator sudo policy\n' > "$test_root/etc/sudoers"
 
@@ -134,6 +135,16 @@ make_stub systemctl <<'EOF'
 #!/usr/bin/env bash
 printf 'systemctl %s\n' "$*" >> "$RETROBOX_TEST_COMMAND_LOG"
 EOF
+make_stub findmnt <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *OPTIONS* ]]; then
+    printf '%s\n' "${RETROBOX_TEST_ROOT_OPTIONS:-rw,relatime}"
+fi
+EOF
+make_stub mount <<'EOF'
+#!/usr/bin/env bash
+printf 'mount %s\n' "$*" >> "$RETROBOX_TEST_COMMAND_LOG"
+EOF
 
 command_log="$test_root/installer-commands.log"
 PATH="$test_bin:$PATH" \
@@ -153,14 +164,22 @@ for relative_path in \
 done
 
 [[ -x "$test_root/opt/retrobox/86Box.AppImage" ]] || fail "installer must install an executable 86Box AppImage"
-[[ -f "$test_root/opt/retrobox/profiles/pentium100/shaders/syncmaster3.glsl" ]] \
-    || fail "installer must copy Pentium shaders"
+[[ -x "$test_root/usr/local/sbin/install-retropc.sh" ]] \
+    || fail "installer must install the post-reboot maintenance command"
+[[ -f "$test_root/data/vms/pentium100/HDD.vhd" ]] \
+    || fail "installer must place the active Pentium VHD in writable /data"
+[[ -f "$test_root/data/vms/pentium100/shaders/syncmaster3.glsl" ]] \
+    || fail "installer must place Pentium shaders beside the writable VM profile"
 [[ -f "$test_root/opt/retrobox/profiles/386sx16/shaders/syncmaster3.glsl" ]] \
     || fail "installer must copy 386 shaders"
-grep -Fqx 'cdrom_01_host_drive = /dev/disk/by-id/ata-SONY_DVD_RW' "$test_root/opt/retrobox/profiles/pentium100/86box.cfg" \
+[[ ! -e "$test_root/opt/retrobox/profiles/pentium100" ]] \
+    || fail "installer must keep mutable Pentium state out of immutable /opt"
+grep -Fqx 'cdrom_01_host_drive = /dev/disk/by-id/ata-SONY_DVD_RW' "$test_root/data/vms/pentium100/86box.cfg" \
     || fail "installer must prefer a stable CD-ROM by-id path"
-grep -Fqx 'floppy_control_socket_enabled = 0' "$test_root/opt/retrobox/profiles/pentium100/86box.cfg" \
+grep -Fqx 'floppy_control_socket_enabled = 0' "$test_root/data/vms/pentium100/86box.cfg" \
     || fail "installer must disable the deferred floppy control socket"
+grep -Fqx 'hdd_01_fn = HDD.vhd' "$test_root/data/vms/pentium100/86box.cfg" \
+    || fail "installer must preserve Pentium profile-relative VHD paths"
 grep -Fqx '86BOX_VERSION=v7.0.0-master.46' "$test_root/etc/retrobox-appliance/install-report.txt" \
     || fail "installer must record the pinned 86Box version"
 grep -Fqx 'CDROM_DEVICE=/dev/disk/by-id/ata-SONY_DVD_RW' "$test_root/etc/retrobox-appliance/install-report.txt" \
@@ -169,6 +188,12 @@ grep -Fqx 'UUID=root-test-uuid / ext4 ro,errors=remount-ro 0 1' "$test_root/etc/
     || fail "installer must write a UUID-rooted read-only fstab entry"
 grep -Fqx 'UUID=data-test-uuid /data ext4 rw,nosuid,nodev 0 2' "$test_root/etc/fstab" \
     || fail "installer must write a UUID-rooted writable data fstab entry"
+grep -Fqx '/data/system-state/samba /var/lib/samba none bind 0 0' "$test_root/etc/fstab" \
+    || fail "installer must preserve Samba state below writable /data"
+grep -Fqx '/data/system-state/network-manager /var/lib/NetworkManager none bind 0 0' "$test_root/etc/fstab" \
+    || fail "installer must preserve network manager state below writable /data"
+[[ -d "$test_root/data/system-state/samba" && -d "$test_root/data/system-state/network-manager" ]] \
+    || fail "installer must create persistent writable service-state directories"
 cmp -s <(printf 'administrator sudo policy\n') "$test_root/etc/sudoers" \
     || fail "installer must preserve the administrator sudo policy"
 grep -Fq 'systemctl --root=' "$command_log" \
@@ -181,10 +206,21 @@ grep -Fq 'TTYPath=/dev/tty1' "$test_root/etc/systemd/system/retrobox-boot.servic
     || fail "boot service must launch on tty1"
 grep -Fq 'Restart=on-failure' "$test_root/etc/systemd/system/retrobox-boot.service" \
     || fail "boot service must restart after an emulator failure"
-grep -Fq -- '--vmpath /opt/retrobox/profiles/pentium100' "$test_root/etc/systemd/system/retrobox-boot.service" \
+grep -Fq -- '--vmpath /data/vms/pentium100' "$test_root/etc/systemd/system/retrobox-boot.service" \
     || fail "boot service must launch the Pentium profile"
 grep -Fq 'RETROBOX_MAINTENANCE=1' "$test_root/etc/systemd/system/retrobox-boot.service" \
     || fail "boot service must document a fullscreen maintenance override"
+grep -Fq 'Conflicts=getty@tty1.service' "$test_root/etc/systemd/system/retrobox-boot.service" \
+    || fail "boot service must reserve tty1 from getty"
+grep -Fq 'Before=getty@tty1.service' "$test_root/etc/systemd/system/retrobox-boot.service" \
+    || fail "boot service must order before the tty1 getty"
+grep -Fq '/data/system-state/samba' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
+    || fail "read-only support must document persistent Samba state"
+grep -Fq '/data/system-state/network-manager' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
+    || fail "read-only support must document persistent network state"
+
+printf 'persisted VHD state\n' > "$test_root/data/vms/pentium100/HDD.vhd"
+printf 'persisted NVR state\n' > "$test_root/data/vms/pentium100/86box.nvr"
 
 PATH="$test_bin:$PATH" \
 RETROBOX_PAYLOAD_ROOT="$test_payload" \
@@ -196,6 +232,10 @@ bash "$installer_file" --target-root "$test_root" --config "$test_payload/instal
     || fail "installer must keep fstab root provisioning idempotent"
 [[ $(grep -Fc 'UUID=data-test-uuid /data ext4 rw,nosuid,nodev 0 2' "$test_root/etc/fstab") -eq 1 ]] \
     || fail "installer must keep fstab data provisioning idempotent"
+grep -Fqx 'persisted VHD state' "$test_root/data/vms/pentium100/HDD.vhd" \
+    || fail "installer must preserve the active Pentium VHD on repeat provisioning"
+grep -Fqx 'persisted NVR state' "$test_root/data/vms/pentium100/86box.nvr" \
+    || fail "installer must preserve generated Pentium NVR state on repeat provisioning"
 
 rm "$test_root/dev/disk/by-id/ata-SONY_DVD_RW"
 touch "$test_root/dev/sr0"
@@ -231,6 +271,35 @@ if bash "$installer_file" --unknown-option >/dev/null 2>&1; then
     fail "installer must reject unknown arguments"
 fi
 
+readonly_error="$test_root/readonly-error.log"
+if PATH="$test_bin:$PATH" \
+    RETROBOX_TEST_ROOT_OPTIONS=ro,relatime \
+    RETROBOX_PAYLOAD_ROOT="$test_payload" \
+    RETROBOX_ROOT_UUID="root-test-uuid" \
+    RETROBOX_DATA_UUID="data-test-uuid" \
+    RETROBOX_TEST_COMMAND_LOG="$command_log" \
+    bash "$installer_file" --target-root "$test_root" --config "$test_payload/install-retropc.conf" > /dev/null 2> "$readonly_error"; then
+    fail "installer must refuse default provisioning on a read-only root"
+fi
+grep -Fq -- '--maintenance' "$readonly_error" \
+    || fail "read-only provisioning failure must explain the maintenance command"
+
+PATH="$test_bin:$PATH" \
+RETROBOX_TEST_ROOT_OPTIONS=ro,relatime \
+RETROBOX_PAYLOAD_ROOT="$test_payload" \
+RETROBOX_TEST_COMMAND_LOG="$command_log" \
+bash "$test_root/usr/local/sbin/install-retropc.sh" --maintenance --target-root "$test_root"
+grep -Fq "mount -o remount,rw $canonical_test_root" "$command_log" \
+    || fail "maintenance mode must remount the selected root read-write"
+
+PATH="$test_bin:$PATH" \
+RETROBOX_TEST_ROOT_OPTIONS=rw,errors=remount-ro \
+RETROBOX_PAYLOAD_ROOT="$test_payload" \
+RETROBOX_ROOT_UUID="root-test-uuid" \
+RETROBOX_DATA_UUID="data-test-uuid" \
+RETROBOX_TEST_COMMAND_LOG="$command_log" \
+bash "$installer_file" --target-root "$test_root" --config "$test_payload/install-retropc.conf"
+
 grep -Fq '[retro-floppy-scratch]' "$test_root/etc/samba/smb.conf" \
     || fail "installer must install the restricted Samba scratch share"
 grep -Fq 'guest ok = no' "$test_root/etc/samba/smb.conf" \
@@ -240,5 +309,20 @@ if grep -Eq '^\[[^]]*(cataloged|vms|snapshots)' "$test_root/etc/samba/smb.conf";
 fi
 grep -Fq 'systemctl edit retrobox-boot.service' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
     || fail "read-only support must document the maintenance boot override"
+grep -Fq 'mount -o remount,ro /' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
+    || fail "read-only support must document returning root to read-only mode"
+grep -Fq '/usr/local/sbin/install-retropc.sh --maintenance' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
+    || fail "read-only support must document the installed maintenance command"
+
+touch "$test_payload/86Box.AppImage"
+rm "$test_payload/$RETROBOX_86BOX_ASSET"
+if PATH="$test_bin:$PATH" \
+    RETROBOX_PAYLOAD_ROOT="$test_payload" \
+    RETROBOX_ROOT_UUID="root-test-uuid" \
+    RETROBOX_DATA_UUID="data-test-uuid" \
+    RETROBOX_TEST_COMMAND_LOG="$command_log" \
+    bash "$installer_file" --target-root "$test_root" --config "$test_payload/install-retropc.conf" > /dev/null 2>&1; then
+    fail "installer must reject a generic AppImage when the pinned asset is absent"
+fi
 
 printf 'PASS: installer contract\n'
