@@ -235,6 +235,11 @@ grep -Fq 'Conflicts=getty@tty1.service' "$test_root/etc/systemd/system/retrobox-
     || fail "boot service must reserve tty1 from getty"
 grep -Fq 'Before=getty@tty1.service' "$test_root/etc/systemd/system/retrobox-boot.service" \
     || fail "boot service must order before the tty1 getty"
+grep -Fq 'After=local-fs.target' "$test_root/etc/systemd/system/retrobox-boot.service" \
+    || fail "boot service must wait for local filesystems"
+if grep -Eq '^(After|Wants)=network(-online)?\.target$' "$test_root/etc/systemd/system/retrobox-boot.service"; then
+    fail "boot service must not wait for network availability"
+fi
 grep -Fq '/data/system-state/samba' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
     || fail "read-only support must document persistent Samba state"
 grep -Fq '/data/system-state/network-manager' "$test_root/etc/retrobox-appliance/read-only-root.conf" \
