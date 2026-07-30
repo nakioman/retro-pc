@@ -6,6 +6,7 @@ config_file="$repo_root/appliance/installer/install-retropc.conf"
 parser_file="$repo_root/appliance/installer/read-install-retropc-conf.sh"
 preseed_file="$repo_root/appliance/installer/preseed.cfg"
 installer_file="$repo_root/appliance/installer/install-retropc.sh"
+builder_file="$repo_root/appliance/installer/build-installer.sh"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -16,6 +17,7 @@ fail() {
 [[ -f "$parser_file" ]] || fail "installer configuration parser is missing: $parser_file"
 [[ -f "$preseed_file" ]] || fail "installer preseed is missing: $preseed_file"
 [[ -f "$installer_file" ]] || fail "target-side installer is missing: $installer_file"
+[[ -f "$builder_file" ]] || fail "installer ISO builder is missing: $builder_file"
 
 # shellcheck source=/dev/null
 source "$parser_file"
@@ -337,5 +339,172 @@ if PATH="$test_bin:$PATH" \
     bash "$installer_file" --target-root "$test_root" --config "$test_payload/install-retropc.conf" > /dev/null 2>&1; then
     fail "installer must reject a generic AppImage when the pinned asset is absent"
 fi
+
+build_test_root=$(mktemp -d)
+build_test_bin=$(mktemp -d)
+missing_command_bin=$(mktemp -d)
+build_output="$build_test_root/output/retro-pc-installer.iso"
+build_log="$build_test_root/build.log"
+build_error="$build_test_root/build-error.log"
+cleanup_all() {
+    cleanup
+    rm -rf "$build_test_root" "$build_test_bin" "$missing_command_bin"
+}
+trap cleanup_all EXIT
+
+make_build_stub() {
+    local name=$1
+    cat > "$build_test_bin/$name"
+    chmod +x "$build_test_bin/$name"
+}
+
+make_build_stub curl <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+output=''
+for ((index = 1; index <= $#; index += 1)); do
+    if [[ "${!index}" == '--output' ]]; then
+        next_index=$((index + 1))
+        output=${!next_index}
+    fi
+done
+
+url=${!#}
+printf 'curl %s\n' "$url" >> "$RETROBOX_TEST_BUILD_LOG"
+case "$url" in
+    https://github.com/nakioman/86box/releases/download/vtest.99/86Box-Linux-x86_64.AppImage)
+        head -c 2048 /dev/zero > "$output"
+        ;;
+    https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso)
+        printf 'debian source image\n' > "$output"
+        ;;
+    *)
+        printf 'unexpected download URL: %s\n' "$url" >&2
+        exit 22
+        ;;
+esac
+EOF
+make_build_stub dirname <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == '--' ]]; then
+    shift
+fi
+printf '%s\n' "${1%/*}"
+EOF
+cp "$build_test_bin/dirname" "$missing_command_bin/dirname"
+make_build_stub mise <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'mise %s\n' "$*" >> "$RETROBOX_TEST_BUILD_LOG"
+printf 'published retrobox\n' > "$RETROBOX_TEST_PUBLISH_BINARY"
+chmod +x "$RETROBOX_TEST_PUBLISH_BINARY"
+EOF
+make_build_stub xorriso <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'xorriso' >> "$RETROBOX_TEST_BUILD_LOG"
+for argument in "$@"; do
+    printf ' %q' "$argument" >> "$RETROBOX_TEST_BUILD_LOG"
+done
+printf '\n' >> "$RETROBOX_TEST_BUILD_LOG"
+
+arguments="$*"
+if [[ "$arguments" == *'-extract /isolinux '* ]]; then
+    destination=${!#}
+    mkdir -p "$destination"
+    cat > "$destination/txt.cfg" <<'CFG'
+label install
+    menu label ^Install
+    kernel /install.amd/vmlinuz
+    append vga=788 initrd=/install.amd/initrd.gz --- quiet
+CFG
+    printf 'isolinux binary\n' > "$destination/isolinux.bin"
+    exit 0
+fi
+
+if [[ "$arguments" == *'-outdev '* ]]; then
+    for ((index = 1; index <= $#; index += 1)); do
+        if [[ "${!index}" == '-outdev' ]]; then
+            output_index=$((index + 1))
+            printf 'remastered ISO\n' > "${!output_index}"
+        fi
+        if [[ "${!index}" == '-map' ]]; then
+            source_index=$((index + 1))
+            destination_index=$((index + 2))
+            if [[ "${!destination_index}" == '/isolinux' ]]; then
+                grep -F 'preseed/file=/cdrom/preseed.cfg' "${!source_index}/txt.cfg" >> "$RETROBOX_TEST_BUILD_LOG"
+            fi
+        fi
+    done
+    exit 0
+fi
+
+if [[ "$arguments" == *'-report_el_torito plain'* ]]; then
+    printf 'El Torito boot img : 1  BIOS\n'
+    exit 0
+fi
+
+if [[ "$arguments" == *'-find '* ]]; then
+    for ((index = 1; index <= $#; index += 1)); do
+        if [[ "${!index}" == '-find' ]]; then
+            path_index=$((index + 1))
+            printf '%s\n' "${!path_index}"
+        fi
+    done
+    exit 0
+fi
+EOF
+make_build_stub sha256sum <<'EOF'
+#!/usr/bin/env bash
+printf 'fixture-sha256  %s\n' "$1"
+EOF
+make_build_stub git <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == 'rev-parse' ]]; then
+    printf 'fixture-commit\n'
+fi
+EOF
+
+published_binary="$build_test_root/retrobox"
+PATH="$build_test_bin:$PATH" \
+RETROBOX_TEST_BUILD_LOG="$build_log" \
+RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
+RETROBOX_PUBLISH_BINARY="$published_binary" \
+env 86BOX_VERSION=vtest.99 \
+bash "$builder_file" --output "$build_output"
+
+canonical_build_output=$(cd "$(dirname "$build_output")" && pwd -P)/$(basename "$build_output")
+[[ -s "$build_output" ]] || fail "builder must create the requested ISO"
+[[ -f "$build_output.sha256" ]] || fail "builder must create an ISO SHA-256 sidecar"
+[[ -f "$build_output.json" ]] || fail "builder must create ISO metadata"
+grep -Fqx "fixture-sha256  $canonical_build_output" "$build_output.sha256" \
+    || fail "builder must write the ISO SHA-256"
+grep -Fq '"86box_version": "vtest.99"' "$build_output.json" \
+    || fail "builder metadata must record the selected 86Box version"
+grep -Fq '"git_commit": "fixture-commit"' "$build_output.json" \
+    || fail "builder metadata must record the source commit"
+grep -Fq 'mise run publish-linux-x64' "$build_log" \
+    || fail "builder must publish retrobox through mise"
+grep -Fq 'curl https://github.com/nakioman/86box/releases/download/vtest.99/86Box-Linux-x86_64.AppImage' "$build_log" \
+    || fail "builder must download the exact configured 86Box release asset"
+grep -Fq 'curl https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso' "$build_log" \
+    || fail "builder must use the pinned Debian 13 netinst image"
+grep -Fq -- '-boot_image any replay' "$build_log" \
+    || fail "builder must preserve the source BIOS boot configuration"
+grep -Fq 'preseed/file=/cdrom/preseed.cfg' "$build_log" \
+    || fail "builder must add the preseed kernel argument to the BIOS boot menu"
+for iso_path in /preseed.cfg /retropc/install-retropc.sh /retropc/86Box.AppImage /retropc/profiles /retropc/retrobox; do
+    grep -Fq -- "-find $iso_path" "$build_log" \
+        || fail "builder must inspect $iso_path in the generated ISO"
+done
+
+PATH="$missing_command_bin" "$BASH" "$builder_file" --output "$build_output" > /dev/null 2> "$build_error" || true
+for required_command in curl xorriso sha256sum mise git; do
+    grep -Fq "required command '$required_command' was not found" "$build_error" \
+        || fail "builder must explain how to install missing $required_command"
+done
 
 printf 'PASS: installer contract\n'
