@@ -19,6 +19,7 @@ repo_root=$(cd -- "$script_dir/../.." && pwd -P)
 config_file="$script_dir/install-retropc.conf"
 parser_file="$script_dir/read-install-retropc-conf.sh"
 output_file=${output_file:-"$repo_root/build/retro-pc-installer.iso"}
+mkdir -p "$(dirname -- "$output_file")"
 output_dir=$(cd -- "$(dirname -- "$output_file")" && pwd -P)
 output_file="$output_dir/$(basename -- "$output_file")"
 
