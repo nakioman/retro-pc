@@ -16,15 +16,14 @@ permissions:
 jobs:
   build-installer:
     runs-on: ubuntu-latest
-    env:
-      86BOX_VERSION: v7.0.0-master.46
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v4
       - name: Install ISO build tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xorriso
+          sudo apt-get install --yes debconf-utils xorriso
+      - run: debconf-set-selections -c appliance/installer/preseed.cfg
       - run: mise run test
       - run: ./appliance/installer/build-installer.sh
       - name: Publish build summary
@@ -32,7 +31,7 @@ jobs:
           {
             echo '## Debian appliance installer'
             echo
-            echo "- 86Box version: \`$(printenv 86BOX_VERSION)\`"
+            echo '- 86Box version: `'"$(awk -F'"' '/"86box_version"/ {print $4; exit}' build/retro-pc-installer.iso.json)"'`'
             echo "- SHA-256: \`$(awk '{print $1}' build/retro-pc-installer.iso.sha256)\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

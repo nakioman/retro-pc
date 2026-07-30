@@ -17,6 +17,10 @@ The command publishes `retrobox`, downloads the pinned Debian and 86Box
 assets, and writes the ISO plus `build/retro-pc-installer.iso.sha256` and
 `build/retro-pc-installer.iso.json`.
 
+Release versions and the 86Box x86_64 asset are edited in
+`appliance/installer/install-retropc.conf`. The builder and GitHub Actions
+both read that file; there is no workflow environment variable override.
+
 GitHub Actions runs the same builder on Ubuntu whenever installer-related
 sources change, or manually through the **Build Debian appliance installer**
 workflow. Download its `retro-pc-debian-installer-<commit>` artifact, which

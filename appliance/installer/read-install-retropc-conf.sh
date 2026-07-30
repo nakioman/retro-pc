@@ -30,6 +30,9 @@ load_retrobox_config() {
             86BOX_REPOSITORY|86BOX_VERSION|86BOX_ASSET)
                 variable="RETROBOX_$key"
                 ;;
+            DEBIAN_VERSION)
+                variable="RETROBOX_DEBIAN_VERSION"
+                ;;
             RETROBOX_CONFIG_ROOT|RETROBOX_DATA_ROOT)
                 variable="$key"
                 ;;

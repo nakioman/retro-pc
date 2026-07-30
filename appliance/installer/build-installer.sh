@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-debian_version='13.6.0'
-debian_netinst_url="https://cdimage.debian.org/debian-cd/${debian_version}/amd64/iso-cd/debian-${debian_version}-amd64-netinst.iso"
 minimum_appimage_bytes=1024
 
 usage() {
@@ -12,7 +10,7 @@ Usage: build-installer.sh [--output PATH]
 Build a BIOS-preserving Debian 13 installer ISO with the Retro PC appliance
 payload. The default output is build/retro-pc-installer.iso.
 
-Set 86BOX_VERSION to override the version from install-retropc.conf.
+Debian and 86Box release values are read from install-retropc.conf.
 EOF
 }
 
@@ -64,15 +62,18 @@ source "$parser_file"
 load_retrobox_config "$config_file"
 
 box86_repository=${RETROBOX_86BOX_REPOSITORY:-}
-box86_version=$(printenv 86BOX_VERSION 2>/dev/null || true)
-box86_version=${box86_version:-${RETROBOX_86BOX_VERSION:-}}
+box86_version=${RETROBOX_86BOX_VERSION:-}
 box86_asset=${RETROBOX_86BOX_ASSET:-}
+debian_version=${RETROBOX_DEBIAN_VERSION:-}
+debian_netinst_url="https://cdimage.debian.org/debian-cd/${debian_version}/amd64/iso-cd/debian-${debian_version}-amd64-netinst.iso"
 [[ "$box86_repository" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] \
     || die '86Box repository metadata is invalid'
 [[ "$box86_version" =~ ^v[A-Za-z0-9._-]+$ ]] \
     || die '86Box version metadata is invalid'
 [[ "$box86_asset" =~ ^[A-Za-z0-9._-]+\.AppImage$ ]] \
     || die '86Box asset metadata is invalid'
+[[ "$debian_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die 'Debian version metadata is invalid'
 
 output_directory=$(dirname -- "$output_file")
 mkdir -p "$output_directory"

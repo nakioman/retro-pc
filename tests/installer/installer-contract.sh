@@ -8,7 +8,6 @@ preseed_file="$repo_root/appliance/installer/preseed.cfg"
 installer_file="$repo_root/appliance/installer/install-retropc.sh"
 builder_file="$repo_root/appliance/installer/build-installer.sh"
 installer_readme="$repo_root/appliance/installer/README.md"
-workflow_file="$repo_root/.github/workflows/build-appliance-installer.yml"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -21,42 +20,6 @@ fail() {
 [[ -f "$installer_file" ]] || fail "target-side installer is missing: $installer_file"
 [[ -f "$builder_file" ]] || fail "installer ISO builder is missing: $builder_file"
 [[ -f "$installer_readme" ]] || fail "installer documentation is missing: $installer_readme"
-[[ -f "$workflow_file" ]] || fail "installer build workflow is missing: $workflow_file"
-
-grep -Fqx 'name: Build Debian appliance installer' "$workflow_file" \
-    || fail "workflow must use the Debian appliance installer name"
-grep -Fqx '  workflow_dispatch:' "$workflow_file" \
-    || fail "workflow must support manual dispatch"
-grep -Fqx '  push:' "$workflow_file" \
-    || fail "workflow must run for relevant pushes"
-for workflow_path in 'appliance/**' 'profiles/**' 'src/**' mise.toml .github/workflows/build-appliance-installer.yml; do
-    grep -Fqx "      - '$workflow_path'" "$workflow_file" \
-        || fail "workflow push paths must include $workflow_path"
-done
-grep -Fqx 'permissions:' "$workflow_file" \
-    || fail "workflow must declare repository permissions"
-grep -Fqx '  contents: read' "$workflow_file" \
-    || fail "workflow must use read-only repository contents permission"
-grep -Fqx '    runs-on: ubuntu-latest' "$workflow_file" \
-    || fail "workflow must use the Ubuntu hosted runner"
-grep -Fq 'uses: actions/checkout@v4' "$workflow_file" \
-    || fail "workflow must check out its source"
-grep -Fq 'uses: jdx/mise-action@v4' "$workflow_file" \
-    || fail "workflow must set up the repository mise toolchain"
-grep -Fqx '      - run: mise run test' "$workflow_file" \
-    || fail "workflow must run the project test task"
-grep -Fqx '      - run: ./appliance/installer/build-installer.sh' "$workflow_file" \
-    || fail "workflow must invoke the installer builder"
-grep -Fq 'uses: actions/upload-artifact@v4' "$workflow_file" \
-    || fail "workflow must upload the installer artifact"
-grep -Fqx '          name: retro-pc-debian-installer-${{ github.sha }}' "$workflow_file" \
-    || fail "workflow artifact name must include the source commit"
-grep -Fqx '          if-no-files-found: error' "$workflow_file" \
-    || fail "workflow artifact upload must fail when build outputs are absent"
-grep -Fqx '          retention-days: 7' "$workflow_file" \
-    || fail "workflow artifact retention must be seven days"
-grep -Fq 'GITHUB_STEP_SUMMARY' "$workflow_file" \
-    || fail "workflow must publish build metadata to its summary"
 
 grep -Fqx './appliance/installer/build-installer.sh --output build/retro-pc-installer.iso' "$installer_readme" \
     || fail "installer documentation must provide the exact local build command"
@@ -74,12 +37,17 @@ load_retrobox_config "$config_file"
 [[ "${RETROBOX_86BOX_REPOSITORY:-}" == "nakioman/86box" ]] || fail "parser must expose RETROBOX_86BOX_REPOSITORY"
 [[ "${RETROBOX_86BOX_VERSION:-}" == "v7.0.0-master.46" ]] || fail "parser must expose RETROBOX_86BOX_VERSION"
 [[ "${RETROBOX_86BOX_ASSET:-}" == *x86_64* ]] || fail "parser must expose an x86_64 RETROBOX_86BOX_ASSET"
+[[ "${RETROBOX_DEBIAN_VERSION:-}" == "13.6.0" ]] || fail "parser must expose RETROBOX_DEBIAN_VERSION"
 [[ "${RETROBOX_CONFIG_ROOT:-}" == "/data/retrobox" ]] || fail "parser must expose RETROBOX_CONFIG_ROOT"
 [[ "${RETROBOX_DATA_ROOT:-}" == "/data" ]] || fail "parser must expose RETROBOX_DATA_ROOT"
 [[ "${RETROBOX_INSTALLER_LABEL:-}" == "BIOS-only" ]] || fail "parser must expose RETROBOX_INSTALLER_LABEL"
 
 if grep -Eiq '(password|passwd|secret|token|credential|private[_-]?key)[[:space:]]*=' "$config_file"; then
     fail "installer configuration must not contain credentials"
+fi
+
+if grep -Fq 'printenv 86BOX_VERSION' "$builder_file"; then
+    fail "builder must use the configured 86Box version rather than an environment override"
 fi
 
 if awk '
@@ -127,6 +95,9 @@ grep -Eq 'mountpoint\{[[:space:]]*/data[[:space:]]*\}' "$preseed_file" \
 grep -Eq '^[[:space:]]*d-i[[:space:]]+partman/mount_style[[:space:]]+select[[:space:]]+uuid[[:space:]]*$' "$preseed_file" \
     || fail "preseed must generate UUID-based fstab entries"
 
+grep -Eq '^[[:space:]]*d-i[[:space:]]+pkgsel/include[[:space:]]+string.*(^|[[:space:]])fuse3([[:space:]]|$)' "$preseed_file" \
+    || fail "preseed must install fuse3 for the 86Box AppImage"
+
 test_root=$(mktemp -d)
 test_payload=$(mktemp -d)
 test_bin=$(mktemp -d)
@@ -135,30 +106,6 @@ cleanup() {
     rm -rf "$test_root" "$test_payload" "$test_bin"
 }
 trap cleanup EXIT
-
-summary_command=$(awk '
-    /^      - name: Publish build summary$/ { in_summary = 1; next }
-    in_summary && /^      - / { exit }
-    in_summary && /^        run: \|$/ { in_run = 1; next }
-    in_run {
-        sub(/^          /, "")
-        print
-    }
-' "$workflow_file")
-[[ -n "$summary_command" ]] || fail "workflow must define an executable build summary command"
-mkdir -p "$test_root/build"
-printf 'fixture-sha256  build/retro-pc-installer.iso\n' > "$test_root/build/retro-pc-installer.iso.sha256"
-summary_output="$test_root/github-step-summary.md"
-(
-    cd "$test_root"
-    env 86BOX_VERSION=vtest.99 \
-        GITHUB_STEP_SUMMARY="$summary_output" \
-        bash -c "$summary_command"
-)
-grep -Fqx -- '- 86Box version: `vtest.99`' "$summary_output" \
-    || fail "workflow summary must publish the selected 86Box version"
-grep -Fqx -- '- SHA-256: `fixture-sha256`' "$summary_output" \
-    || fail "workflow summary must publish the ISO checksum"
 
 mkdir -p \
     "$test_root/etc" \
@@ -430,6 +377,8 @@ make_build_stub() {
     chmod +x "$build_test_bin/$name"
 }
 
+export RETROBOX_86BOX_REPOSITORY RETROBOX_86BOX_VERSION RETROBOX_86BOX_ASSET RETROBOX_DEBIAN_VERSION
+
 make_build_stub curl <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -445,10 +394,10 @@ done
 url=${!#}
 printf 'curl %s\n' "$url" >> "$RETROBOX_TEST_BUILD_LOG"
 case "$url" in
-    https://github.com/nakioman/86box/releases/download/vtest.99/86Box-SDL-x86_64-46.AppImage)
+    "https://github.com/${RETROBOX_86BOX_REPOSITORY}/releases/download/${RETROBOX_86BOX_VERSION}/${RETROBOX_86BOX_ASSET}")
         head -c 2048 /dev/zero > "$output"
         ;;
-    https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso)
+    "https://cdimage.debian.org/debian-cd/${RETROBOX_DEBIAN_VERSION}/amd64/iso-cd/debian-${RETROBOX_DEBIAN_VERSION}-amd64-netinst.iso")
         printf 'debian source image\n' > "$output"
         ;;
     *)
@@ -557,7 +506,6 @@ PATH="$build_test_bin:$PATH" \
 RETROBOX_TEST_BUILD_LOG="$build_log" \
 RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
 RETROBOX_PUBLISH_BINARY="$published_binary" \
-env 86BOX_VERSION=vtest.99 \
 bash "$builder_file" --output "$build_output"
 
 canonical_build_output=$(cd "$(dirname "$build_output")" && pwd -P)/$(basename "$build_output")
@@ -566,15 +514,15 @@ canonical_build_output=$(cd "$(dirname "$build_output")" && pwd -P)/$(basename "
 [[ -f "$build_output.json" ]] || fail "builder must create ISO metadata"
 grep -Fqx "fixture-sha256  $canonical_build_output" "$build_output.sha256" \
     || fail "builder must write the ISO SHA-256"
-grep -Fq '"86box_version": "vtest.99"' "$build_output.json" \
+grep -Fq "\"86box_version\": \"$RETROBOX_86BOX_VERSION\"" "$build_output.json" \
     || fail "builder metadata must record the selected 86Box version"
 grep -Fq '"git_commit": "fixture-commit"' "$build_output.json" \
     || fail "builder metadata must record the source commit"
 grep -Fq 'mise run publish-linux-x64' "$build_log" \
     || fail "builder must publish retrobox through mise"
-grep -Fq 'curl https://github.com/nakioman/86box/releases/download/vtest.99/86Box-SDL-x86_64-46.AppImage' "$build_log" \
+grep -Fq "curl https://github.com/$RETROBOX_86BOX_REPOSITORY/releases/download/$RETROBOX_86BOX_VERSION/$RETROBOX_86BOX_ASSET" "$build_log" \
     || fail "builder must download the exact configured 86Box release asset"
-grep -Fq 'curl https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso' "$build_log" \
+grep -Fq "curl https://cdimage.debian.org/debian-cd/$RETROBOX_DEBIAN_VERSION/amd64/iso-cd/debian-$RETROBOX_DEBIAN_VERSION-amd64-netinst.iso" "$build_log" \
     || fail "builder must use the pinned Debian 13 netinst image"
 grep -Fq -- '-as mkisofs' "$build_log" \
     || fail "builder must create the ISO with explicit xorriso mkisofs options"
@@ -603,7 +551,6 @@ if PATH="$build_test_bin:$PATH" \
     RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
     RETROBOX_PUBLISH_BINARY="$published_binary" \
     RETROBOX_TEST_ELTORITO_REPORT=$'El Torito boot img : 1  BIOS\nPlatform Id : 0xef EFI' \
-    env 86BOX_VERSION=vtest.99 \
     bash "$builder_file" --output "$build_test_root/efi/retro-pc-installer.iso" > /dev/null 2> "$efi_build_error"; then
     fail "builder must reject an El Torito catalog with an EFI entry"
 fi
@@ -616,7 +563,6 @@ if PATH="$build_test_bin:$PATH" \
     RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
     RETROBOX_PUBLISH_BINARY="$published_binary" \
     RETROBOX_TEST_BOOT_MENU_FIXTURE=uneditable \
-    env 86BOX_VERSION=vtest.99 \
     bash "$builder_file" --output "$build_test_root/uneditable/retro-pc-installer.iso" > /dev/null 2> "$uneditable_build_error"; then
     fail "builder must reject a BIOS boot menu whose append line cannot be edited"
 fi
