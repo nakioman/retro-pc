@@ -45,12 +45,13 @@
 - Modify: `appliance/README.md`
 
 **Interfaces:**
-- Produces shell variables consumed by `build-installer.sh` and `install-retropc.sh`: `86BOX_REPOSITORY`, `86BOX_VERSION`, `86BOX_ASSET`, `RETROBOX_CONFIG_ROOT`, `RETROBOX_DATA_ROOT`, `INSTALLER_LABEL`.
+- Produces editable configuration keys consumed by a parser in `build-installer.sh` and `install-retropc.sh`: `86BOX_REPOSITORY`, `86BOX_VERSION`, `86BOX_ASSET`, `RETROBOX_CONFIG_ROOT`, `RETROBOX_DATA_ROOT`, `INSTALLER_LABEL`.
+- The parser exposes valid Bash variables with the `RETROBOX_` prefix, including `RETROBOX_86BOX_VERSION`; configuration keys beginning with a digit are never sourced directly.
 - Produces contract checks runnable without a Debian target system.
 
-- [ ] **Step 1: Write failing contract checks** for the pinned release, x86_64 asset, BIOS-only label, `/data` root, and absence of credentials.
+- [ ] **Step 1: Write failing contract checks** for the pinned release, x86_64 asset, BIOS-only label, `/data` root, absence of credentials, and the safe parser-to-variable interface.
 - [ ] **Step 2: Run the checks** with `bash tests/installer/installer-contract.sh`; verify they fail because the configuration does not exist.
-- [ ] **Step 3: Add the configuration file** with `86BOX_VERSION="v7.0.0-master.46"` and explicit paths.
+- [ ] **Step 3: Add the configuration file** with `86BOX_VERSION="v7.0.0-master.46"` and explicit paths, plus a parser that maps the editable keys to valid `RETROBOX_*` variables.
 - [ ] **Step 4: Add documentation** stating that changing `86BOX_VERSION` is the supported release update mechanism.
 - [ ] **Step 5: Run the checks** again and verify they pass.
 - [ ] **Step 6: Commit** with `git add appliance/installer/install-retropc.conf appliance/README.md tests/installer/installer-contract.sh && git commit -m "feat(appliance): define installer configuration contract"`.
