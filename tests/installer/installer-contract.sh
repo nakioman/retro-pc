@@ -445,7 +445,7 @@ done
 url=${!#}
 printf 'curl %s\n' "$url" >> "$RETROBOX_TEST_BUILD_LOG"
 case "$url" in
-    https://github.com/nakioman/86box/releases/download/vtest.99/86Box-Linux-x86_64.AppImage)
+    https://github.com/nakioman/86box/releases/download/vtest.99/86Box-SDL-x86_64-46.AppImage)
         head -c 2048 /dev/zero > "$output"
         ;;
     https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso)
@@ -572,7 +572,7 @@ grep -Fq '"git_commit": "fixture-commit"' "$build_output.json" \
     || fail "builder metadata must record the source commit"
 grep -Fq 'mise run publish-linux-x64' "$build_log" \
     || fail "builder must publish retrobox through mise"
-grep -Fq 'curl https://github.com/nakioman/86box/releases/download/vtest.99/86Box-Linux-x86_64.AppImage' "$build_log" \
+grep -Fq 'curl https://github.com/nakioman/86box/releases/download/vtest.99/86Box-SDL-x86_64-46.AppImage' "$build_log" \
     || fail "builder must download the exact configured 86Box release asset"
 grep -Fq 'curl https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso' "$build_log" \
     || fail "builder must use the pinned Debian 13 netinst image"
