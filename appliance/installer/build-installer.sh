@@ -115,37 +115,52 @@ ln -s "$box86_asset" "$payload_dir/86Box.AppImage"
 curl --fail --location --retry 3 --output "$debian_iso" "$debian_netinst_url"
 [[ -s "$debian_iso" ]] || die "Debian netinst download is empty: $debian_netinst_url"
 
-isolinux_dir="$work_dir/isolinux"
-xorriso -osirrox on -indev "$debian_iso" -extract /isolinux "$isolinux_dir"
+iso_root="$work_dir/iso-root"
+xorriso -osirrox on -indev "$debian_iso" -extract / "$iso_root"
+isolinux_dir="$iso_root/isolinux"
+[[ -f "$isolinux_dir/isolinux.bin" ]] \
+    || die 'Debian netinst image is missing the BIOS isolinux boot image'
+[[ -f "$isolinux_dir/isohdpfx.bin" ]] \
+    || die 'Debian netinst image is missing the BIOS isohybrid MBR'
 boot_menu_count=0
 while IFS= read -r -d '' boot_menu; do
     updated_boot_menu="$boot_menu.updated"
     if ! awk '
         /^[[:space:]]*append[[:space:]]/ {
-            if ($0 !~ /preseed\/file=\/cdrom\/preseed\.cfg/) {
+            if ($0 ~ /---/ && $0 !~ /preseed\/file=\/cdrom\/preseed\.cfg/) {
                 sub(/[[:space:]]+---/, " preseed/file=/cdrom/preseed.cfg ---")
+                changed = 1
             }
-            updated = 1
         }
         { print }
-        END { exit !updated }
+        END { exit !changed }
     ' "$boot_menu" > "$updated_boot_menu"; then
         rm -f "$updated_boot_menu"
         continue
     fi
+    grep -Fq 'preseed/file=/cdrom/preseed.cfg' "$updated_boot_menu" \
+        || die "could not verify the preseed argument in BIOS boot menu: $boot_menu"
     mv "$updated_boot_menu" "$boot_menu"
     ((boot_menu_count += 1))
 done < <(find "$isolinux_dir" -type f -name '*.cfg' -print0)
 ((boot_menu_count > 0)) || die 'could not add the preseed argument to an isolinux BIOS boot menu'
 
 rm -f "$output_file" "$output_file.sha256" "$output_file.json"
-xorriso \
-    -indev "$debian_iso" \
-    -outdev "$output_file" \
-    -map "$script_dir/preseed.cfg" /preseed.cfg \
-    -map "$payload_dir" /retropc \
-    -map "$isolinux_dir" /isolinux \
-    -boot_image any replay
+install -m 0644 "$script_dir/preseed.cfg" "$iso_root/preseed.cfg"
+cp -a "$payload_dir" "$iso_root/retropc"
+xorriso -as mkisofs \
+    -o "$output_file" \
+    -r \
+    -J \
+    -joliet-long \
+    -V 'Retro PC Installer' \
+    -isohybrid-mbr "$isolinux_dir/isohdpfx.bin" \
+    -b isolinux/isolinux.bin \
+    -c isolinux/boot.cat \
+    -no-emul-boot \
+    -boot-load-size 4 \
+    -boot-info-table \
+    "$iso_root"
 
 verify_iso_path() {
     local iso_path=$1 inspection
@@ -168,6 +183,9 @@ boot_report=$(xorriso -indev "$output_file" -report_el_torito plain 2>&1) \
     || die 'could not inspect generated ISO boot records'
 grep -Eiq '(BIOS|Platform Id[[:space:]]*:[[:space:]]*0x00)' <<< "$boot_report" \
     || die 'generated ISO does not retain a BIOS El Torito boot entry'
+if grep -Eiq '(EFI|UEFI|Platform Id[[:space:]]*:[[:space:]]*(0x)?[Ee][Ff])' <<< "$boot_report"; then
+    die 'generated ISO El Torito report must not contain EFI or UEFI boot entries'
+fi
 
 sha256sum "$output_file" > "$output_file.sha256"
 iso_sha256=$(awk '{print $1}' "$output_file.sha256")

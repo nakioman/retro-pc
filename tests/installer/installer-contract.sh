@@ -7,6 +7,7 @@ parser_file="$repo_root/appliance/installer/read-install-retropc-conf.sh"
 preseed_file="$repo_root/appliance/installer/preseed.cfg"
 installer_file="$repo_root/appliance/installer/install-retropc.sh"
 builder_file="$repo_root/appliance/installer/build-installer.sh"
+installer_readme="$repo_root/appliance/installer/README.md"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -18,6 +19,16 @@ fail() {
 [[ -f "$preseed_file" ]] || fail "installer preseed is missing: $preseed_file"
 [[ -f "$installer_file" ]] || fail "target-side installer is missing: $installer_file"
 [[ -f "$builder_file" ]] || fail "installer ISO builder is missing: $builder_file"
+[[ -f "$installer_readme" ]] || fail "installer documentation is missing: $installer_readme"
+
+grep -Fqx './appliance/installer/build-installer.sh --output build/retro-pc-installer.iso' "$installer_readme" \
+    || fail "installer documentation must provide the exact local build command"
+grep -Fq 'GitHub Actions' "$installer_readme" \
+    || fail "installer documentation must describe the GitHub Actions artifact"
+grep -Fq 'BIOS/Legacy' "$installer_readme" \
+    || fail "installer documentation must describe the BIOS/Legacy-only scope"
+grep -Fq 'floppy' "$installer_readme" \
+    || fail "installer documentation must describe the current no-floppy scope"
 
 # shellcheck source=/dev/null
 source "$parser_file"
@@ -412,38 +423,50 @@ done
 printf '\n' >> "$RETROBOX_TEST_BUILD_LOG"
 
 arguments="$*"
-if [[ "$arguments" == *'-extract /isolinux '* ]]; then
+if [[ "$arguments" == *'-extract / '* ]]; then
     destination=${!#}
-    mkdir -p "$destination"
-    cat > "$destination/txt.cfg" <<'CFG'
+    mkdir -p "$destination/isolinux"
+    cat > "$destination/isolinux/txt.cfg" <<'CFG'
 label install
     menu label ^Install
     kernel /install.amd/vmlinuz
     append vga=788 initrd=/install.amd/initrd.gz --- quiet
 CFG
-    printf 'isolinux binary\n' > "$destination/isolinux.bin"
+    cat > "$destination/isolinux/rescue.cfg" <<'CFG'
+label rescue
+    menu label ^Rescue
+    kernel /install.amd/vmlinuz
+    append vga=788 initrd=/install.amd/initrd.gz --- rescue
+CFG
+    if [[ "${RETROBOX_TEST_BOOT_MENU_FIXTURE:-valid}" == 'uneditable' ]]; then
+        sed -i.bak 's/ --- quiet//' "$destination/isolinux/txt.cfg"
+        rm "$destination/isolinux/txt.cfg.bak"
+        sed -i.bak 's/ --- rescue//' "$destination/isolinux/rescue.cfg"
+        rm "$destination/isolinux/rescue.cfg.bak"
+    fi
+    printf 'isolinux binary\n' > "$destination/isolinux/isolinux.bin"
+    printf 'isohybrid mbr\n' > "$destination/isolinux/isohdpfx.bin"
     exit 0
 fi
 
-if [[ "$arguments" == *'-outdev '* ]]; then
+if [[ "$arguments" == *'-as mkisofs '* ]]; then
     for ((index = 1; index <= $#; index += 1)); do
-        if [[ "${!index}" == '-outdev' ]]; then
+        if [[ "${!index}" == '-o' ]]; then
             output_index=$((index + 1))
             printf 'remastered ISO\n' > "${!output_index}"
         fi
-        if [[ "${!index}" == '-map' ]]; then
-            source_index=$((index + 1))
-            destination_index=$((index + 2))
-            if [[ "${!destination_index}" == '/isolinux' ]]; then
-                grep -F 'preseed/file=/cdrom/preseed.cfg' "${!source_index}/txt.cfg" >> "$RETROBOX_TEST_BUILD_LOG"
-            fi
-        fi
     done
+    source_root=${!#}
+    while IFS= read -r -d '' boot_menu; do
+        grep -Fq 'preseed/file=/cdrom/preseed.cfg' "$boot_menu" \
+            || { printf 'missing preseed in BIOS menu: %s\n' "$boot_menu" >&2; exit 31; }
+        printf 'verified BIOS menu preseed %s\n' "$boot_menu" >> "$RETROBOX_TEST_BUILD_LOG"
+    done < <(find "$source_root/isolinux" -type f -name '*.cfg' -print0)
     exit 0
 fi
 
 if [[ "$arguments" == *'-report_el_torito plain'* ]]; then
-    printf 'El Torito boot img : 1  BIOS\n'
+    printf '%s\n' "${RETROBOX_TEST_ELTORITO_REPORT:-El Torito boot img : 1  BIOS}"
     exit 0
 fi
 
@@ -492,14 +515,52 @@ grep -Fq 'curl https://github.com/nakioman/86box/releases/download/vtest.99/86Bo
     || fail "builder must download the exact configured 86Box release asset"
 grep -Fq 'curl https://cdimage.debian.org/debian-cd/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso' "$build_log" \
     || fail "builder must use the pinned Debian 13 netinst image"
-grep -Fq -- '-boot_image any replay' "$build_log" \
-    || fail "builder must preserve the source BIOS boot configuration"
-grep -Fq 'preseed/file=/cdrom/preseed.cfg' "$build_log" \
-    || fail "builder must add the preseed kernel argument to the BIOS boot menu"
+grep -Fq -- '-as mkisofs' "$build_log" \
+    || fail "builder must create the ISO with explicit xorriso mkisofs options"
+grep -Fq -- '-b isolinux/isolinux.bin' "$build_log" \
+    || fail "builder must explicitly select the BIOS isolinux boot image"
+grep -Fq -- '-c isolinux/boot.cat' "$build_log" \
+    || fail "builder must explicitly create a BIOS El Torito boot catalog"
+grep -Fq -- '-isohybrid-mbr' "$build_log" \
+    || fail "builder must retain BIOS USB boot support with an isohybrid MBR"
+if grep -Fq -- '-boot_image any replay' "$build_log"; then
+    fail "builder must not replay the source boot catalog"
+fi
+if grep -Eiq -- '(^|[[:space:]])(-e|--efi-boot|--efi-boot-part|--efi-boot-image)([[:space:]]|$)' "$build_log"; then
+    fail "builder must not add an EFI boot path"
+fi
+[[ $(grep -Fc 'verified BIOS menu preseed' "$build_log") -eq 2 ]] \
+    || fail "builder must inject the preseed argument into every edited BIOS menu"
 for iso_path in /preseed.cfg /retropc/install-retropc.sh /retropc/86Box.AppImage /retropc/profiles /retropc/retrobox; do
     grep -Fq -- "-find $iso_path" "$build_log" \
         || fail "builder must inspect $iso_path in the generated ISO"
 done
+
+efi_build_error="$build_test_root/efi-build-error.log"
+if PATH="$build_test_bin:$PATH" \
+    RETROBOX_TEST_BUILD_LOG="$build_log" \
+    RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
+    RETROBOX_PUBLISH_BINARY="$published_binary" \
+    RETROBOX_TEST_ELTORITO_REPORT=$'El Torito boot img : 1  BIOS\nPlatform Id : 0xef EFI' \
+    env 86BOX_VERSION=vtest.99 \
+    bash "$builder_file" --output "$build_test_root/efi/retro-pc-installer.iso" > /dev/null 2> "$efi_build_error"; then
+    fail "builder must reject an El Torito catalog with an EFI entry"
+fi
+grep -Fq 'must not contain EFI or UEFI' "$efi_build_error" \
+    || fail "builder must explain an EFI El Torito catalog failure"
+
+uneditable_build_error="$build_test_root/uneditable-build-error.log"
+if PATH="$build_test_bin:$PATH" \
+    RETROBOX_TEST_BUILD_LOG="$build_log" \
+    RETROBOX_TEST_PUBLISH_BINARY="$published_binary" \
+    RETROBOX_PUBLISH_BINARY="$published_binary" \
+    RETROBOX_TEST_BOOT_MENU_FIXTURE=uneditable \
+    env 86BOX_VERSION=vtest.99 \
+    bash "$builder_file" --output "$build_test_root/uneditable/retro-pc-installer.iso" > /dev/null 2> "$uneditable_build_error"; then
+    fail "builder must reject a BIOS boot menu whose append line cannot be edited"
+fi
+grep -Fq 'could not add the preseed argument' "$uneditable_build_error" \
+    || fail "builder must explain an uneditable BIOS boot menu failure"
 
 PATH="$missing_command_bin" "$BASH" "$builder_file" --output "$build_output" > /dev/null 2> "$build_error" || true
 for required_command in curl xorriso sha256sum mise git; do
