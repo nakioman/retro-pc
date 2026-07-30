@@ -23,6 +23,14 @@ systemd unit files, read-only-root enforcement, or the graphics stack needed
 by 86Box. Those pieces must be integrated and tested against the real hardware
 separately.
 
+## Installer configuration
+
+The installer configuration contract is defined in
+[`installer/install-retropc.conf`](installer/install-retropc.conf). Changing
+`86BOX_VERSION` is the supported release update mechanism; the installer must
+continue to use the explicitly configured x86_64 asset and must not embed
+credentials in this file.
+
 ## Accounts and permissions
 
 Create a system user and matching system group named `retrobox`. The account
