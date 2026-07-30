@@ -1,0 +1,42 @@
+# Debian 13 (trixie) runtime package manifest for the Retro PC appliance.
+#
+# This list is intentionally limited to packages needed by the physical
+# appliance at runtime and for normal maintenance. It is suitable as the
+# explicit package list layered on top of a minimal Debian 13 installation.
+# Dependency packages pulled in by APT are not listed separately.
+#
+# The official debian:13-slim image is a useful reference for keeping the
+# starting point small, but the final target is a physical Debian system with
+# systemd, hardware devices, SSH, Samba, and audio support.
+
+# Base service/runtime
+systemd
+udev
+
+# Appliance administration and file transfer
+openssh-server
+samba
+sudo
+
+# Hardware and audio runtime
+alsa-utils
+kmod
+fuse3
+
+# Small maintenance/networking toolset
+procps
+iproute2
+util-linux
+pciutils
+ca-certificates
+
+# Deliberately excluded from this base manifest:
+# - .NET SDK, compilers, and build tools
+# - Docker or container tooling
+# - desktop environments and window managers
+# - X11/Wayland/SDL/DRM/graphics packages for 86Box
+# - DOS, Windows, drivers, games, or other copyrighted media
+#
+# 86Box is supplied as an AppImage. Its graphics dependencies and any
+# additional host libraries required by the selected AppImage must be decided
+# during the physical graphics integration work, not added speculatively here.
