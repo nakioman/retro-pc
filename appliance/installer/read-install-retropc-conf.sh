@@ -33,6 +33,9 @@ load_retrobox_config() {
             DEBIAN_VERSION)
                 variable="RETROBOX_DEBIAN_VERSION"
                 ;;
+            DEBIAN_SUITE|DEBIAN_LIVE_VARIANT|IMAGE_SIZE_GIB|ROOT_SIZE_GIB|SWAPFILE_SIZE_GIB)
+                variable="RETROBOX_$key"
+                ;;
             RETROBOX_CONFIG_ROOT|RETROBOX_DATA_ROOT)
                 variable="$key"
                 ;;

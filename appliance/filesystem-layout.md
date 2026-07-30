@@ -33,8 +33,8 @@ The current `retrobox` code uses these paths directly:
 - `/data/floppies/cataloged` stores imported floppy images.
 - VM paths are under `/data/vms`.
 
-The directories may be created during appliance provisioning. The `retrobox`
-system user/group should own `/data/retrobox` and the cataloged application
+The directories may be created during appliance provisioning. The human
+`retrobox` user/group should own `/data/retrobox` and the cataloged application
 state. Samba write access should be restricted to the `scratch` directory;
 network users must not be granted write access to catalogs, VM disks, or
 snapshots.

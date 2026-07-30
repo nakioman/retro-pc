@@ -1,5 +1,9 @@
 # Debian Appliance Installer Implementation Plan
 
+> Historical plan for the Debian Installer prototype. The current implementation
+> uses `build-system-image.sh`, `install-image.sh`, and a Debian Live BIOS
+> environment instead of preseed-based package installation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a BIOS/Legacy-only Debian Installer ISO in GitHub Actions that interactively installs the Retro PC appliance without floppy/NFC integration.

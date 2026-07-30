@@ -31,9 +31,10 @@ jobs:
       - name: Install ISO build tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes isolinux xorriso
+          sudo apt-get install --yes debootstrap e2fsprogs grub-pc-bin isolinux squashfs-tools util-linux xorriso zstd
       - run: mise run test
-      - run: ./appliance/installer/build-installer.sh
+      - run: bash tests/installer/installer-contract.sh
+      - run: sudo -E env "PATH=$PATH" ./appliance/installer/build-installer.sh
       - name: Publish build summary
         run: |
           {
@@ -49,5 +50,7 @@ jobs:
             build/retro-pc-installer.iso
             build/retro-pc-installer.iso.sha256
             build/retro-pc-installer.iso.json
+            build/retrobox-system.raw.zst
+            build/retrobox-system.raw.zst.sha256
           if-no-files-found: error
           retention-days: 7

@@ -5,10 +5,10 @@ usage() {
     cat <<'EOF'
 Usage: install-retropc.sh [--target-root PATH] [--config PATH] [--maintenance]
 
-When invoked by Debian Installer from /cdrom/retropc/install-retropc.sh, the
-implicit target root is /target. When invoked on the installed appliance, the
-implicit target root is /. Pass --target-root only for an already-mounted
-target system or a controlled test target.
+When invoked on the installed appliance, the implicit target root is /. Pass
+--target-root only for an already-mounted target system or a controlled test
+target. The image installer uses install-image.sh for first-time deployment;
+this script remains the maintenance/provisioning utility.
 
 Use --maintenance after booting a read-only appliance to remount the selected
 root read-write. It does not provision or modify appliance files.

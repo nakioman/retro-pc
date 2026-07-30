@@ -5,11 +5,10 @@ appliance. The target is Debian 13 (trixie), installed as a minimal physical
 system and extended with the runtime packages listed in
 [`debian/packages.txt`](debian/packages.txt).
 
-The official `debian:13-slim` image is used as a reference for keeping the
-package set small. It is not the appliance image: a container does not model
-the physical machine's systemd boot, audio, USB/serial, CD-ROM, input, or
-graphics devices. The final deployment is a normal Debian installation on the
-appliance hardware.
+The official `debian:13-slim` image is used only as a reference for keeping the
+package set small. GitHub Actions builds the actual physical-system image with
+Debian tooling; the target image models systemd boot, audio, USB/serial,
+CD-ROM, input, and graphics devices.
 
 ## Runtime shape
 
@@ -18,16 +17,16 @@ implementation detail and does not provide a desktop environment. 86Box is
 expected to be delivered as an AppImage, while `retrobox` is deployed as the
 self-contained Linux x64 binary produced by the repository's publish task.
 
-This issue defines the base layout only. It does not create a bootable image,
-systemd unit files, read-only-root enforcement, or the graphics stack needed
-by 86Box. Those pieces must be integrated and tested against the real hardware
-separately.
+The build produces a BIOS/Legacy-only USB installer containing a complete
+preinstalled system image. The target machine only receives the image and
+machine-specific credentials/configuration; it does not run Debian Installer
+or download packages.
 
 ## Installer configuration
 
 The installer configuration contract is defined in
-[`installer/install-retropc.conf`](installer/install-retropc.conf). Changing
-The Debian and 86Box release values in this file are the source of truth; the
+[`installer/install-retropc.conf`](installer/install-retropc.conf). The Debian
+and 86Box release values in this file are the source of truth; the
 installer must continue to use the explicitly configured x86_64 asset and must
 not embed credentials in this file. Installer scripts load the file through
 [`read-install-retropc-conf.sh`](installer/read-install-retropc-conf.sh), which
@@ -36,14 +35,10 @@ variables such as `RETROBOX_86BOX_VERSION`.
 
 ## Accounts and permissions
 
-Create a system user and matching system group named `retrobox`. The account
-owns the application state under `/data/retrobox` and should be granted only
-the device and service permissions needed by the eventual systemd units.
-
-The account is not a remote login account by default. Maintenance access is
-provided through SSH for an explicitly authorized administrator account, using
-`sudo` for commands that require elevated privileges. Do not enable password
-login for the `retrobox` service account merely to make maintenance easier.
+Create the sole human account named `retrobox`. Its password is requested by
+the USB installer, it belongs to `sudo`, and root is locked with no root SSH
+login. The account owns the application state under `/data/retrobox` and is
+used by the fullscreen 86Box service.
 
 Samba exposes only the floppy import drop directory:
 
@@ -83,7 +78,7 @@ included by this base layout.
 
 ## Installer operation and verification
 
-The bootable installer and the exact artifact, USB-writing, BIOS boot,
+The bootable installer, preinstalled image artifact, USB-writing, BIOS boot,
 first-boot, and recovery procedures are documented in
 [`installer/README.md`](installer/README.md). Its ISO is BIOS/Legacy-only: it
 does not contain a UEFI boot path. The operator selects the target disk and
@@ -94,8 +89,8 @@ The installed contract is a read-only `/` filesystem plus a writable `/data`
 filesystem. Verify the physical prototype only with a disposable disk, then
 confirm the hostname, administrator sudo access, timezone, SSH, restricted
 Samba scratch share, `/data` persistence, detected physical CD-ROM path, and
-fullscreen 86Box launch. Generated ISO artifacts have deterministic ISO,
-`.sha256`, and `.json` names, and GitHub Actions publishes the same set as a
+fullscreen 86Box launch. Generated artifacts have deterministic ISO/raw-image,
+`.sha256`, and `.json` names, and GitHub Actions publishes them as a
 commit-named artifact.
 
 Recovery is intentionally available through a systemd maintenance override,

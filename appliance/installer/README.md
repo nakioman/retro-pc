@@ -1,8 +1,9 @@
 # Retro PC BIOS Installer
 
-This builder creates the Retro PC Debian 13 installer image. The image is
-BIOS/Legacy-only: it has a BIOS El Torito boot entry and no EFI or UEFI boot
-path.
+This builder creates a BIOS/Legacy-only installer USB containing a complete
+preinstalled Debian 13 appliance image. The target machine does not run
+Debian Installer or download packages: the USB copies the prepared image and
+applies the few machine-specific settings.
 
 ## Build locally
 
@@ -13,23 +14,23 @@ From the repository root on a Debian or Ubuntu host with `curl`, `xorriso`,
 ./appliance/installer/build-installer.sh --output build/retro-pc-installer.iso
 ```
 
-The command publishes `retrobox`, downloads the pinned Debian and 86Box
-assets, and writes the ISO plus `build/retro-pc-installer.iso.sha256` and
-`build/retro-pc-installer.iso.json`.
+The command publishes `retrobox`, builds the Debian system image, downloads
+the pinned Debian Live and 86Box assets, and writes the ISO plus the raw image,
+checksums, and metadata under `build/`.
 
 Release versions and the 86Box x86_64 asset are edited in
 `appliance/installer/install-retropc.conf`. The builder and GitHub Actions
 both read that file; there is no workflow environment variable override.
 
-GitHub Actions runs the same builder on Ubuntu whenever installer-related
-sources change, or manually through the **Build Debian appliance installer**
-workflow. Download its `retro-pc-debian-installer-<commit>` artifact, which
-contains the ISO, checksum, and metadata JSON. Prototype artifacts are retained
-for seven days. From the extracted artifact directory, verify it before using
-it:
+GitHub Actions runs the same builder on Ubuntu for pull requests affecting the
+installer and on `main`, or manually through the **Build Debian appliance
+installer** workflow. Its artifact contains the BIOS ISO, prepared compressed
+raw image, checksums, and metadata. Prototype artifacts are retained for seven
+days. Verify the ISO before using it:
 
 ```text
 sha256sum -c retro-pc-installer.iso.sha256
+sha256sum -c retrobox-system.raw.zst.sha256
 ```
 
 ## Write and install
@@ -55,27 +56,26 @@ Boot the appliance from that USB drive in Legacy/BIOS mode; do not select
 UEFI-only boot. The first physical installation must use a disposable target
 disk. It is a prototype check, not final RTM hardware validation.
 
-At boot, Debian Installer loads the bundled preseed and then asks the operator
-to confirm the following answers:
+At boot, the live installer asks the operator to confirm the following answers:
 
 - Select the intended target disk and explicitly confirm the destructive
   partitioning write. The installer never chooses a disk for you.
 - Provide the hostname (the displayed `retrobox` default may be changed).
-- Create the first maintenance user and password. Those credentials are
-  entered only in Debian Installer; they are not in `preseed.cfg`, the image
-  builder, workflow, or repository.
+- Set and confirm the password for the fixed `retrobox` user. Root is locked
+  and `retrobox` receives sudo access.
 - Confirm the timezone (the displayed `Etc/UTC` default may be changed).
 
-The selected disk is partitioned for BIOS/MBR boot with an ext4 `/` filesystem
-mounted read-only after provisioning and a separate writable ext4 `/data`
-filesystem. Persistent appliance state is placed under `/data`, including
+The selected disk receives a prebuilt BIOS/MBR image. Its root filesystem is
+mounted read-only after provisioning and its writable `/data` partition is
+expanded to fill the remaining disk space. A 2 GiB swapfile lives inside
+`/data`. Persistent appliance state is placed under `/data`, including
 `/data/retrobox`, `/data/vms`, `/data/floppies/scratch`,
 `/data/floppies/cataloged`, and `/data/snapshots`.
 
 ## First boot checks
 
 After installation completes, remove the USB drive and boot the installed disk
-in BIOS/Legacy mode. Log in as the maintenance user locally or by SSH, then
+in BIOS/Legacy mode. Log in as `retrobox` locally or by SSH, then
 check the installed contract:
 
 ```text
@@ -100,12 +100,11 @@ From another machine on the network, verify remote maintenance and the
 restricted Samba scratch share with an authorized Samba user:
 
 ```text
-ssh <maintenance-user>@<appliance-hostname>
+ssh retrobox@<appliance-hostname>
 smbclient //'<appliance-hostname>'/retro-floppy-scratch -U <authorized-samba-user>
 ```
 
-The Samba user must be an existing local user authorized through the
-`retrobox-samba` group and Samba's password database; the share exposes only
+The `retrobox` user is the local sudo-enabled maintenance account. The share exposes only
 `/data/floppies/scratch`, not VM disks, snapshots, or cataloged media. Finally,
 confirm visually that the normal console boots directly into fullscreen 86Box
 using `/data/vms/pentium100` and that its CD-ROM device is available when the

@@ -1,5 +1,9 @@
 # Debian Appliance Installer Design
 
+> Superseded by the preinstalled raw-image installer implemented in this
+> branch. The current design uses a Debian Live BIOS environment to copy a
+> prepared Debian disk image and configure `retrobox`.
+
 ## Goal
 
 Build a BIOS/Legacy-only bootable Debian Installer USB image for the Retro PC

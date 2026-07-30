@@ -1,0 +1,16 @@
+[Unit]
+Description=Retro PC preinstalled image installer
+After=local-fs.target
+Conflicts=getty@tty1.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/retrobox-install-image
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
