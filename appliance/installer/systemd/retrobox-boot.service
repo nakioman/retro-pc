@@ -1,0 +1,27 @@
+[Unit]
+Description=RetroBox Pentium 100 fullscreen appliance
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsExecutable=/opt/retrobox/86Box.AppImage
+
+# Maintenance override: `systemctl edit retrobox-boot.service`, then add:
+# [Service]
+# Environment=RETROBOX_MAINTENANCE=1
+# The override exits successfully before fullscreen 86Box claims tty1.
+
+[Service]
+Type=simple
+User=retrobox
+WorkingDirectory=/opt/retrobox/profiles/pentium100
+Environment=HOME=/data/retrobox
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal+console
+TTYReset=yes
+TTYVHangup=yes
+ExecStart=/bin/sh -ec 'if [ "$$RETROBOX_MAINTENANCE" = 1 ]; then exit 0; fi; exec /opt/retrobox/86Box.AppImage --vmpath /opt/retrobox/profiles/pentium100'
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
