@@ -8,6 +8,7 @@ preseed_file="$repo_root/appliance/installer/preseed.cfg"
 installer_file="$repo_root/appliance/installer/install-retropc.sh"
 builder_file="$repo_root/appliance/installer/build-installer.sh"
 installer_readme="$repo_root/appliance/installer/README.md"
+workflow_file="$repo_root/.github/workflows/build-appliance-installer.yml"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -20,6 +21,42 @@ fail() {
 [[ -f "$installer_file" ]] || fail "target-side installer is missing: $installer_file"
 [[ -f "$builder_file" ]] || fail "installer ISO builder is missing: $builder_file"
 [[ -f "$installer_readme" ]] || fail "installer documentation is missing: $installer_readme"
+[[ -f "$workflow_file" ]] || fail "installer build workflow is missing: $workflow_file"
+
+grep -Fqx 'name: Build Debian appliance installer' "$workflow_file" \
+    || fail "workflow must use the Debian appliance installer name"
+grep -Fqx '  workflow_dispatch:' "$workflow_file" \
+    || fail "workflow must support manual dispatch"
+grep -Fqx '  push:' "$workflow_file" \
+    || fail "workflow must run for relevant pushes"
+for workflow_path in 'appliance/**' 'profiles/**' 'src/**' mise.toml .github/workflows/build-appliance-installer.yml; do
+    grep -Fqx "      - '$workflow_path'" "$workflow_file" \
+        || fail "workflow push paths must include $workflow_path"
+done
+grep -Fqx 'permissions:' "$workflow_file" \
+    || fail "workflow must declare repository permissions"
+grep -Fqx '  contents: read' "$workflow_file" \
+    || fail "workflow must use read-only repository contents permission"
+grep -Fqx '    runs-on: ubuntu-latest' "$workflow_file" \
+    || fail "workflow must use the Ubuntu hosted runner"
+grep -Fq 'uses: actions/checkout@v4' "$workflow_file" \
+    || fail "workflow must check out its source"
+grep -Fq 'uses: jdx/mise-action@v4' "$workflow_file" \
+    || fail "workflow must set up the repository mise toolchain"
+grep -Fqx '      - run: mise run test' "$workflow_file" \
+    || fail "workflow must run the project test task"
+grep -Fqx '      - run: ./appliance/installer/build-installer.sh' "$workflow_file" \
+    || fail "workflow must invoke the installer builder"
+grep -Fq 'uses: actions/upload-artifact@v4' "$workflow_file" \
+    || fail "workflow must upload the installer artifact"
+grep -Fqx '          name: retro-pc-debian-installer-${{ github.sha }}' "$workflow_file" \
+    || fail "workflow artifact name must include the source commit"
+grep -Fqx '          if-no-files-found: error' "$workflow_file" \
+    || fail "workflow artifact upload must fail when build outputs are absent"
+grep -Fqx '          retention-days: 7' "$workflow_file" \
+    || fail "workflow artifact retention must be seven days"
+grep -Fq 'GITHUB_STEP_SUMMARY' "$workflow_file" \
+    || fail "workflow must publish build metadata to its summary"
 
 grep -Fqx './appliance/installer/build-installer.sh --output build/retro-pc-installer.iso' "$installer_readme" \
     || fail "installer documentation must provide the exact local build command"
