@@ -26,6 +26,14 @@ the config is relative:
 hdd_01_fn = HDD.vhd
 ```
 
+The SDL graphics configuration enables the bundled CRT shader:
+
+```text
+shader0 = shaders/syncmaster3.glsl
+```
+
+Keep the `shaders/` directory beside `86box.cfg` when copying the profile.
+
 Launching the profile should reach BIOS and then an empty/non-system disk
 state. Install DOS manually later if the VM needs to become bootable.
 
