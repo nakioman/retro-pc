@@ -300,6 +300,19 @@ RETROBOX_DATA_UUID="data-test-uuid" \
 RETROBOX_TEST_COMMAND_LOG="$command_log" \
 bash "$installer_file" --target-root "$test_root" --config "$test_payload/install-retropc.conf"
 
+PATH="$test_bin:$PATH" \
+RETROBOX_TEST_ROOT_OPTIONS=rw,errors=remount-ro \
+RETROBOX_ROOT_UUID="root-test-uuid" \
+RETROBOX_DATA_UUID="data-test-uuid" \
+RETROBOX_TEST_COMMAND_LOG="$command_log" \
+bash "$test_root/usr/local/sbin/install-retropc.sh" --target-root "$test_root"
+grep -Fqx 'persisted VHD state' "$test_root/data/vms/pentium100/HDD.vhd" \
+    || fail "installed provisioning command must preserve the active Pentium VHD"
+grep -Fqx 'persisted NVR state' "$test_root/data/vms/pentium100/86box.nvr" \
+    || fail "installed provisioning command must preserve generated Pentium NVR state"
+[[ $(grep -Fc 'UUID=root-test-uuid / ext4 ro,errors=remount-ro 0 1' "$test_root/etc/fstab") -eq 1 ]] \
+    || fail "installed provisioning command must keep root provisioning idempotent"
+
 grep -Fq '[retro-floppy-scratch]' "$test_root/etc/samba/smb.conf" \
     || fail "installer must install the restricted Samba scratch share"
 grep -Fq 'guest ok = no' "$test_root/etc/samba/smb.conf" \

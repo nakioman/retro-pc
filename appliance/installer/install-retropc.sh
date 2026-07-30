@@ -21,7 +21,11 @@ die() {
 }
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-payload_root=${RETROBOX_PAYLOAD_ROOT:-$script_dir}
+default_payload_root=$script_dir
+if [[ -d "$script_dir/../lib/retrobox-installer" ]]; then
+    default_payload_root=$(cd -- "$script_dir/../lib/retrobox-installer" && pwd -P)
+fi
+payload_root=${RETROBOX_PAYLOAD_ROOT:-$default_payload_root}
 target_root=''
 config_file=''
 maintenance_mode=false
@@ -133,6 +137,10 @@ copy_payload_file() {
     local source=$1 destination=$2 mode=$3
     [[ -r "$source" ]] || die "payload file is missing: $source"
     install -d -m 0755 "$(dirname -- "$destination")"
+    if [[ -e "$destination" && "$source" -ef "$destination" ]]; then
+        chmod "$mode" "$destination"
+        return
+    fi
     install -m "$mode" "$source" "$destination"
 }
 
@@ -249,6 +257,14 @@ detect_cdrom_device() {
 appimage_source="$payload_root/$RETROBOX_86BOX_ASSET"
 [[ -r "$appimage_source" ]] || die "pinned 86Box AppImage payload is missing: $RETROBOX_86BOX_ASSET"
 
+persistent_payload_root=$(target_path /usr/local/lib/retrobox-installer)
+copy_payload_file "$payload_root/install-retropc.conf" "$persistent_payload_root/install-retropc.conf" 0644
+copy_payload_file "$payload_root/read-install-retropc-conf.sh" "$persistent_payload_root/read-install-retropc-conf.sh" 0644
+copy_payload_file "$appimage_source" "$persistent_payload_root/$RETROBOX_86BOX_ASSET" 0755
+copy_payload_file "$payload_root/systemd/retrobox-boot.service" "$persistent_payload_root/systemd/retrobox-boot.service" 0644
+copy_payload_file "$payload_root/samba/smb.conf" "$persistent_payload_root/samba/smb.conf" 0644
+copy_payload_file "$payload_root/read-only-root.conf" "$persistent_payload_root/read-only-root.conf" 0644
+
 ensure_system_group retrobox
 ensure_system_group retrobox-samba
 ensure_system_user retrobox retrobox
@@ -264,11 +280,13 @@ install_root=$(target_path /opt/retrobox)
 install -d -m 0755 "$install_root/profiles"
 install -m 0755 "$appimage_source" "$install_root/86Box.AppImage"
 [[ -d "$payload_root/profiles/386sx16" ]] || die 'profile payload is missing: 386sx16'
+seed_payload_tree "$payload_root/profiles/386sx16" "$persistent_payload_root/profiles/386sx16"
 rm -rf "$install_root/profiles/386sx16"
 cp -R "$payload_root/profiles/386sx16" "$install_root/profiles/386sx16"
 upsert_profile_key "$install_root/profiles/386sx16/86box.cfg" floppy_control_socket_enabled 0
 
 [[ -d "$payload_root/profiles/pentium100" ]] || die 'profile payload is missing: pentium100'
+seed_payload_tree "$payload_root/profiles/pentium100" "$persistent_payload_root/profiles/pentium100"
 pentium_vm_root="$data_root/vms/pentium100"
 install -d -m 0750 "$pentium_vm_root"
 seed_payload_tree "$payload_root/profiles/pentium100" "$pentium_vm_root"
