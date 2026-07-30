@@ -9,6 +9,13 @@ on:
       - 'src/**'
       - 'mise.toml'
       - '.github/workflows/build-appliance-installer.yml'
+  pull_request:
+    paths:
+      - 'appliance/**'
+      - 'profiles/**'
+      - 'src/**'
+      - 'mise.toml'
+      - '.github/workflows/build-appliance-installer.yml'
 
 permissions:
   contents: read
