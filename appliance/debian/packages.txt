@@ -22,17 +22,15 @@ samba
 sudo
 network-manager
 
-# Hardware and audio runtime
+# Hardware and audio runtime.  The generic Debian kernel intentionally carries
+# modules for many machines; that is one package, not a desktop or vendor
+# driver installation.
 alsa-utils
 kmod
 fuse3
-xserver-xorg
-xinit
-dbus-x11
 libgl1
 libasound2t64
 libpulse0
-pulseaudio-utils
 
 # Small maintenance/networking toolset
 procps
@@ -47,5 +45,6 @@ ca-certificates
 # - desktop environments and window managers
 # - DOS, Windows, drivers, games, or other copyrighted media
 #
-# 86Box is supplied as an AppImage; this manifest contains the minimal X11 and
-# audio host libraries needed by the selected runtime.
+# 86Box is supplied as an AppImage. It is launched directly on the BIOS
+# console, so an X server, display manager, desktop environment, and X11
+# session tools are deliberately not part of the appliance.

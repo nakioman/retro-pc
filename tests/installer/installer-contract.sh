@@ -42,9 +42,14 @@ if grep -Eiq 'debian-(13|trixie).*netinst|preseed/file|pkgsel/include' "$builder
     fail 'image builder must not use the Debian Installer package-install path'
 fi
 
-for package in systemd systemd-sysv linux-image-amd64 grub-pc-bin openssh-server samba sudo network-manager alsa-utils fuse3 xserver-xorg xinit libgl1 libasound2t64 libpulse0 pulseaudio-utils; do
+for package in systemd systemd-sysv linux-image-amd64 grub-pc-bin openssh-server samba sudo network-manager alsa-utils fuse3 libgl1 libasound2t64 libpulse0; do
     grep -Eq "^[[:space:]]*$package([[:space:]]|$)" "$packages_file" \
         || fail "runtime package is missing: $package"
+done
+for package in xserver-xorg xinit dbus-x11 pulseaudio-utils; do
+    if grep -Eq "^[[:space:]]*$package([[:space:]]|$)" "$packages_file"; then
+        fail "desktop/session package must not be explicit: $package"
+    fi
 done
 if awk '!/^[[:space:]]*#/ && NF { print $1 }' "$packages_file" | grep -Eiq '^(python|pip|desktop|gnome|kde)'; then
     fail 'runtime package manifest contains an explicitly unwanted large dependency'

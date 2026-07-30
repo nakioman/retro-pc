@@ -84,8 +84,22 @@ mount "$root_partition" "$root_mount"
 mkdir -p "$root_mount/data"
 mount "$data_partition" "$root_mount/data"
 
+# Package post-install scripts must not try to start services inside the
+# offline image while debootstrap is assembling it.  Remove this guard before
+# the image is finalized so normal systemd boot behavior is preserved.
+install -d -m 0755 "$root_mount/usr/sbin"
+cat > "$root_mount/usr/sbin/policy-rc.d" <<'EOF'
+#!/bin/sh
+exit 101
+EOF
+chmod 0755 "$root_mount/usr/sbin/policy-rc.d"
+
 packages=$(awk '!/^[[:space:]]*#/ && NF { printf "%s%s", separator, $1; separator="," }' "$packages_file")
-DEBIAN_FRONTEND=noninteractive debootstrap --arch=amd64 --variant=minbase --include="$packages" "$suite" "$root_mount" https://deb.debian.org/debian
+if ! DEBIAN_FRONTEND=noninteractive debootstrap --arch=amd64 --variant=minbase --include="$packages" "$suite" "$root_mount" https://deb.debian.org/debian; then
+    cat "$root_mount/debootstrap/debootstrap.log" >&2 || true
+    die 'debootstrap failed while assembling the system image'
+fi
+rm -f "$root_mount/usr/sbin/policy-rc.d"
 
 install -d -m 0755 "$root_mount/opt/retrobox" "$root_mount/usr/local/lib/retrobox-installer" \
     "$root_mount/etc/retrobox-appliance"
