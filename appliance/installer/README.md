@@ -17,9 +17,10 @@ The command publishes `retrobox`, downloads the pinned Debian and 86Box
 assets, and writes the ISO plus `build/retro-pc-installer.iso.sha256` and
 `build/retro-pc-installer.iso.json`.
 
-GitHub Actions builds the same deliverables on Ubuntu and uploads the ISO,
-checksum, and metadata JSON as workflow artifacts. Download all three files
-from the workflow run and verify the checksum before using the image.
+The next task adds a GitHub Actions workflow that consumes this local builder
+on Ubuntu and uploads the ISO, checksum, and metadata JSON as workflow
+artifacts. Once that workflow is available, download all three files from its
+run and verify the checksum before using the image.
 
 ## Write and install
 
