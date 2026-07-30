@@ -80,3 +80,30 @@ An administrator connecting over SSH should be able to:
 
 No DOS, Windows, drivers, games, floppy images, or other copyrighted media are
 included by this base layout.
+
+## Installer operation and verification
+
+The bootable installer and the exact artifact, USB-writing, BIOS boot,
+first-boot, and recovery procedures are documented in
+[`installer/README.md`](installer/README.md). Its ISO is BIOS/Legacy-only: it
+does not contain a UEFI boot path. The operator selects the target disk and
+confirms its destructive erasure interactively; no device path is embedded in
+the installer or documentation as an installation target.
+
+The installed contract is a read-only `/` filesystem plus a writable `/data`
+filesystem. Verify the physical prototype only with a disposable disk, then
+confirm the hostname, administrator sudo access, timezone, SSH, restricted
+Samba scratch share, `/data` persistence, detected physical CD-ROM path, and
+fullscreen 86Box launch. Generated ISO artifacts have deterministic ISO,
+`.sha256`, and `.json` names, and GitHub Actions publishes the same set as a
+commit-named artifact.
+
+Recovery is intentionally available through a systemd maintenance override,
+SSH or local console, and `/usr/local/sbin/install-retropc.sh --maintenance`
+to remount root read-write for updates. The normal root read-only mode must be
+restored before rebooting.
+
+The installer deliberately does not integrate floppy control. It installs the
+restricted Samba scratch directory only as storage and permissions groundwork;
+it does not configure the ESP8266 controller, NFC tags, floppy daemon, or
+automatic floppy-image insertion.

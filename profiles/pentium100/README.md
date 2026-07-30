@@ -12,8 +12,8 @@ VM. The 86Box configuration is the source of truth for hardware selection.
 - Sound: Sound Blaster 16
 - Hard disk: `HDD.vhd`, blank dynamic VHD with approximately 2.1 GB geometry
 - Floppy: one 3.5-inch 1.44 MB drive with `alps_df354h148f_80t` audio
-- CD-ROM: one ATAPI 4x slot; configure physical-drive passthrough later in
-  86Box, according to the host operating system and available drive
+- CD-ROM: one ATAPI 4x slot; the Debian appliance installer detects the host's
+  physical optical drive and writes its path into the installed runtime profile
 - Expected OS: DOS and Windows 3.1, installed manually later
 
 ## Launch
@@ -36,9 +36,12 @@ Keep the `shaders/` directory beside `86box.cfg` when copying the profile.
 
 Launching the profile should reach BIOS and then an empty/non-system disk
 state. Install DOS and Windows 3.1 manually later if the VM needs to become
-bootable. Configure the physical CD-ROM passthrough later in 86Box; that
-setting depends on the host operating system and available drive, so it is
-intentionally not included or validated by this profile template.
+bootable. The repository template intentionally has no host-specific CD-ROM
+path. During Debian appliance installation, `install-retropc.sh` detects the
+physical optical drive and writes `cdrom_01_host_drive` into the writable
+runtime profile at `/data/vms/pentium100/86box.cfg`, preferring a stable
+`/dev/disk/by-id/...` path and falling back to `/dev/sr0`. If no drive is
+present, it records that absence rather than inventing a path.
 
 ## Blank Disk
 
@@ -60,4 +63,5 @@ runtime-generated and is not part of the profile template.
 ## Media Policy
 
 This profile includes no DOS, Windows, drivers, games, floppy images, CD-ROM
-images, or other copyrighted media.
+images, physical CD media, or other copyrighted media. A physical disc is
+supplied and managed by the appliance operator outside this repository.
