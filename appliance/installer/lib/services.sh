@@ -82,6 +82,10 @@ _configure_splash() {
     mkdir -p "$TARGET_MNT/etc/plymouth"
     install -m 0644 "$PAYLOAD_DIR/plymouth/plymouthd.conf" "$TARGET_MNT/etc/plymouth/plymouthd.conf"
     in_target plymouth-set-default-theme spinner >/dev/null 2>&1 || true
+    # Bring up the framebuffer/KMS early in the initramfs so Plymouth paints as
+    # soon as possible instead of leaving text visible first.
+    mkdir -p "$TARGET_MNT/etc/initramfs-tools/conf.d"
+    printf 'FRAMEBUFFER=y\n' > "$TARGET_MNT/etc/initramfs-tools/conf.d/retropc-splash"
 }
 
 _configure_identity() {

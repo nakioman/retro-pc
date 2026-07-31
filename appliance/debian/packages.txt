@@ -22,6 +22,11 @@ udev
 # checking the ext4 root.
 e2fsprogs
 
+# System message bus. systemd-logind needs it to handle the ACPI power button
+# (HandlePowerKey=poweroff) and manage login sessions; minbase omits it, which
+# leaves the power button dead.
+dbus
+
 # Bootloader for the installed target disk (BIOS/legacy MBR).
 # grub-install runs from the live installer; grub-pc keeps update-grub working
 # on the deployed system.
