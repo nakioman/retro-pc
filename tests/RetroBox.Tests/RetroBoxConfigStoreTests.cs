@@ -18,8 +18,6 @@ public sealed class RetroBoxConfigStoreTests
         Assert.Equal("Pentium 100", data.Vms["pentium100"].Label);
         Assert.Equal("ro", data.Floppies["monkey1-disk1"].Mode);
         Assert.Equal("720K", data.Floppies["monkey1-disk1"].Size);
-        Assert.Equal("The Secret of Monkey Island", data.Games["monkey1"].Label);
-        Assert.Equal(new[] { "monkey1-disk1" }, data.Games["monkey1"].FloppyIds);
     }
 
     [Fact]

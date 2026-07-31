@@ -31,6 +31,9 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@v2
 
+      - name: Run tests
+        run: mise run test
+
       - name: Publish Linux x64 binary
         run: mise run publish-linux-x64
 
