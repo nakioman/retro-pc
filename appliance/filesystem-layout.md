@@ -28,6 +28,7 @@ part of the deployed system image and are not application state.
   system/
     var/          # overlay upperdir for /var
     .var.work/    # overlay workdir for /var
+  swapfile        # disk swap backstop (see below)
 ```
 
 `/data/retrobox/install-report.txt` is written by the USB installer and records
@@ -75,6 +76,9 @@ The USB installer implements this contract as follows:
 - `/etc` stays **read-only**. The few files that must exist per machine — the
   SSH host keys and the machine-id — are generated into the image at install
   time. Maintenance edits use `sudo mount -o remount,rw /`.
+- Swap for the low-RAM machine: **zram** (compressed RAM swap, preferred) plus a
+  modest **`/data/swapfile`** as a lower-priority OOM backstop. The root stays
+  read-only; the swapfile lives on writable `/data`.
 
 `/etc` is deliberately **not** an fstab overlay: `/etc` is read during early
 boot, before an fstab-mounted overlay could apply, which would split-brain the

@@ -30,6 +30,8 @@ PAYLOAD_DIR="$SELF_DIR/payload"
 . "$LIB_DIR/rootfs-extract.sh"
 # shellcheck source=lib/fstab.sh
 . "$LIB_DIR/fstab.sh"
+# shellcheck source=lib/swap.sh
+. "$LIB_DIR/swap.sh"
 # shellcheck source=lib/users.sh
 . "$LIB_DIR/users.sh"
 # shellcheck source=lib/hardware-detect.sh
@@ -90,6 +92,7 @@ main() {
 
     # 4. Host-specific config generated into the target.
     write_fstab
+    setup_swap
     mount_target_binds
     create_accounts
     detect_and_record_hardware

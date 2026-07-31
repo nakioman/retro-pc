@@ -139,8 +139,9 @@ Fully implemented: two-rootfs build + hybrid ISO, safe disk selection,
 partition/format, offline rootfs extract, UUID fstab, read-only root via `ro` +
 tmpfs + `/var` overlay on `/data`, `retrobox` account (root locked) with prompted
 password, SSH, Samba scratch share, DHCP networking, Plymouth boot splash, GRUB
-BIOS install with hidden 1280x960 menu + recovery entry, and the
-`retrobox-daemon` / `retrobox-boot` systemd units.
+BIOS install with hidden 1280x960 menu + recovery entry, zram + `/data` swapfile
+backstop for the low-RAM machine, and the `retrobox-daemon` / `retrobox-boot`
+systemd units.
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 
@@ -154,5 +155,4 @@ Deferred and recorded in `install-report.txt` rather than failing the install:
   shows the placeholder boot service (use SSH or the recovery entry for a shell).
 - **UEFI boot** — BIOS/legacy only for now; the build script leaves a seam for a
   GRUB EFI El-Torito image.
-- **Swap partition** — not created.
 - **Network beyond DHCP** — static addressing / DNS tuning is out of scope.
