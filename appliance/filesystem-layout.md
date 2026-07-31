@@ -14,7 +14,6 @@ part of the deployed system image and are not application state.
     config.yaml
     vms.yaml
     floppies.yaml
-    games.yaml
     install-report.txt
   vms/
     386sx16/
