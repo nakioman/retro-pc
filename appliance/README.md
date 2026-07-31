@@ -18,21 +18,25 @@ implementation detail and does not provide a desktop environment. 86Box is
 expected to be delivered as an AppImage, while `retrobox` is deployed as the
 self-contained Linux x64 binary produced by the repository's publish task.
 
-This issue defines the base layout only. It does not create a bootable image,
-systemd unit files, read-only-root enforcement, or the graphics stack needed
-by 86Box. Those pieces must be integrated and tested against the real hardware
-separately.
+This document defines the base layout. The bootable USB installer that turns it
+into an installed, read-only-root system on the appliance disk lives under
+[`installer/`](installer/README.md); the installer is the authoritative source
+for the systemd units, Samba share, read-only-root enforcement, and account
+setup described below until the standalone child issues (#28, #29, #30) land.
 
 ## Accounts and permissions
 
-Create a system user and matching system group named `retrobox`. The account
-owns the application state under `/data/retrobox` and should be granted only
-the device and service permissions needed by the eventual systemd units.
+The appliance uses a single account, `retrobox`.
 
-The account is not a remote login account by default. Maintenance access is
-provided through SSH for an explicitly authorized administrator account, using
-`sudo` for commands that require elevated privileges. Do not enable password
-login for the `retrobox` service account merely to make maintenance easier.
+`root` is locked (`passwd -l root`): there is no interactive root login on the
+console or over SSH. `retrobox` is both the service runtime user (it owns the
+application state under `/data/retrobox`) and the maintenance login. It is a
+member of the `sudo` group and elevates with `sudo` for privileged commands.
+There is no separate administrator account.
+
+The `retrobox` password is set during installation (the installer prompts for
+it) and is required for SSH login and `sudo`. Maintenance is performed over SSH
+as `retrobox`; `PermitRootLogin` is disabled.
 
 Samba exposes only the floppy import drop directory:
 

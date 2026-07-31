@@ -1,0 +1,8 @@
+# RetroBox maintenance sudo policy.
+# Installed to /etc/sudoers.d/retrobox (mode 0440) on the target.
+#
+# root login is locked; retrobox is the sole account and elevates with sudo for
+# maintenance (mounting the root filesystem read-write, managing services, etc).
+# A password is required (set during install) — this is a maintenance box, not
+# an unattended-privilege appliance.
+retrobox ALL=(ALL:ALL) ALL

@@ -1,0 +1,156 @@
+# RetroBox USB appliance installer
+
+This directory builds a **bootable USB installer** that installs the RetroBox
+Debian appliance onto the target machine's internal HDD/SSD (issue #38).
+
+The installed system is a **read-only-root** Debian 13 appliance with a mutable
+`/data` partition, GRUB in BIOS/legacy MBR mode, SSH maintenance access, and a
+Samba scratch share — see [`../README.md`](../README.md) and
+[`../filesystem-layout.md`](../filesystem-layout.md).
+
+> **First functional slice.** This implements the end-to-end build → boot →
+> safe install → read-only-root path. A few things are intentionally deferred
+> and recorded rather than blocking the install — see
+> [Scope & deferrals](#scope--deferrals).
+
+## How it works
+
+The build produces **two** root filesystems packed into one hybrid ISO:
+
+1. A small **live installer** rootfs (`live/filesystem.squashfs`) that boots from
+   USB and auto-runs [`install-retropc.sh`](install-retropc.sh) on tty1.
+2. The **target appliance** rootfs (`install/target-rootfs.squashfs`), built from
+   [`../debian/packages.txt`](../debian/packages.txt), carried on the USB and
+   extracted onto the internal disk. The install is **offline** — no network is
+   needed on the retro PC.
+
+```text
+Build USB installer image        (build-usb-installer.sh)
+Write image to a USB stick       (dd)
+Boot the retro PC from USB       (BIOS/legacy)
+Installer auto-starts on tty1    (install-retropc.sh)
+Pick the internal disk           (USB device excluded; typed confirmation)
+Partition + format               (MBR: p1 root ro, p2 /data rw)
+Extract appliance rootfs         (offline, from the USB)
+Write UUID fstab, users, GRUB    (root locked; retrobox password prompted)
+Remove USB and reboot            (target boots the installed appliance)
+```
+
+## Build
+
+### CI (recommended)
+
+`.github/workflows/build-usb-installer.yml` runs shellcheck, builds the image on
+a native Linux runner, and uploads `retropc-installer.iso` as an artifact.
+Download it from the workflow run, then flash it (below).
+
+### Local (macOS / Docker)
+
+The Debian tooling needs Linux, so build in the privileged builder container.
+The image is amd64 (the appliance target); on Apple Silicon add
+`--platform linux/amd64` so mmdebstrap builds natively under emulation:
+
+```bash
+docker build --platform linux/amd64 -t retropc-builder appliance/installer
+docker run --rm --platform linux/amd64 --privileged -v "$PWD:/work" \
+    retropc-builder /work/appliance/installer/build-usb-installer.sh
+# -> appliance/installer/out/retropc-installer.iso
+```
+
+On an amd64 host you can drop `--platform linux/amd64`.
+
+### Local (native Linux)
+
+```bash
+sudo apt-get install -y mmdebstrap squashfs-tools xorriso \
+    isolinux syslinux-common dosfstools zstd e2fsprogs
+sudo bash appliance/installer/build-usb-installer.sh
+```
+
+### Embedding the real binaries
+
+The RetroBox binary and 86Box AppImage are **not** in the repo, so a plain build
+stages placeholders (the installer records them as `PLACEHOLDER`). To embed the
+real artifacts:
+
+```bash
+mise run publish-linux-x64   # produces the retrobox linux-x64 single-file binary
+RETROBOX_BIN=path/to/retrobox BOX86_APPIMAGE=path/to/86box.AppImage \
+    sudo bash appliance/installer/build-usb-installer.sh
+```
+
+## Flash to USB
+
+```bash
+# macOS: find the disk with `diskutil list`, unmount, then (BE SURE of the disk):
+sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/rdiskN bs=4m
+# Linux:
+sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M status=progress
+```
+
+## Install onto the retro PC
+
+1. Set the BIOS to boot from USB (legacy/BIOS mode, not UEFI).
+2. Boot; the installer starts on the primary display.
+3. Choose the internal disk. **The USB installer device is excluded by default**,
+   and you must type the exact `ERASE /dev/sdX` confirmation before anything is
+   written.
+4. Set the `retrobox` password when prompted (used for SSH and `sudo`).
+5. Remove the USB and reboot.
+
+## Accounts & maintenance
+
+- `root` is **locked**. `retrobox` is the sole account — the service runtime user
+  and the SSH maintenance login, with `sudo`.
+- Maintenance over SSH: `ssh retrobox@<ip>` (DHCP; `PermitRootLogin no`).
+- The root filesystem is read-only. To edit system files:
+  `sudo mount -o remount,rw /`, make the change, then reboot or
+  `sudo mount -o remount,ro /`. `/data` is always writable.
+
+## Recovery
+
+- Hold **Shift** (or press **Esc**) during boot to reveal the hidden GRUB menu.
+- Choose **"RetroBox — recovery (maintenance, no fullscreen VM)"**. It appends
+  `retropc.norun=1`, so `retrobox-boot.service` skips the fullscreen VM path and
+  leaves a normal login on tty1 (SSH still works).
+
+## Verification
+
+Automated (CI / local):
+
+- `shellcheck -x` on all installer scripts.
+- The build asserts the ISO is isohybrid (MBR boot sector), has an El Torito
+  boot catalog, that `target-rootfs.squashfs` is valid, and that the expected
+  package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`) are present.
+
+Manual (on real hardware / a spare disk):
+
+- Installer auto-starts on tty1; the target list excludes the USB device.
+- Installed disk boots without the USB; `ssh retrobox@<ip>` works.
+- `/data` is writable; `/etc/fstab` uses UUIDs; root is read-only.
+- CD-ROM and ESP8266 device choices are recorded in
+  `/data/retrobox/install-report.txt`.
+
+## Scope & deferrals
+
+Fully implemented: two-rootfs build + hybrid ISO, safe disk selection,
+partition/format, offline rootfs extract, UUID fstab, read-only root via `ro` +
+tmpfs + `/var` overlay on `/data`, `retrobox` account (root locked) with prompted
+password, SSH, Samba scratch share, DHCP networking, Plymouth boot splash, GRUB
+BIOS install with hidden 1280x960 menu + recovery entry, and the
+`retrobox-daemon` / `retrobox-boot` systemd units.
+
+Deferred and recorded in `install-report.txt` rather than failing the install:
+
+- **RetroBox binary / 86Box AppImage** — staged from `RETROBOX_BIN` /
+  `BOX86_APPIMAGE`, else placeholders.
+- **ESP8266 serial + physical CD-ROM** — detected when present; otherwise the
+  daemon/hardware config keeps a documented placeholder path. Electronics and
+  passthrough validation are tracked in #22 / #35 / #25.
+- **Fullscreen 86Box boot path** — `retrobox boot` is wired via
+  `retrobox-boot.service` but the graphics stack lands with #26; until then tty1
+  shows the placeholder boot service (use SSH or the recovery entry for a shell).
+- **UEFI boot** — BIOS/legacy only for now; the build script leaves a seam for a
+  GRUB EFI El-Torito image.
+- **Swap partition** — not created.
+- **Network beyond DHCP** — static addressing / DNS tuning is out of scope.

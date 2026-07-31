@@ -1,0 +1,60 @@
+name: Build USB appliance installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "appliance/**"
+      - ".github/workflows/build-usb-installer.yml"
+  pull_request:
+    paths:
+      - "appliance/**"
+      - ".github/workflows/build-usb-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint installer shell scripts
+        # -x follows the sourced lib/*.sh from install-retropc.sh, so the whole
+        # installer is linted with cross-file variable resolution. Linting the
+        # libs standalone would false-flag their shared vars as unused.
+        run: |
+          shellcheck -x -P SCRIPTDIR -S style \
+            appliance/installer/build-usb-installer.sh \
+            appliance/installer/install-retropc.sh
+
+  build:
+    needs: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Debian image tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mmdebstrap squashfs-tools xorriso \
+            isolinux syslinux-common dosfstools \
+            debian-archive-keyring zstd xz-utils e2fsprogs file
+
+      - name: Build installer image
+        # Offline, blob-free CI build: the retrobox binary and 86Box AppImage
+        # are staged as placeholders (see build-usb-installer.sh). Output lands
+        # in the script's default OUT_DIR (appliance/installer/out).
+        run: sudo bash appliance/installer/build-usb-installer.sh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retropc-installer-iso
+          path: appliance/installer/out/retropc-installer.iso
+          if-no-files-found: error
+          retention-days: 14

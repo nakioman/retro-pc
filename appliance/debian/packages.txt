@@ -13,6 +13,16 @@
 systemd
 udev
 
+# Bootloader for the installed target disk (BIOS/legacy MBR).
+# grub-install runs from the live installer; grub-pc keeps update-grub working
+# on the deployed system.
+grub-pc
+
+# Quiet appliance boot splash (a minimal loading bar). Linux stays an
+# implementation detail, so first paint should not be a wall of boot text.
+plymouth
+plymouth-themes
+
 # Appliance administration and file transfer
 openssh-server
 samba

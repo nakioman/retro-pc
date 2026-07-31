@@ -15,6 +15,7 @@ part of the deployed system image and are not application state.
     vms.yaml
     floppies.yaml
     games.yaml
+    install-report.txt
   vms/
     386sx16/
     pentium100/
@@ -24,7 +25,21 @@ part of the deployed system image and are not application state.
   snapshots/
     386sx16/
     pentium100/
+  system/
+    etc/          # overlay upperdir for /etc
+    .etc.work/    # overlay workdir for /etc
+    var/          # overlay upperdir for /var
+    .var.work/    # overlay workdir for /var
 ```
+
+`/data/retrobox/install-report.txt` is written by the USB installer and records
+the detected target disk, CD-ROM, and ESP8266 serial device (or explicit
+placeholders when a device is absent).
+
+`/data/system/` holds the writable overlay upperdirs that make a read-only root
+usable — see [Read-only root exceptions](#read-only-root-exceptions). It is
+system state produced by the installer and the running OS, not user-facing
+application data, and network shares never expose it.
 
 The current `retrobox` code uses these paths directly:
 
@@ -52,9 +67,18 @@ application storage:
 /var/lib/
 ```
 
-The final read-only-root implementation must provide the necessary tmpfs,
-overlay, or explicitly persistent mounts for services that write there. The
-base package layout does not choose or implement that mount strategy.
+The USB installer implements this contract as follows:
+
+- `/` is mounted `ro,errors=remount-ro`.
+- `/tmp` and `/var/log` are `tmpfs` (volatile).
+- `/etc` and `/var` are `overlay` mounts whose writable upperdirs live under
+  `/data/system/` (see the `/data` tree above). This keeps the image root
+  immutable while letting SSH host keys, logs, and Samba state persist across
+  reboots without a separate writable system partition.
+
+A future standalone read-only-root child issue (#30) may replace this with a
+different strategy, but the installed appliance must always keep `/data`
+writable and the OS image root effectively read-only.
 
 The following system areas remain read-only after deployment unless a future
 maintenance workflow deliberately remounts or replaces the system image:
