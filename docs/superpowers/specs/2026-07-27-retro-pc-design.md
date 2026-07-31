@@ -10,7 +10,7 @@ The system runs on real PC hardware with keyboard, mouse, physical CD-ROM, and a
 
 On power-on, the machine boots quietly with either a black screen or a minimal splash. If no key is pressed, it starts the current default 86Box VM in fullscreen.
 
-If the Windows key is pressed during a short boot window, a minimal selector appears:
+If F12 is pressed during a short boot window, a minimal selector appears:
 
 ```text
 Retro PC
@@ -19,7 +19,7 @@ Retro PC
   386SX-16
 ```
 
-The selector uses arrow keys and Enter. Choosing a VM both boots it and saves it as the new default for future boots.
+The selector uses arrow keys and explicit Run / Run and set default actions. F12 is consumed by the console selector and does not depend on evdev.
 
 Normal use happens inside 86Box fullscreen. The user sees the VM BIOS, DOS, or Windows, not Linux. Maintenance is available through SSH and an emergency console path, but those are not part of the normal experience.
 
@@ -51,7 +51,6 @@ No desktop environment is installed. A minimal graphics stack is allowed if requ
   config.yaml
   vms.yaml
   floppies.yaml
-  games.yaml
 
 /data/vms/
   386sx16/

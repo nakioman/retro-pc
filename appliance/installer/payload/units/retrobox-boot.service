@@ -1,5 +1,5 @@
 [Unit]
-Description=RetroBox fullscreen boot launcher (default VM / Windows-key selector)
+Description=RetroBox fullscreen boot launcher (default VM / F12 selector)
 Documentation=https://github.com/nakioman/retro-pc
 RequiresMountsFor=/data
 After=local-fs.target retrobox-daemon.service
@@ -23,7 +23,8 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
-# `retrobox boot` runs the default-VM / selector flow.
+# `retrobox boot` owns VM selection: it starts the default VM after a one-second
+# F12 window, or opens the selector when F12 is pressed.
 ExecStart=/opt/retrobox/retrobox boot
 Restart=on-failure
 RestartSec=3

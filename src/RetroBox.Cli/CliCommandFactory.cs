@@ -19,11 +19,13 @@ public static class CliCommandFactory
 {
     public static RootCommand CreateRootCommand(
         Func<RetroBoxDaemonCommandRequest, int>? daemonRunner = null,
-        Func<RetroBoxBootCommandRequest, int>? bootRunner = null)
+        Func<RetroBoxBootCommandRequest, int>? bootRunner = null,
+        IRetroBoxBootHotkeyDetector? hotkeyDetector = null,
+        IRetroBoxBootSelectorUi? selectorUi = null)
     {
         var rootCommand = new RootCommand("Retro PC appliance control tool.");
 
-        rootCommand.Subcommands.Add(CreateBootCommand(bootRunner));
+        rootCommand.Subcommands.Add(CreateBootCommand(bootRunner, hotkeyDetector, selectorUi));
         rootCommand.Subcommands.Add(CreateDaemonCommand(daemonRunner));
         rootCommand.Subcommands.Add(CreateVmCommand());
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
@@ -162,7 +164,10 @@ public static class CliCommandFactory
         return command;
     }
 
-    private static Command CreateBootCommand(Func<RetroBoxBootCommandRequest, int>? bootRunner)
+    private static Command CreateBootCommand(
+        Func<RetroBoxBootCommandRequest, int>? bootRunner,
+        IRetroBoxBootHotkeyDetector? hotkeyDetector,
+        IRetroBoxBootSelectorUi? selectorUi)
     {
         var configRootOption = ConfigRootOption();
         var binaryOption = new Option<string>("--binary")
@@ -176,20 +181,41 @@ public static class CliCommandFactory
             DefaultValueFactory = _ => RetroBoxBoot.DefaultRomPath,
         };
         var dryRunOption = new Option<bool>("--dry-run") { Description = "Show the VM without starting 86Box." };
-        var command = new Command("boot", "Start the configured default VM.")
+        var selectorOption = new Option<bool>("--selector") { Description = "Open the VM selector immediately." };
+        var selectOption = new Option<string?>("--select") { Description = "Run this VM without changing the default." };
+        var command = new Command("boot", "Start the configured VM, using F12 to open the selector.")
         {
             configRootOption,
             binaryOption,
             romPathOption,
             dryRunOption,
+            selectorOption,
+            selectOption,
         };
         command.SetAction(parseResult =>
         {
             try
             {
                 var configRoot = parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath;
-                var catalog = new RetroBoxConfigStore(configRoot).Load();
-                var vmId = catalog.Config.DefaultVm;
+                var store = new RetroBoxConfigStore(configRoot);
+                var dryRun = parseResult.GetValue(dryRunOption);
+                var selectorRequested = parseResult.GetValue(selectorOption);
+                var explicitVmId = parseResult.GetValue(selectOption);
+                if (!dryRun && explicitVmId is null && !selectorRequested)
+                {
+                    selectorRequested = (hotkeyDetector ?? new RetroBoxBootHotkeyDetector(
+                        new RetroBoxConsoleInput(), new RetroBoxBootClock())).IsSelectorRequested();
+                }
+
+                var catalog = store.Load();
+                var ui = selectorUi ?? new RetroBoxTerminalGuiSelector();
+                var selection = new RetroBoxBootSelector(store, ui).Resolve(
+                    catalog,
+                    explicitVmId,
+                    selectorRequested,
+                    persistDefault: !dryRun);
+                var vmId = selection.VmId
+                    ?? throw new RetroBoxCatalogException("No VM was selected.");
                 var vm = catalog.Vms[vmId];
                 if (!Directory.Exists(vm.Path))
                 {
@@ -208,7 +234,7 @@ public static class CliCommandFactory
                     vmId,
                     vm.Path);
 
-                if (parseResult.GetValue(dryRunOption))
+                if (dryRun)
                 {
                     parseResult.InvocationConfiguration.Output.WriteLine($"{request.VmId}\t{vm.Label}\t{request.VmPath}");
                     return 0;

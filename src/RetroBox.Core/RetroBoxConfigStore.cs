@@ -133,8 +133,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     private static void Validate(RetroBoxCatalogData data)
     {
-        data.Config.DefaultVm.RequireCatalogId("default VM");
-        if (!data.Vms.ContainsKey(data.Config.DefaultVm))
+        if (!string.IsNullOrWhiteSpace(data.Config.DefaultVm) && !data.Vms.ContainsKey(data.Config.DefaultVm))
         {
             throw new RetroBoxCatalogException($"Unknown default VM '{data.Config.DefaultVm}'.");
         }

@@ -91,6 +91,63 @@ public sealed class CliVmTests
     }
 
     [Fact]
+    public void Boot_select_runs_requested_vm_without_changing_default()
+    {
+        var layout = CreateVmLayout();
+        var profile = Path.Combine(layout, "profiles", "386sx16");
+        Directory.CreateDirectory(profile);
+        File.WriteAllText(Path.Combine(profile, "86box.cfg"), "# profile");
+        File.WriteAllText(Path.Combine(layout, "vms.yaml"), $$"""
+            vms:
+              pentium100:
+                label: "Pentium 100"
+                path: "{{profile}}"
+              386sx16:
+                label: "386SX-16"
+                path: "{{profile}}"
+            """);
+        var before = File.ReadAllText(Path.Combine(layout, "config.yaml"));
+        RetroBoxBootCommandRequest? captured = null;
+        var command = CliCommandFactory.CreateRootCommand(bootRunner: request =>
+        {
+            captured = request;
+            return 0;
+        });
+
+        Assert.Equal(0, command.Parse(["boot", "--select", "386sx16", "--config-root", layout]).Invoke());
+        Assert.Equal("386sx16", captured?.VmId);
+        Assert.Equal(before, File.ReadAllText(Path.Combine(layout, "config.yaml")));
+    }
+
+    [Fact]
+    public void Boot_selector_uses_injected_ui()
+    {
+        var layout = CreateVmLayout();
+        var profile = Path.Combine(layout, "profiles", "386sx16");
+        Directory.CreateDirectory(profile);
+        File.WriteAllText(Path.Combine(profile, "86box.cfg"), "# profile");
+        File.WriteAllText(Path.Combine(layout, "vms.yaml"), $$"""
+            vms:
+              pentium100:
+                label: "Pentium 100"
+                path: "{{profile}}"
+              386sx16:
+                label: "386SX-16"
+                path: "{{profile}}"
+            """);
+        var ui = new FakeSelectorUi(new RetroBoxBootSelectionDecision(
+            RetroBoxBootSelectionAction.Run, "386sx16"));
+        RetroBoxBootCommandRequest? captured = null;
+        var command = CliCommandFactory.CreateRootCommand(
+            bootRunner: request => { captured = request; return 0; },
+            selectorUi: ui);
+
+        Assert.Equal(0, command.Parse(["boot", "--selector", "--config-root", layout]).Invoke());
+        Assert.Equal(1, ui.Calls);
+        Assert.Equal("386sx16", captured?.VmId);
+    }
+
+    [Fact]
     public void Default_config_root_is_data_retrobox()
     {
         var command = CliCommandFactory.CreateRootCommand();
@@ -116,5 +173,18 @@ public sealed class CliVmTests
         File.WriteAllText(Path.Combine(root, "floppies.yaml"), "floppies: {}\n");
         File.WriteAllText(Path.Combine(root, "games.yaml"), "games: {}\n");
         return root;
+    }
+
+    private sealed class FakeSelectorUi(RetroBoxBootSelectionDecision decision) : IRetroBoxBootSelectorUi
+    {
+        public int Calls { get; private set; }
+
+        public RetroBoxBootSelectionDecision Select(
+            IReadOnlyList<KeyValuePair<string, RetroBoxVm>> virtualMachines,
+            string? defaultVmId)
+        {
+            Calls++;
+            return decision;
+        }
     }
 }
