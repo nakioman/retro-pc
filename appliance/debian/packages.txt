@@ -11,7 +11,16 @@
 
 # Base service/runtime
 systemd
+# systemd-sysv provides /sbin/init (and reboot/halt/poweroff). The minbase build
+# variant is essential-only and does not pull it in, so the target must list it
+# explicitly or run-init fails with "/sbin/init: no such file or directory".
+systemd-sysv
 udev
+
+# Filesystem tooling. e2fsprogs is Priority: required but not Essential, so
+# minbase omits it — without it the initramfs has no fsck.ext4 and boot fails
+# checking the ext4 root.
+e2fsprogs
 
 # Bootloader for the installed target disk (BIOS/legacy MBR).
 # grub-install runs from the live installer; grub-pc keeps update-grub working
