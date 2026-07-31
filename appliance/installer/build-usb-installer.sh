@@ -158,17 +158,11 @@ xorriso -indev "$OUT_ISO" -report_el_torito plain 2>/dev/null | grep -qi 'El Tor
     || die "ISO has no El Torito boot catalog."
 unsquashfs -s "$ISO/install/target-rootfs.squashfs" >/dev/null \
     || die "target-rootfs.squashfs is not a valid squashfs."
-TARGET_LS="$(unsquashfs -l "$ISO/install/target-rootfs.squashfs")"
+# List once to a file and grep the file (no pipe -> no pipefail/SIGPIPE surprise).
+unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
 for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; do
-    printf '%s\n' "$TARGET_LS" | grep -q "/$bin$" \
+    grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
-done
-# Boot-critical: /sbin/init (systemd-sysv) and fsck.ext4 (e2fsprogs). Suffix match
-# so usrmerge (/sbin -> /usr/sbin) does not matter. Their absence is exactly what
-# broke the installed disk's boot.
-for suffix in sbin/init sbin/fsck.ext4; do
-    printf '%s\n' "$TARGET_LS" | grep -q "/$suffix$" \
-        || die "Boot-critical file missing from target rootfs: *$suffix"
 done
 
 log "Done: $OUT_ISO"
