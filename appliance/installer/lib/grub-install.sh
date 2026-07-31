@@ -15,6 +15,12 @@ install_bootloader() {
         || die "grub-install failed for $TARGET_DISK (see output above)"
     log "Generating grub.cfg (UUID root)"
     in_target update-grub || die "update-grub failed (see output above)"
+
+    # grub-common.service records a successful boot by writing grubenv, which
+    # fails on our read-only root. Mask it so it doesn't show up as a failed unit.
+    in_target systemctl mask grub-common.service >/dev/null 2>&1 \
+        || warn "could not mask grub-common.service"
+
     ok "GRUB installed to $TARGET_DISK (root UUID=$ROOT_UUID)"
 }
 
@@ -30,7 +36,9 @@ GRUB_DISTRIBUTOR="RetroBox"
 # Hidden, near-instant menu for appliance boot; hold SHIFT (or ESC) to reveal it.
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_TIMEOUT=1
-GRUB_RECORDFAIL_TIMEOUT=2
+# Root is read-only, so grub-common.service cannot clear the "recordfail" flag
+# in grubenv. Keep the timeout at 0 so a stuck flag never shows a menu or delay.
+GRUB_RECORDFAIL_TIMEOUT=0
 # Quiet boot with the Plymouth splash. Force the console/framebuffer to
 # 1280x960@60 via the kernel `video=` param: GRUB_GFXMODE alone only sets the
 # GRUB menu mode; once the KMS driver (i915) loads it would otherwise switch to
