@@ -51,6 +51,17 @@ public sealed class RetroBoxConfigStoreTests
     }
 
     [Fact]
+    public void Load_uses_empty_floppy_catalog_when_floppies_yaml_is_missing()
+    {
+        var root = CreateValidRoot();
+        File.Delete(Path.Combine(root, "floppies.yaml"));
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.Empty(data.Floppies);
+    }
+
+    [Fact]
     public void Load_rejects_duplicate_ids()
     {
         var root = CreateValidRoot();

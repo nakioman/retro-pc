@@ -26,7 +26,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
     {
         var config = LoadConfig();
         var vms = LoadYaml<RetroBoxVmCatalog>("vms.yaml").Vms;
-        var floppies = LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies;        
+        var floppies = LoadFloppies();
 
         var data = new RetroBoxCatalogData(config, vms, floppies);
         Validate(data);
@@ -56,6 +56,13 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         return File.Exists(ResolvePath("config.yaml"))
             ? LoadYaml<RetroBoxConfig>("config.yaml")
             : new RetroBoxConfig();
+    }
+
+    private Dictionary<string, RetroBoxFloppy> LoadFloppies()
+    {
+        return File.Exists(ResolvePath("floppies.yaml"))
+            ? LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies
+            : new Dictionary<string, RetroBoxFloppy>(StringComparer.Ordinal);
     }
 
     private T LoadYaml<T>(string fileName)
