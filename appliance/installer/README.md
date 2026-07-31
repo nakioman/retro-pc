@@ -1,7 +1,7 @@
 # RetroBox USB appliance installer
 
 This directory builds a **bootable USB installer** that installs the RetroBox
-Debian appliance onto the target machine's internal HDD/SSD (issue #38).
+Debian appliance onto the target machine's internal HDD/SSD.
 
 The installed system is a **read-only-root** Debian 13 appliance with a mutable
 `/data` partition, GRUB in BIOS/legacy MBR mode, SSH maintenance access, and a

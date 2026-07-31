@@ -58,8 +58,7 @@ banner() {
   ██   ██ ██         ██    ██   ██ ██    ██ ██   ██ ██    ██  ██ ██
   ██   ██ ███████    ██    ██   ██  ██████  ██████   ██████  ██   ██
 
-  Appliance installer — installs a read-only Debian appliance to an
-  internal disk. Nothing is written until you confirm a target disk.
+                          Appliance installer
 
 EOF
 }
@@ -103,12 +102,7 @@ main() {
     printf '\n' >&2
     ok "Installation complete."
     log "Install report saved to /data/retrobox/install-report.txt on the target disk."
-    printf '\n' >&2
-    warn "Leave the USB stick IN. This live installer is running FROM it — pulling"
-    warn "it now would cause read errors during shutdown."
-    warn "When the machine restarts and shows the BIOS/logo screen, THEN remove the"
-    warn "USB so it boots from the internal disk."
-    printf '\n' >&2
+    printf '\n' >&2    
 
     if [ "$RETROPC_UNATTENDED" = "1" ]; then
         return 0

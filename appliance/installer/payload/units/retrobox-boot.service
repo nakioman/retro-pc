@@ -23,9 +23,7 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
-# `retrobox boot` runs the default-VM / selector flow. It is a placeholder in
-# the current CLI; the fullscreen 86Box graphics path is integrated separately
-# (issue #26). Keeping the unit here makes the installed appliance wire it up.
+# `retrobox boot` runs the default-VM / selector flow.
 ExecStart=/opt/retrobox/retrobox boot
 Restart=on-failure
 RestartSec=3

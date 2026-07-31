@@ -26,8 +26,6 @@ part of the deployed system image and are not application state.
     386sx16/
     pentium100/
   system/
-    etc/          # overlay upperdir for /etc
-    .etc.work/    # overlay workdir for /etc
     var/          # overlay upperdir for /var
     .var.work/    # overlay workdir for /var
 ```
@@ -70,15 +68,21 @@ application storage:
 The USB installer implements this contract as follows:
 
 - `/` is mounted `ro,errors=remount-ro`.
-- `/tmp` and `/var/log` are `tmpfs` (volatile).
-- `/etc` and `/var` are `overlay` mounts whose writable upperdirs live under
-  `/data/system/` (see the `/data` tree above). This keeps the image root
-  immutable while letting SSH host keys, logs, and Samba state persist across
-  reboots without a separate writable system partition.
+- `/tmp` is `tmpfs` (volatile).
+- `/var` is an `overlay` mount whose writable upperdir lives under
+  `/data/system/var` (see the `/data` tree above), so logs, Samba state, DHCP
+  leases, and ALSA state persist across reboots without a writable root.
+- `/etc` stays **read-only**. The few files that must exist per machine — the
+  SSH host keys and the machine-id — are generated into the image at install
+  time. Maintenance edits use `sudo mount -o remount,rw /`.
 
-A future standalone read-only-root child issue (#30) may replace this with a
-different strategy, but the installed appliance must always keep `/data`
-writable and the OS image root effectively read-only.
+`/etc` is deliberately **not** an fstab overlay: `/etc` is read during early
+boot, before an fstab-mounted overlay could apply, which would split-brain the
+config (early boot sees the read-only layer, later reads see the overlay). Doing
+an `/etc` (or whole-root) overlay correctly means assembling it in the initramfs
+before `switch_root` — the immutable squashfs-root approach tracked in #43 (and
+the read-only-root prototype #30). Until then the appliance must always keep
+`/data` writable and the OS image root effectively read-only.
 
 The following system areas remain read-only after deployment unless a future
 maintenance workflow deliberately remounts or replaces the system image:

@@ -23,7 +23,6 @@ create_data_tree() {
         "$base/floppies/cataloged" \
         "$base/snapshots" \
         "$base/home" \
-        "$base/system/etc" "$base/system/.etc.work" \
         "$base/system/var" "$base/system/.var.work"
     # Ownership is applied in users.sh once the retrobox uid/gid exist.
 }
