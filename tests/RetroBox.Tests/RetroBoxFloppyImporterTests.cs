@@ -117,7 +117,7 @@ public sealed class RetroBoxFloppyImporterTests
         var sourceImage = Path.Combine(layout.ScratchRoot, "rollback.img");
         var targetImage = Path.Combine(layout.CatalogedRoot, "rollback.img");
         File.WriteAllBytes(sourceImage, [0x33]);
-        File.SetAttributes(Path.Combine(layout.ConfigRoot, "games.yaml"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(layout.ConfigRoot, "floppies.yaml"), FileAttributes.ReadOnly);
 
         var importer = new RetroBoxFloppyImporter();
 

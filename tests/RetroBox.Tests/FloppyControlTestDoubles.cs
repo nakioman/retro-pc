@@ -20,8 +20,7 @@ internal static class FloppyControlTestCatalogs
                     Image = imagePath,
                     Mode = mode,
                 },
-            },
-            new Dictionary<string, RetroBoxGame>(StringComparer.Ordinal));
+            });
     }
 }
 

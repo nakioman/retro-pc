@@ -18,8 +18,6 @@ public sealed class RetroBoxConfigStoreTests
         Assert.Equal("Pentium 100", data.Vms["pentium100"].Label);
         Assert.Equal("ro", data.Floppies["monkey1-disk1"].Mode);
         Assert.Equal("720K", data.Floppies["monkey1-disk1"].Size);
-        Assert.Equal("The Secret of Monkey Island", data.Games["monkey1"].Label);
-        Assert.Equal(new[] { "monkey1-disk1" }, data.Games["monkey1"].FloppyIds);
     }
 
     [Fact]
@@ -38,6 +36,29 @@ public sealed class RetroBoxConfigStoreTests
         var data = store.Load();
 
         Assert.Equal("/Users/nacho/Games/86Box/86box.socket", data.Config.FloppyControlSocketPath);
+    }
+
+    [Fact]
+    public void Load_uses_empty_config_when_config_yaml_is_missing()
+    {
+        var root = CreateValidRoot();
+        File.Delete(Path.Combine(root, "config.yaml"));
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.Equal(string.Empty, data.Config.DefaultVm);
+        Assert.Null(data.Config.FloppyControlSocketPath);
+    }
+
+    [Fact]
+    public void Load_uses_empty_floppy_catalog_when_floppies_yaml_is_missing()
+    {
+        var root = CreateValidRoot();
+        File.Delete(Path.Combine(root, "floppies.yaml"));
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.Empty(data.Floppies);
     }
 
     [Fact]
@@ -166,17 +187,7 @@ public sealed class RetroBoxConfigStoreTests
                 image: "{{floppyImage}}"
                 mode: "ro"
                 size: "720K"
-            """);
-        File.WriteAllText(
-            Path.Combine(root, "games.yaml"),
-            """
-            games:
-              monkey1:
-                label: "The Secret of Monkey Island"
-                defaultVm: pentium100
-                floppyIds:
-                  - monkey1-disk1
-            """);
+            """);        
 
         return root;
     }

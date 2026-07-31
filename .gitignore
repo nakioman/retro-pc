@@ -22,3 +22,4 @@ appliance/installer/out/
 *.user
 *.suo
 *.rsuser
+.DS_Store

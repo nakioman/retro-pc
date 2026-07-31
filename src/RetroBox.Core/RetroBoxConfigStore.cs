@@ -24,12 +24,11 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     public RetroBoxCatalogData Load()
     {
-        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        var config = LoadConfig();
         var vms = LoadYaml<RetroBoxVmCatalog>("vms.yaml").Vms;
-        var floppies = LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies;
-        var games = LoadYaml<RetroBoxGameCatalog>("games.yaml").Games;
+        var floppies = LoadFloppies();
 
-        var data = new RetroBoxCatalogData(config, vms, floppies, games);
+        var data = new RetroBoxCatalogData(config, vms, floppies);
         Validate(data);
         return data;
     }
@@ -42,15 +41,28 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         SaveYamlSet([
             ("config.yaml", serializer.Serialize(data.Config)),
             ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
-            ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
-            ("games.yaml", serializer.Serialize(new RetroBoxGameCatalog { Games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal) })),
+            ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),            
         ]);
     }
 
     public void UpdateDefaultVm(string vmId)
     {
-        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        var config = LoadConfig();
         SaveYaml("config.yaml", serializer.Serialize(config with { DefaultVm = vmId }));
+    }
+
+    private RetroBoxConfig LoadConfig()
+    {
+        return File.Exists(ResolvePath("config.yaml"))
+            ? LoadYaml<RetroBoxConfig>("config.yaml")
+            : new RetroBoxConfig();
+    }
+
+    private Dictionary<string, RetroBoxFloppy> LoadFloppies()
+    {
+        return File.Exists(ResolvePath("floppies.yaml"))
+            ? LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies
+            : new Dictionary<string, RetroBoxFloppy>(StringComparer.Ordinal);
     }
 
     private T LoadYaml<T>(string fileName)
@@ -133,8 +145,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     private static void Validate(RetroBoxCatalogData data)
     {
-        data.Config.DefaultVm.RequireCatalogId("default VM");
-        if (!data.Vms.ContainsKey(data.Config.DefaultVm))
+        if (!string.IsNullOrWhiteSpace(data.Config.DefaultVm) && !data.Vms.ContainsKey(data.Config.DefaultVm))
         {
             throw new RetroBoxCatalogException($"Unknown default VM '{data.Config.DefaultVm}'.");
         }
@@ -167,26 +178,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             {
                 throw new RetroBoxCatalogException($"Invalid floppy size '{floppy.Size}' for floppy '{id}'.");
             }
-        }
-
-        foreach (var (id, game) in data.Games)
-        {
-            id.RequireCatalogId("game ID");
-            game.Label.RequireCatalogValue($"Game '{id}' label");
-
-            if (!string.IsNullOrWhiteSpace(game.DefaultVm) && !data.Vms.ContainsKey(game.DefaultVm))
-            {
-                throw new RetroBoxCatalogException($"Game '{id}' references unknown default VM '{game.DefaultVm}'.");
-            }
-
-            foreach (var floppyId in game.FloppyIds)
-            {
-                if (!data.Floppies.ContainsKey(floppyId))
-                {
-                    throw new RetroBoxCatalogException($"Game '{id}' references unknown floppy '{floppyId}'.");
-                }
-            }
-        }
+        }        
     }
 
 }

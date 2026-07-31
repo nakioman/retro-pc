@@ -3,8 +3,7 @@ namespace RetroBox.Core;
 public sealed record RetroBoxCatalogData(
     RetroBoxConfig Config,
     IReadOnlyDictionary<string, RetroBoxVm> Vms,
-    IReadOnlyDictionary<string, RetroBoxFloppy> Floppies,
-    IReadOnlyDictionary<string, RetroBoxGame> Games);
+    IReadOnlyDictionary<string, RetroBoxFloppy> Floppies);
 
 public sealed record RetroBoxConfig
 {
@@ -48,9 +47,4 @@ internal sealed record RetroBoxVmCatalog
 internal sealed record RetroBoxFloppyCatalog
 {
     public Dictionary<string, RetroBoxFloppy> Floppies { get; init; } = new(StringComparer.Ordinal);
-}
-
-internal sealed record RetroBoxGameCatalog
-{
-    public Dictionary<string, RetroBoxGame> Games { get; init; } = new(StringComparer.Ordinal);
 }
