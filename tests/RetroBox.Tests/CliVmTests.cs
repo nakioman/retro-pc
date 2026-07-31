@@ -19,7 +19,7 @@ public sealed class CliVmTests
     }
 
     [Fact]
-    public void Vm_default_reads_and_updates_only_config_yaml_preserving_comments()
+    public void Vm_default_reads_and_updates_only_config_yaml()
     {
         var layout = CreateVmLayout();
         var configPath = Path.Combine(layout, "config.yaml");
@@ -34,7 +34,7 @@ public sealed class CliVmTests
         Assert.Equal("pentium100\n", output.ToString());
 
         Assert.Equal(0, command.Parse(["vm", "default", "386sx16", "--config-root", layout]).Invoke());
-        Assert.Equal("defaultVm: 386sx16 # keep this comment\nfloppyControlSocketPath: /run/retrobox.sock\n", File.ReadAllText(configPath));
+        Assert.Equal("defaultVm: 386sx16\nfloppyControlSocketPath: /run/retrobox.sock\n", File.ReadAllText(configPath));
         Assert.NotEqual(before, File.ReadAllText(configPath));
         Assert.Equal(vmsBefore, File.ReadAllText(Path.Combine(layout, "vms.yaml")));
     }

@@ -49,44 +49,8 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     public void UpdateDefaultVm(string vmId)
     {
-        var path = ResolvePath("config.yaml");
-        if (!File.Exists(path))
-        {
-            throw new RetroBoxCatalogException($"Required YAML file '{path}' does not exist.");
-        }
-
-        var yaml = File.ReadAllText(path);
-        var lines = yaml.Split("\n", StringSplitOptions.None);
-        var replaced = false;
-
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var line = lines[index];
-            var newline = line.EndsWith('\r') ? "\r" : string.Empty;
-            var content = newline.Length == 0 ? line : line[..^1];
-            if (!content.StartsWith("defaultVm:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var colon = content.IndexOf(':');
-            var valueStart = colon + 1;
-            var commentStart = content.IndexOf('#', valueStart);
-            var valueEnd = commentStart < 0 ? content.Length : commentStart;
-            var suffix = content[valueEnd..];
-            var trailingWhitespace = content[valueStart..valueEnd].TrimEnd();
-            var whitespace = content[valueStart..valueEnd][trailingWhitespace.Length..];
-            lines[index] = content[..valueStart] + " " + vmId + whitespace + suffix + newline;
-            replaced = true;
-            break;
-        }
-
-        if (!replaced)
-        {
-            throw new RetroBoxCatalogException($"YAML file '{path}' does not contain a top-level defaultVm entry.");
-        }
-
-        File.WriteAllText(path, string.Join("\n", lines));
+        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        SaveYaml("config.yaml", serializer.Serialize(config with { DefaultVm = vmId }));
     }
 
     private T LoadYaml<T>(string fileName)
@@ -133,6 +97,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             RestoreBackups(backups);
             throw;
         }
+    }
+
+    private void SaveYaml(string fileName, string yaml)
+    {
+        Directory.CreateDirectory(rootPath);
+        File.WriteAllText(ResolvePath(fileName), yaml);
     }
 
     private string ResolvePath(string fileName)
