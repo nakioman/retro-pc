@@ -171,7 +171,6 @@ public sealed class CliVmTests
                 path: "/data/vms/386sx16"
             """);
         File.WriteAllText(Path.Combine(root, "floppies.yaml"), "floppies: {}\n");
-        File.WriteAllText(Path.Combine(root, "games.yaml"), "games: {}\n");
         return root;
     }
 

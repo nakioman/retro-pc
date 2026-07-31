@@ -31,12 +31,7 @@ internal sealed record TestRetroBoxLayout(string Root, string ConfigRoot, string
                 ? CreateExistingFloppyYaml(catalogedRoot)
                 : """
                   floppies: {}
-                  """);
-        File.WriteAllText(
-            Path.Combine(configRoot, "games.yaml"),
-            """
-            games: {}
-            """);
+                  """);        
 
         return new TestRetroBoxLayout(root, configRoot, scratchRoot, catalogedRoot);
     }

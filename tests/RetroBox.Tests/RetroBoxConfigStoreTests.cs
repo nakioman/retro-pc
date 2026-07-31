@@ -166,17 +166,7 @@ public sealed class RetroBoxConfigStoreTests
                 image: "{{floppyImage}}"
                 mode: "ro"
                 size: "720K"
-            """);
-        File.WriteAllText(
-            Path.Combine(root, "games.yaml"),
-            """
-            games:
-              monkey1:
-                label: "The Secret of Monkey Island"
-                defaultVm: pentium100
-                floppyIds:
-                  - monkey1-disk1
-            """);
+            """);        
 
         return root;
     }
