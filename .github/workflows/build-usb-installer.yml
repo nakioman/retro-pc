@@ -58,3 +58,42 @@ jobs:
           path: appliance/installer/out/retropc-installer.iso
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    # Publish a GitHub Release with the ISO only for pushes to main (or a manual
+    # run on main). PR builds still just upload the artifact above.
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: retropc-installer-iso
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="appliance-$(date -u +%Y%m%d)-${{ github.run_number }}"
+          ISO="dist/retropc-installer-${TAG}.iso"
+          mv dist/retropc-installer.iso "$ISO"
+          {
+            echo "Automated bootable USB appliance installer built from ${{ github.sha }}."
+            echo
+            echo "Flash to a USB and boot the retro PC:"
+            echo '```'
+            echo "sudo dd if=$(basename "$ISO") of=/dev/sdX bs=4M status=progress"
+            echo '```'
+            echo
+            echo "CI builds stage the retrobox binary and 86Box AppImage as placeholders."
+          } > notes.md
+          gh release create "$TAG" "$ISO" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "RetroBox appliance installer ${TAG}" \
+            --notes-file notes.md
