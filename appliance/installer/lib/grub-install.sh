@@ -31,9 +31,12 @@ GRUB_DISTRIBUTOR="RetroBox"
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_TIMEOUT=1
 GRUB_RECORDFAIL_TIMEOUT=2
-# Quiet boot with the Plymouth splash; hand a 1280x960 framebuffer to Linux.
+# Quiet boot with the Plymouth splash. Force the console/framebuffer to
+# 1280x960@60 via the kernel `video=` param: GRUB_GFXMODE alone only sets the
+# GRUB menu mode; once the KMS driver (i915) loads it would otherwise switch to
+# the monitor's native resolution.
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3"
-GRUB_CMDLINE_LINUX=""
+GRUB_CMDLINE_LINUX="video=1280x960@60"
 GRUB_GFXMODE=1280x960x32
 GRUB_GFXPAYLOAD_LINUX=keep
 # Single-purpose appliance: no other OSes to probe, no stock recovery submenu
@@ -61,7 +64,7 @@ menuentry 'RetroBox — recovery (maintenance, no fullscreen VM)' --class recove
     insmod ext2
     search --no-floppy --fs-uuid --set=root $ROOT_UUID
     echo 'Loading RetroBox recovery...'
-    linux /boot/vmlinuz-$kver root=UUID=$ROOT_UUID ro retropc.norun=1
+    linux /boot/vmlinuz-$kver root=UUID=$ROOT_UUID ro retropc.norun=1 video=1280x960@60
     initrd /boot/initrd.img-$kver
 }
 EOF

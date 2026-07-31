@@ -69,6 +69,10 @@ DHCP=yes
 EOF
     enable_unit systemd-networkd.service
     enable_unit systemd-resolved.service
+    # Don't stall boot up to ~2 min waiting for a DHCP lease on a possibly
+    # network-less appliance.
+    in_target systemctl mask systemd-networkd-wait-online.service >/dev/null 2>&1 \
+        || warn "could not mask systemd-networkd-wait-online.service"
     # resolv.conf lives on the writable /run so a read-only /etc is fine.
     ln -sf /run/systemd/resolve/stub-resolv.conf "$TARGET_MNT/etc/resolv.conf"
 }

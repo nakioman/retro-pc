@@ -96,7 +96,9 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
    and you must type the exact `ERASE /dev/sdX` confirmation before anything is
    written.
 4. Set the `retrobox` password when prompted (used for SSH and `sudo`).
-5. Remove the USB and reboot.
+5. Press Enter to reboot **with the USB still inserted** (the live installer runs
+   from it). Remove the USB while the machine restarts — at the BIOS/logo screen
+   — so it boots from the internal disk.
 
 ## Accounts & maintenance
 

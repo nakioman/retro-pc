@@ -101,14 +101,22 @@ main() {
     # 5. Flush and report.
     sync
     printf '\n' >&2
-    ok "Install complete."
-    log "Install report: /data/retrobox/install-report.txt (on the target disk)"
-    log "Remove the USB stick and reboot into the installed appliance."
-    if confirm "Reboot now?"; then
-        cleanup
-        trap - EXIT
-        reboot
+    ok "Installation complete."
+    log "Install report saved to /data/retrobox/install-report.txt on the target disk."
+    printf '\n' >&2
+    warn "Leave the USB stick IN. This live installer is running FROM it — pulling"
+    warn "it now would cause read errors during shutdown."
+    warn "When the machine restarts and shows the BIOS/logo screen, THEN remove the"
+    warn "USB so it boots from the internal disk."
+    printf '\n' >&2
+
+    if [ "$RETROPC_UNATTENDED" = "1" ]; then
+        return 0
     fi
+    read -r -p "Press Enter to reboot now (USB still inserted)... " _ < /dev/tty
+    cleanup
+    trap - EXIT ERR
+    reboot
 }
 
 main "$@"
