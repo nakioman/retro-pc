@@ -47,6 +47,48 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         ]);
     }
 
+    public void UpdateDefaultVm(string vmId)
+    {
+        var path = ResolvePath("config.yaml");
+        if (!File.Exists(path))
+        {
+            throw new RetroBoxCatalogException($"Required YAML file '{path}' does not exist.");
+        }
+
+        var yaml = File.ReadAllText(path);
+        var lines = yaml.Split("\n", StringSplitOptions.None);
+        var replacements = 0;
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var newline = line.EndsWith('\r') ? "\r" : string.Empty;
+            var content = newline.Length == 0 ? line : line[..^1];
+            if (!content.StartsWith("defaultVm:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var colon = content.IndexOf(':');
+            var valueStart = colon + 1;
+            var commentStart = content.IndexOf('#', valueStart);
+            var valueEnd = commentStart < 0 ? content.Length : commentStart;
+            var suffix = content[valueEnd..];
+            var trailingWhitespace = content[valueStart..valueEnd].TrimEnd();
+            var whitespace = content[valueStart..valueEnd][trailingWhitespace.Length..];
+            lines[index] = content[..valueStart] + " " + vmId + whitespace + suffix + newline;
+            replacements++;
+            break;
+        }
+
+        if (replacements == 0)
+        {
+            throw new RetroBoxCatalogException($"YAML file '{path}' does not contain a top-level defaultVm entry.");
+        }
+
+        File.WriteAllText(path, string.Join("\n", lines));
+    }
+
     private T LoadYaml<T>(string fileName)
     {
         var path = ResolvePath(fileName);
