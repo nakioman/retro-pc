@@ -20,6 +20,8 @@ install_services() {
 
 _install_systemd_units() {
     log "Installing systemd units"
+    mkdir -p "$TARGET_MNT/etc/systemd/system" "$TARGET_MNT/etc/tmpfiles.d" \
+        "$TARGET_MNT/etc/sudoers.d"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-daemon.service" \
         "$TARGET_MNT/etc/systemd/system/retrobox-daemon.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-boot.service" \
@@ -30,8 +32,8 @@ _install_systemd_units() {
     install -m 0440 "$PAYLOAD_DIR/sudoers/retrobox" "$TARGET_MNT/etc/sudoers.d/retrobox"
     in_target visudo -cf /etc/sudoers.d/retrobox >/dev/null
 
-    in_target systemctl enable retrobox-daemon.service >/dev/null 2>&1
-    in_target systemctl enable retrobox-boot.service   >/dev/null 2>&1
+    enable_unit retrobox-daemon.service
+    enable_unit retrobox-boot.service
 }
 
 _configure_ssh() {
@@ -43,19 +45,21 @@ PermitRootLogin no
 PasswordAuthentication yes
 EOF
     # Generate host keys now: /etc is read-only at runtime.
-    in_target ssh-keygen -A >/dev/null
-    in_target systemctl enable ssh.service >/dev/null 2>&1
+    in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
+    enable_unit ssh.service
 }
 
 _configure_samba() {
     log "Configuring Samba scratch share"
+    mkdir -p "$TARGET_MNT/etc/samba"
     install -m 0644 "$PAYLOAD_DIR/samba/retropc-scratch.conf" "$TARGET_MNT/etc/samba/smb.conf"
-    in_target systemctl enable smbd.service >/dev/null 2>&1 || true
-    in_target systemctl enable nmbd.service >/dev/null 2>&1 || true
+    enable_unit smbd.service
+    enable_unit nmbd.service
 }
 
 _configure_network() {
     log "Configuring DHCP networking (systemd-networkd + resolved)"
+    mkdir -p "$TARGET_MNT/etc/systemd/network"
     cat > "$TARGET_MNT/etc/systemd/network/20-wired.network" <<'EOF'
 [Match]
 Name=en* eth*
@@ -63,8 +67,8 @@ Name=en* eth*
 [Network]
 DHCP=yes
 EOF
-    in_target systemctl enable systemd-networkd.service >/dev/null 2>&1
-    in_target systemctl enable systemd-resolved.service >/dev/null 2>&1
+    enable_unit systemd-networkd.service
+    enable_unit systemd-resolved.service
     # resolv.conf lives on the writable /run so a read-only /etc is fine.
     ln -sf /run/systemd/resolve/stub-resolv.conf "$TARGET_MNT/etc/resolv.conf"
 }

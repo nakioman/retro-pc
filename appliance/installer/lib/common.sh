@@ -30,6 +30,9 @@ RETROBOX_GROUP="retrobox"
 # Non-interactive mode for smoke tests / CI (never partitions a real disk).
 : "${RETROPC_UNATTENDED:=0}"
 
+# Full transcript of the run (so a failure is inspectable even after it scrolls).
+LOGFILE="${RETROPC_LOG:-/tmp/retropc-install.log}"
+
 # --- Logging ----------------------------------------------------------------
 
 _c_reset=$'\033[0m'; _c_blue=$'\033[1;34m'; _c_yellow=$'\033[1;33m'
@@ -39,7 +42,44 @@ log()  { printf '%s[*]%s %s\n' "$_c_blue"  "$_c_reset" "$*" >&2; }
 ok()   { printf '%s[+]%s %s\n' "$_c_green" "$_c_reset" "$*" >&2; }
 warn() { printf '%s[!]%s %s\n' "$_c_yellow" "$_c_reset" "$*" >&2; }
 err()  { printf '%s[x]%s %s\n' "$_c_red"   "$_c_reset" "$*" >&2; }
-die()  { err "$*"; exit 1; }
+
+# Drop into a recovery shell instead of exiting, so a failure does not make the
+# .bash_profile re-exec the installer and loop back to the banner. Falls back to
+# a plain exit when there is no controlling terminal (CI / unattended).
+_recovery_shell() {
+    if [ -t 0 ]; then
+        err "This is a RECOVERY SHELL — the installer will not restart on its own."
+        err "Scroll up to read the error. Type 'reboot' to try again, or inspect"
+        err "/mnt/target and rerun /opt/retropc-installer/install-retropc.sh."
+        trap - ERR EXIT
+        exec /bin/bash
+    fi
+    exit 1
+}
+
+die() {
+    err "$*"
+    err "Full transcript: $LOGFILE"
+    _recovery_shell
+}
+
+# ERR-trap handler for failures not routed through die().
+fail() {
+    local ec=$? cmd=$BASH_COMMAND line=${1:-?}
+    set +e
+    err "──────────────────────────────────────────────────────────"
+    err "INSTALL FAILED — exit $ec at line $line"
+    err "  while running: $cmd"
+    err "Full transcript: $LOGFILE"
+    err "──────────────────────────────────────────────────────────"
+    _recovery_shell
+}
+
+# enable_unit UNIT -> enable a systemd unit in the target; warn (don't abort) on
+# failure so one non-critical service can't sink the whole install.
+enable_unit() {
+    in_target systemctl enable "$1" >/dev/null 2>&1 || warn "could not enable $1"
+}
 
 # --- Prompts ----------------------------------------------------------------
 

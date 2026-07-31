@@ -13,7 +13,8 @@
 #   RETROPC_RETROBOX_PASSWORD  set retrobox password non-interactively
 #   RETROPC_UNATTENDED=1       never prompt / never auto-pick a destructive target
 
-set -euo pipefail
+# -E so the ERR trap fires inside sourced functions, not just top-level.
+set -Eeuo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SELF_DIR/lib"
@@ -44,6 +45,9 @@ cleanup() {
     umount -l "$TARGET_MNT"      2>/dev/null || true
 }
 trap cleanup EXIT
+# On any unhandled failure, freeze in a recovery shell instead of exiting (which
+# would loop back to the banner). Leaves the target mounted for inspection.
+trap 'fail $LINENO' ERR
 
 banner() {
     cat >&2 <<'EOF'
@@ -65,6 +69,10 @@ require_root() {
 }
 
 main() {
+    # Tee everything to a log so a failure is readable even after it scrolls.
+    : > "$LOGFILE" 2>/dev/null || LOGFILE="/tmp/retropc-install.log"
+    exec > >(tee -a "$LOGFILE") 2>&1
+
     banner
     require_root
     [ -d "$MEDIUM" ] || die "Live medium not found at $MEDIUM (set RETROPC_MEDIUM)."

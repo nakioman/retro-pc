@@ -9,11 +9,18 @@ install_bootloader() {
     _write_grub_defaults
     _write_recovery_entry
     log "Installing GRUB (i386-pc) to $TARGET_DISK MBR"
-    in_target grub-install --target=i386-pc --recheck --no-floppy "$TARGET_DISK" >/dev/null 2>&1 \
-        || die "grub-install failed for $TARGET_DISK"
+    # Do not silence output: grub's own error is the useful diagnostic, and on
+    # failure die() drops to a recovery shell instead of looping.
+    in_target grub-install --target=i386-pc --recheck --no-floppy "$TARGET_DISK" \
+        || die "grub-install failed for $TARGET_DISK (see output above)"
     log "Generating grub.cfg (UUID root)"
-    in_target update-grub >/dev/null 2>&1 || die "update-grub failed"
+    in_target update-grub || die "update-grub failed (see output above)"
     ok "GRUB installed to $TARGET_DISK (root UUID=$ROOT_UUID)"
+}
+
+# Kernel version string (e.g. 6.12.0-amd64) of the newest kernel in the target.
+_target_kver() {
+    in_target sh -c 'ls -1 /boot/vmlinuz-* 2>/dev/null | sort -V | tail -n1 | sed "s|.*/vmlinuz-||"'
 }
 
 _write_grub_defaults() {
@@ -38,7 +45,7 @@ EOF
 
 _write_recovery_entry() {
     local kver
-    kver="$(in_target sh -c 'ls -1 /boot/vmlinuz-* 2>/dev/null | sort -V | tail -n1 | sed "s|.*/vmlinuz-||"')"
+    kver="$(_target_kver)"
     if [ -z "$kver" ]; then
         warn "No kernel found in target /boot; skipping custom recovery entry."
         return

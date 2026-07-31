@@ -53,9 +53,16 @@ EOF
 }
 
 write_install_report() {
-    local by_id report="$TARGET_MNT/data/retrobox/install-report.txt"
-    by_id="$(ls -l /dev/disk/by-id/ 2>/dev/null | awk -v d="$(basename "$TARGET_DISK")" \
-        '$NF ~ ("/"d"$") {print "/dev/disk/by-id/"$(NF-2); exit}')"
+    local by_id="" link target report="$TARGET_MNT/data/retrobox/install-report.txt"
+    # Find a stable by-id path that resolves to the target disk (avoid ls|awk,
+    # which trips pipefail when the directory is absent).
+    target="$(readlink -f "$TARGET_DISK" 2>/dev/null || printf '%s' "$TARGET_DISK")"
+    if [ -d /dev/disk/by-id ]; then
+        for link in /dev/disk/by-id/*; do
+            [ -e "$link" ] || continue
+            if [ "$(readlink -f "$link")" = "$target" ]; then by_id="$link"; break; fi
+        done
+    fi
     mkdir -p "$TARGET_MNT/data/retrobox"
     cat > "$report" <<EOF
 generated=install-retropc.sh
