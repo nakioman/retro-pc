@@ -16,7 +16,6 @@ udev
 dbus
 e2fsprogs
 grub-pc
-# Compressed RAM swap for the low-memory (~2GB) appliance.
 systemd-zram-generator
 plymouth
 plymouth-themes

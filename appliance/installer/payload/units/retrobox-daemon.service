@@ -1,9 +1,11 @@
 [Unit]
 Description=RetroBox hardware integration daemon (ESP8266 floppy controller)
 Documentation=https://github.com/nakioman/retro-pc
-# /data holds the YAML catalogs the daemon reads.
 RequiresMountsFor=/data
 After=local-fs.target
+# Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
+# path and leaves a normal login on tty1 for maintenance.
+ConditionKernelCommandLine=!retropc.norun
 # Skip cleanly when only a placeholder was installed (no real binary yet),
 # instead of failing and restart-looping on the console.
 ConditionPathExists=/opt/retrobox/retrobox
@@ -13,8 +15,7 @@ Type=simple
 User=retrobox
 Group=retrobox
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides
-# SERIAL_DEVICE, SERIAL_BAUD, and FLOPPY_CONTROL_SOCKET. Missing on a machine
-# with no controller wired yet; the daemon then simply gets no serial input.
+# SERIAL_DEVICE, SERIAL_BAUD, and FLOPPY_CONTROL_SOCKET.
 EnvironmentFile=/etc/retrobox/daemon.env
 # The daemon reads serial protocol lines on stdin and drives the 86Box floppy
 # control socket. Configure the serial line, then stream it into the daemon.
