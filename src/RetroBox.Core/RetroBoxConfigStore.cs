@@ -57,7 +57,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
         var yaml = File.ReadAllText(path);
         var lines = yaml.Split("\n", StringSplitOptions.None);
-        var replacements = 0;
+        var replaced = false;
 
         for (var index = 0; index < lines.Length; index++)
         {
@@ -77,11 +77,11 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             var trailingWhitespace = content[valueStart..valueEnd].TrimEnd();
             var whitespace = content[valueStart..valueEnd][trailingWhitespace.Length..];
             lines[index] = content[..valueStart] + " " + vmId + whitespace + suffix + newline;
-            replacements++;
+            replaced = true;
             break;
         }
 
-        if (replacements == 0)
+        if (!replaced)
         {
             throw new RetroBoxCatalogException($"YAML file '{path}' does not contain a top-level defaultVm entry.");
         }

@@ -41,11 +41,7 @@ public static class CliCommandFactory
 
     private static Command CreateDaemonCommand(Func<RetroBoxDaemonCommandRequest, int>? daemonRunner)
     {
-        var configRootOption = new Option<string>("--config-root")
-        {
-            Description = "RetroBox YAML catalog root.",
-            DefaultValueFactory = _ => RetroBoxConfigStore.DefaultRootPath,
-        };
+        var configRootOption = ConfigRootOption();
         var socketPathOption = new Option<string?>("--floppy-control-socket")
         {
             Description = "86Box floppy control Unix socket path.",
@@ -277,11 +273,7 @@ public static class CliCommandFactory
         };
         sizeOption.AcceptOnlyFromAmong(RetroBoxFloppyCatalogRules.ValidSizes);
 
-        var configRootOption = new Option<string>("--config-root")
-        {
-            Description = "RetroBox YAML catalog root.",
-            DefaultValueFactory = _ => RetroBoxConfigStore.DefaultRootPath,
-        };
+        var configRootOption = ConfigRootOption();
         var scratchRootOption = new Option<string>("--scratch-root")
         {
             Description = "Scratch directory that contains source floppy images.",
