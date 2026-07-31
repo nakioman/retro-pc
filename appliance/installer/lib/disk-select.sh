@@ -26,7 +26,6 @@ live_usb_disk() {
 select_target_disk() {
     local exclude candidates=() name type size model tran line
     exclude="$(live_usb_disk)"
-    [ -n "$exclude" ] && log "Excluding live USB installer device: /dev/$exclude"
 
     while IFS= read -r line; do
         # Columns: NAME TYPE SIZE MODEL TRAN
