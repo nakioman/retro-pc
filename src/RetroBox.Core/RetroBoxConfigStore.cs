@@ -47,6 +47,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         ]);
     }
 
+    public void UpdateDefaultVm(string vmId)
+    {
+        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        SaveYaml("config.yaml", serializer.Serialize(config with { DefaultVm = vmId }));
+    }
+
     private T LoadYaml<T>(string fileName)
     {
         var path = ResolvePath(fileName);
@@ -91,6 +97,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             RestoreBackups(backups);
             throw;
         }
+    }
+
+    private void SaveYaml(string fileName, string yaml)
+    {
+        Directory.CreateDirectory(rootPath);
+        File.WriteAllText(ResolvePath(fileName), yaml);
     }
 
     private string ResolvePath(string fileName)
