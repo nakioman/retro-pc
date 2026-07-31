@@ -1,0 +1,32 @@
+[Unit]
+Description=RetroBox fullscreen boot launcher (default VM / Windows-key selector)
+Documentation=https://github.com/nakioman/retro-pc
+RequiresMountsFor=/data
+After=local-fs.target retrobox-daemon.service
+# Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
+# path and leaves a normal login on tty1 for maintenance.
+ConditionKernelCommandLine=!retropc.norun
+# Skip cleanly when only a placeholder was installed (no real binary yet), so
+# tty1 shows a normal login instead of a failing service restart-looping.
+ConditionPathExists=/opt/retrobox/retrobox
+
+# Own tty1 instead of a login prompt on the appliance's primary display.
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=retrobox
+Group=retrobox
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+# `retrobox boot` runs the default-VM / selector flow.
+ExecStart=/opt/retrobox/retrobox boot
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

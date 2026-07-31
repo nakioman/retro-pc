@@ -13,6 +13,9 @@ coverage*.json
 coverage*.xml
 coverage*.info
 
+# USB installer build artifacts
+appliance/installer/out/
+
 # Local IDE/user files
 .vs/
 .vscode/

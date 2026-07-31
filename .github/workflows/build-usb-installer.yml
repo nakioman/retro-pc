@@ -1,0 +1,99 @@
+name: Build USB appliance installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "appliance/**"
+      - ".github/workflows/build-usb-installer.yml"
+  pull_request:
+    paths:
+      - "appliance/**"
+      - ".github/workflows/build-usb-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint installer shell scripts
+        # -x follows the sourced lib/*.sh from install-retropc.sh, so the whole
+        # installer is linted with cross-file variable resolution. Linting the
+        # libs standalone would false-flag their shared vars as unused.
+        run: |
+          shellcheck -x -P SCRIPTDIR -S style \
+            appliance/installer/build-usb-installer.sh \
+            appliance/installer/install-retropc.sh
+
+  build:
+    needs: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Debian image tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mmdebstrap squashfs-tools xorriso \
+            isolinux syslinux-common dosfstools \
+            debian-archive-keyring zstd xz-utils e2fsprogs file
+
+      - name: Build installer image
+        # Offline, blob-free CI build: the retrobox binary and 86Box AppImage
+        # are staged as placeholders (see build-usb-installer.sh). Output lands
+        # in the script's default OUT_DIR (appliance/installer/out).
+        run: sudo bash appliance/installer/build-usb-installer.sh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retropc-installer-iso
+          path: appliance/installer/out/retropc-installer.iso
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    # Publish a GitHub Release with the ISO only for pushes to main (or a manual
+    # run on main). PR builds still just upload the artifact above.
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: retropc-installer-iso
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="appliance-$(date -u +%Y%m%d)-${{ github.run_number }}"
+          ISO="dist/retropc-installer-${TAG}.iso"
+          mv dist/retropc-installer.iso "$ISO"
+          {
+            echo "Automated bootable USB appliance installer built from ${{ github.sha }}."
+            echo
+            echo "Flash to a USB and boot the retro PC:"
+            echo '```'
+            echo "sudo dd if=$(basename "$ISO") of=/dev/sdX bs=4M status=progress"
+            echo '```'
+            echo
+            echo "CI builds stage the retrobox binary and 86Box AppImage as placeholders."
+          } > notes.md
+          gh release create "$TAG" "$ISO" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "RetroBox appliance installer ${TAG}" \
+            --notes-file notes.md

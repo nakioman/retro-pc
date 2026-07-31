@@ -11,7 +11,14 @@
 
 # Base service/runtime
 systemd
+systemd-sysv
 udev
+dbus
+e2fsprogs
+grub-pc
+systemd-zram-generator
+plymouth
+plymouth-themes
 
 # Appliance administration and file transfer
 openssh-server
