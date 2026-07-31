@@ -31,6 +31,20 @@ public sealed class RetroBoxBootSelectorTests
     }
 
     [Fact]
+    public void Missing_config_file_forces_selector()
+    {
+        var root = CreateRoot("pentium100");
+        File.Delete(Path.Combine(root, "config.yaml"));
+        var ui = new FakeSelectorUi(new RetroBoxBootSelectionDecision(
+            RetroBoxBootSelectionAction.Run, "386sx16"));
+
+        var result = new RetroBoxBootSelector(new RetroBoxConfigStore(root), ui).Resolve();
+
+        Assert.Equal("386sx16", result.VmId);
+        Assert.Equal(1, ui.Calls);
+    }
+
+    [Fact]
     public void Run_and_set_default_persists_before_returning()
     {
         var root = CreateRoot("pentium100");

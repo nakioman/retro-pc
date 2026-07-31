@@ -39,6 +39,18 @@ public sealed class RetroBoxConfigStoreTests
     }
 
     [Fact]
+    public void Load_uses_empty_config_when_config_yaml_is_missing()
+    {
+        var root = CreateValidRoot();
+        File.Delete(Path.Combine(root, "config.yaml"));
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.Equal(string.Empty, data.Config.DefaultVm);
+        Assert.Null(data.Config.FloppyControlSocketPath);
+    }
+
+    [Fact]
     public void Load_rejects_duplicate_ids()
     {
         var root = CreateValidRoot();

@@ -24,7 +24,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     public RetroBoxCatalogData Load()
     {
-        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        var config = LoadConfig();
         var vms = LoadYaml<RetroBoxVmCatalog>("vms.yaml").Vms;
         var floppies = LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies;        
 
@@ -47,8 +47,15 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     public void UpdateDefaultVm(string vmId)
     {
-        var config = LoadYaml<RetroBoxConfig>("config.yaml");
+        var config = LoadConfig();
         SaveYaml("config.yaml", serializer.Serialize(config with { DefaultVm = vmId }));
+    }
+
+    private RetroBoxConfig LoadConfig()
+    {
+        return File.Exists(ResolvePath("config.yaml"))
+            ? LoadYaml<RetroBoxConfig>("config.yaml")
+            : new RetroBoxConfig();
     }
 
     private T LoadYaml<T>(string fileName)
