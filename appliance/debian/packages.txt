@@ -29,6 +29,8 @@ sudo
 alsa-utils
 kmod
 fuse3
+libgles2
+
 
 # Small maintenance/networking toolset
 procps
