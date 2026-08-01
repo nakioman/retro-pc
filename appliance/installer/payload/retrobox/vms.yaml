@@ -1,0 +1,7 @@
+vms:
+  386sx16:
+    label: "386SX-16"
+    path: "/data/vms/386sx16"
+  pentium100:
+    label: "Pentium 100"
+    path: "/data/vms/pentium100"

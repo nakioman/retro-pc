@@ -12,9 +12,9 @@
 #   SUITE            Debian suite (default: trixie)
 #   MIRROR           Debian mirror (default: https://deb.debian.org/debian)
 #   OUT_DIR          output dir (default: appliance/installer/out)
-#   RETROBOX_BIN     path to the published retrobox linux-x64 binary (optional;
-#                    placeholder staged when unset — keeps CI blob-free)
-#   BOX86_APPIMAGE   path to the 86Box AppImage (optional; placeholder when unset)
+#   RETROBOX_BIN     path to the published retrobox linux-x64 binary
+#   BOX86_APPIMAGE   optional local override for the pinned 86Box AppImage
+#   BOX86_ROMS_ARCHIVE optional local override for the pinned ROM tarball
 
 set -euo pipefail
 
@@ -24,6 +24,7 @@ MIRROR="${MIRROR:-https://deb.debian.org/debian}"
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 PKG_LIST="$REPO_ROOT/appliance/debian/packages.txt"
+ARTIFACT_ENV="$REPO_ROOT/appliance/86box.env"
 OUT_DIR="${OUT_DIR:-$SELF_DIR/out}"
 ISOLINUX_LIB="/usr/lib/ISOLINUX"
 SYSLINUX_MOD="/usr/lib/syslinux/modules/bios"
@@ -38,7 +39,27 @@ latest() { printf '%s\n' "$@" | sort -V | tail -n1; }
 command -v mmdebstrap >/dev/null || die "mmdebstrap not installed."
 command -v mksquashfs >/dev/null || die "squashfs-tools not installed."
 command -v xorriso    >/dev/null || die "xorriso not installed."
+command -v curl       >/dev/null || die "curl not installed."
+command -v sha256sum  >/dev/null || die "sha256sum not installed."
+command -v tar         >/dev/null || die "tar not installed."
 [ -f "$ISOLINUX_LIB/isolinux.bin" ] || die "isolinux not installed ($ISOLINUX_LIB/isolinux.bin missing)."
+[ -f "$ARTIFACT_ENV" ] || die "Artifact manifest not found: $ARTIFACT_ENV"
+# shellcheck disable=SC1090
+. "$ARTIFACT_ENV"
+
+[[ "$BOX86_APPIMAGE_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid AppImage SHA256 in $ARTIFACT_ENV"
+[[ "$BOX86_ROMS_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid ROMs SHA256 in $ARTIFACT_ENV"
+
+download_and_verify() {
+    local source="$1" url="$2" expected="$3" label="$4"
+    if [ ! -f "$source" ]; then
+        log "Downloading $label"
+        curl --fail --location --retry 3 --retry-delay 2 --silent --show-error \
+            "$url" -o "$source"
+    fi
+    printf '%s  %s\n' "$expected" "$source" | sha256sum -c - >/dev/null \
+        || die "$label checksum mismatch"
+}
 
 WORK="$(mktemp -d)"
 LIVE="$WORK/live-root"
@@ -47,7 +68,7 @@ ISO="$WORK/iso"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
-mkdir -p "$ISO/live" "$ISO/install" "$ISO/isolinux" "$OUT_DIR"
+mkdir -p "$ISO/live" "$ISO/install" "$ISO/isolinux" "$ISO/install/roms" "$OUT_DIR"
 
 # --- 1. Target appliance rootfs (the deployed OS) --------------------------
 log "Building target appliance rootfs from $(basename "$PKG_LIST")"
@@ -101,23 +122,28 @@ mksquashfs "$LIVE" "$ISO/live/filesystem.squashfs" -comp zstd -noappend -no-prog
 cp "$(latest "$LIVE"/boot/vmlinuz-*)" "$ISO/live/vmlinuz"
 cp "$(latest "$LIVE"/boot/initrd.img-*)" "$ISO/live/initrd.img"
 
-# --- 5. Stage loose payloads (retrobox binary + 86Box AppImage) ------------
-if [ -n "${RETROBOX_BIN:-}" ] && [ -f "${RETROBOX_BIN:-}" ]; then
-    install -m 0755 "$RETROBOX_BIN" "$ISO/install/retrobox"
-    log "Staged retrobox binary from RETROBOX_BIN"
-else
-    printf 'retrobox binary not provided at build time (set RETROBOX_BIN to embed the real one).\n' \
-        > "$ISO/install/retrobox.placeholder"
-    log "No RETROBOX_BIN; staged placeholder"
-fi
-if [ -n "${BOX86_APPIMAGE:-}" ] && [ -f "${BOX86_APPIMAGE:-}" ]; then
-    install -m 0755 "$BOX86_APPIMAGE" "$ISO/install/86box.AppImage"
-    log "Staged 86Box AppImage from BOX86_APPIMAGE"
-else
-    printf '86Box AppImage not provided at build time (set BOX86_APPIMAGE to embed it).\n' \
-        > "$ISO/install/86box.AppImage.placeholder"
-    log "No BOX86_APPIMAGE; staged placeholder"
-fi
+# --- 5. Stage runtime, ROMs, catalog, and VM profiles -----------------------
+[ -n "${RETROBOX_BIN:-}" ] && [ -f "${RETROBOX_BIN:-}" ] \
+    || die "RETROBOX_BIN must point to the published Linux x64 binary"
+install -m 0755 "$RETROBOX_BIN" "$ISO/install/retrobox"
+
+APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
+ROMS_CACHE="${BOX86_ROMS_ARCHIVE:-$WORK/86box-roms-${BOX86_ROMS_VERSION}.tar.gz}"
+download_and_verify "$APPIMAGE_CACHE" "$BOX86_APPIMAGE_URL" "$BOX86_APPIMAGE_SHA256" "86Box AppImage"
+download_and_verify "$ROMS_CACHE" "$BOX86_ROMS_URL" "$BOX86_ROMS_SHA256" "86Box ROM tarball"
+install -m 0755 "$APPIMAGE_CACHE" "$ISO/install/86box.AppImage"
+tar -xzf "$ROMS_CACHE" --strip-components=1 -C "$ISO/install/roms"
+[ -n "$(find "$ISO/install/roms" -type f -print -quit)" ] \
+    || die "86Box ROM tarball extracted no files"
+cp -a "$SELF_DIR/payload/retrobox" "$ISO/install/"
+cp -a "$SELF_DIR/payload/profiles" "$ISO/install/"
+for vm in 386sx16 pentium100; do
+    for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+        [ -f "$ISO/install/profiles/$vm/$required" ] \
+            || die "ISO payload profile $vm is missing $required"
+    done
+done
+log "Staged runtime, ROMs, VM catalog, and profiles"
 
 # --- 6. ISOLINUX BIOS boot files + config ----------------------------------
 log "Staging ISOLINUX BIOS boot files"
@@ -164,6 +190,11 @@ for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; d
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
 done
+[ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
+[ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
+[ -f "$ISO/install/retrobox/vms.yaml" ] || die "ISO is missing vms.yaml"
+[ -f "$ISO/install/profiles/386sx16/shaders/syncmaster3.glsl" ] || die "ISO is missing 386sx16 shader"
+[ -f "$ISO/install/profiles/pentium100/shaders/syncmaster3.glsl" ] || die "ISO is missing pentium100 shader"
 
 log "Done: $OUT_ISO"
 ls -lh "$OUT_ISO"

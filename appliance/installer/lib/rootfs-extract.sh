@@ -3,7 +3,7 @@
 # out the mutable /data tree. Offline: the OS comes from the squashfs carried on
 # the USB, not from the network.
 #
-# Sets globals RETROBOX_STATUS and BOX86_STATUS ("installed" | "PLACEHOLDER").
+# Sets globals RETROBOX_STATUS and BOX86_STATUS ("installed").
 
 extract_rootfs() {
     [ -f "$TARGET_SQUASHFS" ] || die "Target rootfs not found on medium: $TARGET_SQUASHFS"
@@ -27,29 +27,39 @@ create_data_tree() {
     # Ownership is applied in users.sh once the retrobox uid/gid exist.
 }
 
-# Copy the RetroBox binary and 86Box AppImage from the medium into the target.
-# The build stages a real file when RETROBOX_BIN / BOX86_APPIMAGE were provided,
-# otherwise a ".placeholder" marker so CI can build with no large/copyright blobs.
+# Copy the immutable runtime, ROMs, catalog, and VM profiles from the medium.
 stage_binaries() {
-    mkdir -p "$TARGET_MNT$RETROBOX_OPT" "$TARGET_MNT$BOX86_OPT"
+    mkdir -p "$TARGET_MNT$RETROBOX_OPT" "$TARGET_MNT$BOX86_OPT" \
+        "$TARGET_MNT/data/retrobox" "$TARGET_MNT/data/vms"
 
-    if [ -f "$RETROBOX_SRC" ]; then
-        install -m 0755 "$RETROBOX_SRC" "$TARGET_MNT$RETROBOX_OPT/retrobox"
-        RETROBOX_STATUS="installed"
-        ok "Staged retrobox binary -> $RETROBOX_OPT/retrobox"
-    else
-        cp "$RETROBOX_SRC.placeholder" "$TARGET_MNT$RETROBOX_OPT/retrobox.placeholder" 2>/dev/null || true
-        RETROBOX_STATUS="PLACEHOLDER"
-        warn "retrobox binary not on medium; installed a placeholder marker only"
-    fi
+    [ -x "$RETROBOX_SRC" ] || die "Executable RetroBox binary not on medium: $RETROBOX_SRC"
+    install -m 0755 "$RETROBOX_SRC" "$TARGET_MNT$RETROBOX_OPT/retrobox"
+    RETROBOX_STATUS="installed"
+    ok "Staged retrobox binary -> $RETROBOX_OPT/retrobox"
 
-    if [ -f "$BOX86_SRC" ]; then
-        install -m 0755 "$BOX86_SRC" "$TARGET_MNT$BOX86_OPT/86box.AppImage"
-        BOX86_STATUS="installed"
-        ok "Staged 86Box AppImage -> $BOX86_OPT/86box.AppImage"
-    else
-        cp "$BOX86_SRC.placeholder" "$TARGET_MNT$BOX86_OPT/86box.AppImage.placeholder" 2>/dev/null || true
-        BOX86_STATUS="PLACEHOLDER"
-        warn "86Box AppImage not on medium; installed a placeholder marker only"
-    fi
+    [ -f "$BOX86_SRC" ] || die "86Box AppImage not on medium: $BOX86_SRC"
+    install -m 0755 "$BOX86_SRC" "$TARGET_MNT$BOX86_OPT/86box.AppImage"
+    BOX86_STATUS="installed"
+    ok "Staged 86Box AppImage -> $BOX86_OPT/86box.AppImage"
+
+    [ -d "$BOX86_ROMS_SRC" ] || die "86Box ROMs not on medium: $BOX86_ROMS_SRC"
+    mkdir -p "$TARGET_MNT$BOX86_OPT/roms"
+    cp -a "$BOX86_ROMS_SRC/." "$TARGET_MNT$BOX86_OPT/roms/"
+    ok "Staged 86Box ROMs -> $BOX86_OPT/roms"
+
+    [ -f "$PAYLOAD_DIR/retrobox/vms.yaml" ] || die "VM catalog payload is missing"
+    install -m 0644 "$PAYLOAD_DIR/retrobox/vms.yaml" "$TARGET_MNT/data/retrobox/vms.yaml"
+    for vm in 386sx16 pentium100; do
+        local profile="$PAYLOAD_DIR/profiles/$vm"
+        for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+            [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
+        done
+        mkdir -p "$TARGET_MNT/data/vms/$vm"
+        cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
+        for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+            [ -f "$TARGET_MNT/data/vms/$vm/$required" ] \
+                || die "Installed VM profile $vm is missing $required"
+        done
+    done
+    ok "Staged VM catalog and profiles -> /data"
 }

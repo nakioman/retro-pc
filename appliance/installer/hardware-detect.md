@@ -65,6 +65,6 @@ cdrom.status=DETECTED
 serial.device=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
 serial.baud=115200
 serial.status=DETECTED
-retrobox.binary=installed        # or PLACEHOLDER
-box86.appimage=installed         # or PLACEHOLDER
+retrobox.binary=installed
+box86.appimage=installed
 ```

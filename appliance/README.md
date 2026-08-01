@@ -15,8 +15,11 @@ appliance hardware.
 
 The normal user experience is 86Box in fullscreen. Linux remains an
 implementation detail and does not provide a desktop environment. 86Box is
-expected to be delivered as an AppImage, while `retrobox` is deployed as the
-self-contained Linux x64 binary produced by the repository's publish task.
+deployed as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`, while
+`/opt/retrobox/retrobox` is the self-contained Linux x64 binary produced by the
+repository's publish task. Versions and checksums are pinned in
+[`86box.env`](86box.env): [86Box v7.0.0-master.46](https://github.com/nakioman/86Box/releases/tag/v7.0.0-master.46)
+and [ROMs v6.0](https://github.com/86Box/roms/releases/tag/v6.0).
 
 This document defines the base layout. The bootable USB installer that turns it
 into an installed, read-only-root system on the appliance disk lives under
@@ -67,7 +70,7 @@ An administrator connecting over SSH should be able to:
 1. Inspect `retrobox` YAML catalogs under `/data/retrobox`.
 2. Copy floppy images into `/data/floppies/scratch` through the restricted
    Samba share or an approved SSH transfer.
-3. Run the published `retrobox` CLI for catalog/import maintenance.
+3. Run the published `/opt/retrobox/retrobox` CLI for catalog/import maintenance.
 4. Inspect VM directories and snapshots without changing the base OS.
 5. Collect service and hardware diagnostics once the systemd units exist.
 

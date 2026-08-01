@@ -3,21 +3,28 @@
 ## Mount and mutability model
 
 The appliance is designed around a read-only root filesystem. The operating
-system, installed packages, the `retrobox` binary, and 86Box's AppImage are
-part of the deployed system image and are not application state.
+system, installed packages, `/opt/retrobox/retrobox`, 86Box's AppImage, and
+`/opt/86Box/roms` are part of the deployed system image and are not application
+state. The AppImage is pinned to [86Box v7.0.0-master.46](https://github.com/nakioman/86Box/releases/tag/v7.0.0-master.46),
+and the ROM set to [86Box/roms v6.0](https://github.com/86Box/roms/releases/tag/v6.0).
 
 `/data` is the persistent writable filesystem for Retro PC state:
 
 ```text
 /data/
   retrobox/
-    config.yaml
     vms.yaml
     floppies.yaml
     install-report.txt
   vms/
     386sx16/
+      86box.cfg
+      HDD.vhd
+      shaders/syncmaster3.glsl
     pentium100/
+      86box.cfg
+      HDD.vhd
+      shaders/syncmaster3.glsl
   floppies/
     scratch/
     cataloged/
@@ -45,6 +52,10 @@ The current `retrobox` code uses these paths directly:
 - `/data/floppies/scratch` is the import source directory.
 - `/data/floppies/cataloged` stores imported floppy images.
 - VM paths are under `/data/vms`.
+- The immutable runtime is `/opt/retrobox/retrobox`, `/opt/86Box/86box.AppImage`,
+  and `/opt/86Box/roms`.
+- `config.yaml` is optional runtime state. The installer seeds only `vms.yaml`
+  and does not choose a default VM.
 
 The directories may be created during appliance provisioning. The `retrobox`
 system user/group should own `/data/retrobox` and the cataloged application

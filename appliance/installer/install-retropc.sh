@@ -85,7 +85,7 @@ main() {
     partition_disk "$TARGET_DISK"
     mount_target
 
-    # 3. Lay down the OS image + mutable /data, stage binaries.
+    # 3. Lay down the OS image + mutable /data, stage runtime and profiles.
     extract_rootfs
     create_data_tree
     stage_binaries

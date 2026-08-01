@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xz-utils \
         e2fsprogs \
         file \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
