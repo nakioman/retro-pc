@@ -34,8 +34,33 @@ jobs:
       - name: Run tests
         run: mise run test
 
+      - name: Install Native AOT toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev binutils
+
       - name: Publish Linux x64 binary
         run: mise run publish-linux-x64
+
+      - name: Smoke test published binary
+        run: |
+          set -euo pipefail
+          artifact="src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/retrobox"
+          fixture="$(mktemp -d)"
+          trap 'rm -rf "$fixture"' EXIT
+          mkdir -p "$fixture/vms/386sx16" "$fixture/vms/pentium100"
+          touch "$fixture/vms/386sx16/86box.cfg" "$fixture/vms/pentium100/86box.cfg"
+          printf '%s\n' \
+            'vms:' \
+            '  386sx16:' \
+            '    label: "386SX-16"' \
+            "    path: \"$fixture/vms/386sx16\"" \
+            '  pentium100:' \
+            '    label: "Pentium 100"' \
+            "    path: \"$fixture/vms/pentium100\"" \
+            > "$fixture/vms.yaml"
+          "$artifact" --help
+          "$artifact" boot --dry-run --config-root "$fixture" --select 386sx16
+          "$artifact" boot --dry-run --config-root "$fixture" --select pentium100
+          test ! -e "$fixture/config.yaml"
 
       - name: Upload RetroBox artifact
         uses: actions/upload-artifact@v4

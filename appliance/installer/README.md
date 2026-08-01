@@ -113,6 +113,13 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
   `sudo mount -o remount,rw /`, make the change, then reboot or
   `sudo mount -o remount,ro /`. `/data` is always writable.
 
+## Machine selector
+
+Press F12 during the boot window to open the text selector on the appliance
+console. Press a VM's displayed number to start it. Press `D`, then a VM number,
+to save it as the default and start it immediately. `Esc` cancels; if a default
+is already configured, cancellation starts that VM.
+
 ## Recovery
 
 - Hold **Shift** (or press **Esc**) during boot to reveal the hidden GRUB menu.

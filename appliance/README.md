@@ -16,14 +16,21 @@ appliance hardware.
 The normal user experience is 86Box in fullscreen. Linux remains an
 implementation detail and does not provide a desktop environment. 86Box is
 deployed as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`, while
-`/opt/retrobox/retrobox` is the self-contained Linux x64 binary produced by the
-repository's publish task. Versions and checksums are pinned in
+`/opt/retrobox/retrobox` is the self-contained Native AOT Linux x64 binary
+produced by the repository's publish task. Versions and checksums are pinned in
 [`86box.env`](86box.env).
 This document defines the base layout. The bootable USB installer that turns it
 into an installed, read-only-root system on the appliance disk lives under
 [`installer/`](installer/README.md); the installer is the authoritative source
 for the systemd units, Samba share, read-only-root enforcement, and account
 setup described below until the standalone child issues (#28, #29, #30) land.
+
+## Machine selector
+
+Press F12 during the boot window to open the plain-text machine selector. Press
+the VM's displayed number to start it, or press `D` and then a number to set
+that VM as the default and start it immediately. `Esc` cancels; when a default
+already exists, cancellation starts that default.
 
 ## Accounts and permissions
 

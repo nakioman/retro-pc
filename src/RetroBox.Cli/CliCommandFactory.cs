@@ -208,7 +208,7 @@ public static class CliCommandFactory
                 }
 
                 var catalog = store.Load();
-                var ui = selectorUi ?? new RetroBoxTerminalGuiSelector();
+                var ui = selectorUi ?? new RetroBoxConsoleSelector();
                 var selection = new RetroBoxBootSelector(store, ui).Resolve(
                     catalog,
                     explicitVmId,

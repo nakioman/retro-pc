@@ -12,12 +12,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             ? DefaultRootPath
             : Path.GetFullPath(rootPath);
 
-    private readonly IDeserializer deserializer = new DeserializerBuilder()
+    private readonly IDeserializer deserializer = new StaticDeserializerBuilder(new RetroBoxYamlContext())
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .WithDuplicateKeyChecking()
             .Build();
             
-    private readonly ISerializer serializer = new SerializerBuilder()
+    private readonly ISerializer serializer = new StaticSerializerBuilder(new RetroBoxYamlContext())
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
             .Build();
