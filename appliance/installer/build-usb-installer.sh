@@ -123,8 +123,9 @@ cp "$(latest "$LIVE"/boot/vmlinuz-*)" "$ISO/live/vmlinuz"
 cp "$(latest "$LIVE"/boot/initrd.img-*)" "$ISO/live/initrd.img"
 
 # --- 5. Stage runtime, ROMs, catalog, and VM profiles -----------------------
-[ -n "${RETROBOX_BIN:-}" ] && [ -f "${RETROBOX_BIN:-}" ] \
-    || die "RETROBOX_BIN must point to the published Linux x64 binary"
+if [ -z "${RETROBOX_BIN:-}" ] || [ ! -f "${RETROBOX_BIN:-}" ]; then
+    die "RETROBOX_BIN must point to the published Linux x64 binary"
+fi
 install -m 0755 "$RETROBOX_BIN" "$ISO/install/retrobox"
 
 APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
