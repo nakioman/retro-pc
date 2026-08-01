@@ -136,14 +136,20 @@ install -m 0755 "$APPIMAGE_CACHE" "$ISO/install/86box.AppImage"
 tar -xzf "$ROMS_CACHE" --strip-components=1 -C "$ISO/install/roms"
 [ -n "$(find "$ISO/install/roms" -type f -print -quit)" ] \
     || die "86Box ROM tarball extracted no files"
-cp -a "$SELF_DIR/payload/retrobox" "$ISO/install/"
+cp -a "$SELF_DIR/payload/retrobox/vms.yaml" "$ISO/install/vms.yaml"
 cp -a "$SELF_DIR/payload/profiles" "$ISO/install/"
-for vm in 386sx16 pentium100; do
+found_profile=0
+for profile in "$ISO/install"/profiles/*/; do
+    [ -d "$profile" ] || continue
+    found_profile=1
+    vm="${profile%/}"
+    vm="${vm##*/}"
     for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
-        [ -f "$ISO/install/profiles/$vm/$required" ] \
+        [ -f "$profile/$required" ] \
             || die "ISO payload profile $vm is missing $required"
     done
 done
+[ "$found_profile" = "1" ] || die "ISO payload contains no VM profiles"
 log "Staged runtime, ROMs, VM catalog, and profiles"
 
 # --- 6. ISOLINUX BIOS boot files + config ----------------------------------
@@ -193,9 +199,8 @@ for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; d
 done
 [ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
 [ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
-[ -f "$ISO/install/retrobox/vms.yaml" ] || die "ISO is missing vms.yaml"
-[ -f "$ISO/install/profiles/386sx16/shaders/syncmaster3.glsl" ] || die "ISO is missing 386sx16 shader"
-[ -f "$ISO/install/profiles/pentium100/shaders/syncmaster3.glsl" ] || die "ISO is missing pentium100 shader"
+[ -f "$ISO/install/vms.yaml" ] || die "ISO is missing vms.yaml"
+[ -d "$ISO/install/profiles" ] || die "ISO is missing VM profiles"
 
 log "Done: $OUT_ISO"
 ls -lh "$OUT_ISO"

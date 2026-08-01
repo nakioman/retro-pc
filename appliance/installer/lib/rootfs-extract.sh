@@ -29,6 +29,8 @@ create_data_tree() {
 
 # Copy the immutable runtime, ROMs, catalog, and VM profiles from the medium.
 stage_binaries() {
+    local profile_root profile vm required found_profile=0
+
     mkdir -p "$TARGET_MNT$RETROBOX_OPT" "$TARGET_MNT$BOX86_OPT" \
         "$TARGET_MNT/data/retrobox" "$TARGET_MNT/data/vms"
 
@@ -49,8 +51,13 @@ stage_binaries() {
 
     [ -f "$PAYLOAD_DIR/retrobox/vms.yaml" ] || die "VM catalog payload is missing"
     install -m 0644 "$PAYLOAD_DIR/retrobox/vms.yaml" "$TARGET_MNT/data/retrobox/vms.yaml"
-    for vm in 386sx16 pentium100; do
-        local profile="$PAYLOAD_DIR/profiles/$vm"
+    profile_root="$PAYLOAD_DIR/profiles"
+    [ -d "$profile_root" ] || die "VM profiles payload is missing"
+    for profile in "$profile_root"/*/; do
+        [ -d "$profile" ] || continue
+        found_profile=1
+        profile="${profile%/}"
+        vm="${profile##*/}"
         for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
             [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
         done
@@ -61,5 +68,6 @@ stage_binaries() {
                 || die "Installed VM profile $vm is missing $required"
         done
     done
+    [ "$found_profile" = "1" ] || die "VM profiles payload contains no profiles"
     ok "Staged VM catalog and profiles -> /data"
 }
