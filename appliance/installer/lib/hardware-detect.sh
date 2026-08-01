@@ -69,7 +69,7 @@ detect_hdmi_pcm() {
 }
 
 configure_audio_output() {
-    local detected card_id device home asoundrc passwd_entry
+    local detected card_id device home asoundrc passwd_entry _login _passwd _uid _gid _gecos _shell
 
     if ! detected="$(detect_hdmi_pcm)"; then
         HDMI_AUDIO_DEVICE="unknown"
@@ -89,7 +89,7 @@ configure_audio_output() {
     esac
 
     passwd_entry="$(in_target getent passwd "$RETROBOX_USER" || true)"
-    home="${passwd_entry##*:}"
+    IFS=: read -r _login _passwd _uid _gid _gecos home _shell <<< "$passwd_entry"
     if [ -z "$home" ]; then
         HDMI_AUDIO_DEVICE="unknown"
         HDMI_AUDIO_STATUS="NO_USER_HOME"
