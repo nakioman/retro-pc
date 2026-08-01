@@ -6,13 +6,9 @@ After=local-fs.target
 # Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
 # path and leaves a normal login on tty1 for maintenance.
 ConditionKernelCommandLine=!retropc.norun
-# Skip cleanly if the immutable runtime was not installed, instead of failing
-# and restart-looping on the console.
-ConditionPathExists=/opt/retrobox/retrobox
 
 [Service]
 Type=simple
-ExecCondition=/usr/bin/test -x /opt/retrobox/retrobox
 User=retrobox
 Group=retrobox
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides

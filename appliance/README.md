@@ -18,9 +18,7 @@ implementation detail and does not provide a desktop environment. 86Box is
 deployed as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`, while
 `/opt/retrobox/retrobox` is the self-contained Linux x64 binary produced by the
 repository's publish task. Versions and checksums are pinned in
-[`86box.env`](86box.env): [86Box v7.0.0-master.46](https://github.com/nakioman/86Box/releases/tag/v7.0.0-master.46)
-and [ROMs v6.0](https://github.com/86Box/roms/releases/tag/v6.0).
-
+[`86box.env`](86box.env).
 This document defines the base layout. The bootable USB installer that turns it
 into an installed, read-only-root system on the appliance disk lives under
 [`installer/`](installer/README.md); the installer is the authoritative source

@@ -5,8 +5,7 @@
 The appliance is designed around a read-only root filesystem. The operating
 system, installed packages, `/opt/retrobox/retrobox`, 86Box's AppImage, and
 `/opt/86Box/roms` are part of the deployed system image and are not application
-state. The AppImage is pinned to [86Box v7.0.0-master.46](https://github.com/nakioman/86Box/releases/tag/v7.0.0-master.46),
-and the ROM set to [86Box/roms v6.0](https://github.com/86Box/roms/releases/tag/v6.0).
+state. 
 
 `/data` is the persistent writable filesystem for Retro PC state:
 
@@ -14,7 +13,6 @@ and the ROM set to [86Box/roms v6.0](https://github.com/86Box/roms/releases/tag/
 /data/
   retrobox/
     vms.yaml
-    floppies.yaml
     install-report.txt
   vms/
     386sx16/

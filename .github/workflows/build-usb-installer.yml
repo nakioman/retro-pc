@@ -99,8 +99,6 @@ jobs:
             echo '```'
             echo "sudo dd if=$(basename "$ISO") of=/dev/sdX bs=4M status=progress"
             echo '```'
-            echo
-            echo "Runtime: 86Box v7.0.0-master.46; ROMs: 86Box/roms v6.0."
           } > notes.md
           gh release create "$TAG" "$ISO" \
             --repo "${{ github.repository }}" \
