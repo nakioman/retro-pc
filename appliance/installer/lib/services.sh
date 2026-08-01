@@ -44,6 +44,9 @@ _configure_ssh() {
 # RetroBox appliance SSH policy.
 PermitRootLogin no
 PasswordAuthentication yes
+# Do not accept a locale from the maintenance client that is not installed in
+# the minimal image; this keeps apt, Perl, and system tools warning-free.
+SetEnv LANG=C.UTF-8 LC_ALL=C.UTF-8
 EOF
     # Generate host keys now: /etc is read-only at runtime.
     in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
