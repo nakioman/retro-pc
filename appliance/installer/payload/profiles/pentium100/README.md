@@ -29,10 +29,11 @@ hdd_01_fn = HDD.vhd
 The SDL graphics configuration enables the bundled CRT shader:
 
 ```text
-shader0 = shaders/syncmaster3.glsl
+shader0 = /data/vms/pentium100/shaders/syncmaster3.glsl
 ```
 
-Keep the `shaders/` directory beside `86box.cfg` when copying the profile.
+The appliance uses the absolute path `/data/vms/pentium100/shaders/syncmaster3.glsl`
+because 86Box resolves shader paths independently of the VM working directory.
 
 Launching the profile should reach BIOS and then an empty/non-system disk
 state. Install DOS and Windows 3.1 manually later if the VM needs to become
