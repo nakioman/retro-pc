@@ -13,6 +13,7 @@ install_services() {
     _configure_samba
     _configure_network
     _configure_splash
+    _configure_locale
     _configure_identity
     _finalize_target_image
     ok "Services, SSH, Samba, networking, and splash configured"
@@ -86,6 +87,14 @@ _configure_splash() {
     # soon as possible instead of leaving text visible first.
     mkdir -p "$TARGET_MNT/etc/initramfs-tools/conf.d"
     printf 'FRAMEBUFFER=y\n' > "$TARGET_MNT/etc/initramfs-tools/conf.d/retropc-splash"
+}
+
+_configure_locale() {
+    log "Configuring UTF-8 locale"
+    # C.UTF-8 is provided by glibc and does not require the locales package or
+    # generating a locale database in the minimal appliance image.
+    mkdir -p "$TARGET_MNT/etc/default"
+    printf 'LANG=C.UTF-8\n' > "$TARGET_MNT/etc/default/locale"
 }
 
 _configure_identity() {
