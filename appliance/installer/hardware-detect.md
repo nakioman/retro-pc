@@ -27,12 +27,18 @@ Probed in this order; the first stable match wins:
 2. `/dev/sr0`.
 3. `/dev/cdrom` symlink.
 
-The resolved path is written into the 86Box Pentium profile for physical CD-ROM
-passthrough. If nothing is found, the profile keeps a placeholder
-(`/dev/sr0`) and the report records `cdrom.status=NOT_DETECTED`.
+When a drive is detected, the installer updates every installed
+`/data/vms/**/86box.cfg` that has an active optical slot. It selects the
+lowest-numbered enabled `cdrom_XX_parameters` entry whose bus is not `none`,
+then writes `cdrom_XX_image_path = ioctl://<detected-device>`. Other optical
+slots are left untouched. A malformed or unreadable profile is warned about and
+skipped without failing installation.
 
-Passthrough validation against real media is out of scope here (tracked in #25);
-the installer only records/consumes the device path.
+When no drive is found, installed profiles are unchanged. `/dev/sr0` remains
+only the diagnostic placeholder in `hardware.env` and the install report;
+it is never written into a profile. Payload profile templates are likewise
+host-neutral. Follow [the physical CD-ROM validation procedure](../../docs/cdrom-passthrough.md)
+on the target appliance.
 
 ## ESP8266 / NodeMCU floppy controller (serial)
 

@@ -30,9 +30,11 @@ Path: `profiles/pentium100`
 
 This is the RTM mid-1990s gaming VM profile: a Pentium 100 with 8 MB of RAM,
 Trident TGUI9440AGi PCI video, Sound Blaster 16, a blank approximately 2.1 GB
-disk, and an ATAPI CD-ROM slot. Physical CD-ROM passthrough is configured later
-in 86Box and depends on the host operating system and available drive; it is
-not portable profile state and is not validated here.
+disk, and an ATAPI CD-ROM slot. The portable payload does not contain a host
+device path. During appliance installation, a detected physical drive configures
+only the first active optical slot in the installed copy with
+`ioctl://<detected-device>`; no detected drive leaves profiles unchanged. See
+[`cdrom-passthrough.md`](cdrom-passthrough.md) for target validation.
 
 Profile files:
 

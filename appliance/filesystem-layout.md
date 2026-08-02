@@ -37,7 +37,10 @@ state.
 
 `/data/retrobox/install-report.txt` is written by the USB installer and records
 the detected target disk, CD-ROM, and ESP8266 serial device (or explicit
-placeholders when a device is absent).
+diagnostic placeholders when a device is absent). When a CD-ROM is detected,
+the installer writes its `ioctl://` path only to the first active optical slot
+of each applicable installed `/data/vms/*/86box.cfg`; it leaves profiles
+unchanged when no drive is found.
 
 `/data/system/` holds the writable overlay upperdirs that make a read-only root
 usable — see [Read-only root exceptions](#read-only-root-exceptions). It is
@@ -120,7 +123,8 @@ The eventual services should run with the least privilege compatible with the
 hardware:
 
 - `retrobox` owns and edits its YAML catalogs under `/data/retrobox`.
-- `retrobox` reads VM and cataloged floppy assets under `/data`.
+- `retrobox` reads VM and cataloged floppy assets under `/data` and belongs to
+  Linux's `cdrom` group for physical optical-drive access.
 - `retrobox` writes imported assets to `/data/floppies/cataloged` only through
   the import workflow.
 - administrators use SSH and `sudo` for maintenance and diagnostics.
@@ -129,9 +133,10 @@ hardware:
 - the 86Box control socket is created at
   `/run/retrobox/86box-floppy.sock` by the eventual runtime service.
 
-Device-group membership for audio, input, serial/USB, CD-ROM, and graphics is
-intentionally not finalized here. It depends on the physical hardware and the
-deferred graphics integration work.
+Audio, input, serial/USB, and graphics device access still depends on the
+physical hardware and runtime integration. `cdrom` group membership is the
+baseline for physical optical-drive access; add a device-specific rule only if
+target validation proves it necessary.
 
 ## Backup boundary
 
