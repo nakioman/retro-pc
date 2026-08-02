@@ -67,17 +67,21 @@ sudo apt-get install -y mmdebstrap squashfs-tools xorriso \
 sudo bash appliance/installer/build-usb-installer.sh
 ```
 
-### Embedding the real binaries
+### Embedding the runtime
 
-The RetroBox binary and 86Box AppImage are **not** in the repo, so a plain build
-stages placeholders (the installer records them as `PLACEHOLDER`). To embed the
-real artifacts:
+The build always embeds the published RetroBox binary and downloads the pinned
+86Box AppImage and ROM tarball from `appliance/86box.env`, validating both
+SHA256 values. To build locally:
 
 ```bash
 mise run publish-linux-x64   # produces the retrobox linux-x64 single-file binary
 RETROBOX_BIN=path/to/retrobox BOX86_APPIMAGE=path/to/86box.AppImage \
     sudo bash appliance/installer/build-usb-installer.sh
 ```
+
+The installer copies the runtime to `/opt`, `vms.yaml` to
+`/data/retrobox/vms.yaml`, and both complete profiles to `/data/vms`. It does
+not create `config.yaml`; that file remains optional runtime state.
 
 ## Flash to USB
 
@@ -108,6 +112,13 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 - The root filesystem is read-only. To edit system files:
   `sudo mount -o remount,rw /`, make the change, then reboot or
   `sudo mount -o remount,ro /`. `/data` is always writable.
+
+## Machine selector
+
+Press F12 during the boot window to open the text selector on the appliance
+console. Press a VM's displayed number to start it. Press `D`, then a VM number,
+to save it as the default and start it immediately. `Esc` cancels; if a default
+is already configured, cancellation starts that VM.
 
 ## Recovery
 
@@ -145,8 +156,9 @@ systemd units.
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 
-- **RetroBox binary / 86Box AppImage** — staged from `RETROBOX_BIN` /
-  `BOX86_APPIMAGE`, else placeholders.
+- **RetroBox binary / 86Box AppImage / ROMs** — required at build time; the
+  AppImage and ROM tarball are downloaded and checksum-verified from
+  `appliance/86box.env`.
 - **ESP8266 serial + physical CD-ROM** — detected when present; otherwise the
   daemon/hardware config keeps a documented placeholder path. Electronics and
   passthrough validation are tracked in #22 / #35 / #25.

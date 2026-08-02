@@ -13,6 +13,7 @@ install_services() {
     _configure_samba
     _configure_network
     _configure_splash
+    _configure_locale
     _configure_identity
     _finalize_target_image
     ok "Services, SSH, Samba, networking, and splash configured"
@@ -43,6 +44,9 @@ _configure_ssh() {
 # RetroBox appliance SSH policy.
 PermitRootLogin no
 PasswordAuthentication yes
+# Do not accept a locale from the maintenance client that is not installed in
+# the minimal image; this keeps apt, Perl, and system tools warning-free.
+SetEnv LANG=C.UTF-8 LC_ALL=C.UTF-8
 EOF
     # Generate host keys now: /etc is read-only at runtime.
     in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
@@ -86,6 +90,14 @@ _configure_splash() {
     # soon as possible instead of leaving text visible first.
     mkdir -p "$TARGET_MNT/etc/initramfs-tools/conf.d"
     printf 'FRAMEBUFFER=y\n' > "$TARGET_MNT/etc/initramfs-tools/conf.d/retropc-splash"
+}
+
+_configure_locale() {
+    log "Configuring UTF-8 locale"
+    # C.UTF-8 is provided by glibc and does not require the locales package or
+    # generating a locale database in the minimal appliance image.
+    mkdir -p "$TARGET_MNT/etc/default"
+    printf 'LANG=C.UTF-8\n' > "$TARGET_MNT/etc/default/locale"
 }
 
 _configure_identity() {

@@ -6,9 +6,6 @@ After=local-fs.target retrobox-daemon.service
 # Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
 # path and leaves a normal login on tty1 for maintenance.
 ConditionKernelCommandLine=!retropc.norun
-# Skip cleanly when only a placeholder was installed (no real binary yet), so
-# tty1 shows a normal login instead of a failing service restart-looping.
-ConditionPathExists=/opt/retrobox/retrobox
 
 # Own tty1 instead of a login prompt on the appliance's primary display.
 Conflicts=getty@tty1.service

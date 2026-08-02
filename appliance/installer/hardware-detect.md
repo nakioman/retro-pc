@@ -49,6 +49,18 @@ no serial device is present the daemon config keeps a placeholder
 `serial.status=NOT_DETECTED`. Electronics validation is out of scope (tracked in
 #22 / #35); the installer only records/consumes the path and baud.
 
+## HDMI audio
+
+The installer checks ALSA's ELD data under `/proc/asound` for a connected HDMI
+monitor and selects the corresponding HDMI PCM. It writes a per-user
+`~/.asoundrc` for `retrobox` using the stable ALSA card id and detected PCM,
+for example `plughw:CARD=MID,DEV=3`; it does not assume that the card is always
+numbered `0` or that HDMI is always device `3`.
+
+If no connected HDMI endpoint is visible during installation, the installer
+leaves ALSA's normal default unchanged and records `audio.status=NOT_DETECTED`.
+The target can then be reconfigured after connecting the display.
+
 ## Install report format
 
 `/data/retrobox/install-report.txt` is a simple `key=value` text file, for
@@ -65,6 +77,8 @@ cdrom.status=DETECTED
 serial.device=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
 serial.baud=115200
 serial.status=DETECTED
-retrobox.binary=installed        # or PLACEHOLDER
-box86.appimage=installed         # or PLACEHOLDER
+audio.device=plughw:CARD=MID,DEV=3
+audio.status=DETECTED
+retrobox.binary=installed
+box86.appimage=installed
 ```

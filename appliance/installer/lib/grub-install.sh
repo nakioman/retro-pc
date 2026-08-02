@@ -49,7 +49,7 @@ GRUB_RECORDFAIL_TIMEOUT=0
 # 1280x960@60 via the kernel `video=` param: GRUB_GFXMODE alone only sets the
 # GRUB menu mode; once the KMS driver (i915) loads it would otherwise switch to
 # the monitor's native resolution.
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 vt.global_cursor_default=0 rd.udev.log_level=3"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX="video=1280x960@60"
 GRUB_GFXMODE=1280x960x32
 GRUB_GFXPAYLOAD_LINUX=keep

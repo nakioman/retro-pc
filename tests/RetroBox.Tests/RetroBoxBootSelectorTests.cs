@@ -128,6 +128,18 @@ public sealed class RetroBoxBootSelectorTests
         Assert.Contains("No virtual machines", error.Message);
     }
 
+    [Fact]
+    public void Catalog_loads_without_optional_config_yaml()
+    {
+        var root = CreateRoot("");
+        File.Delete(Path.Combine(root, "config.yaml"));
+
+        var catalog = new RetroBoxConfigStore(root).Load();
+
+        Assert.Equal(2, catalog.Vms.Count);
+        Assert.Equal(string.Empty, catalog.Config.DefaultVm);
+    }
+
     private static string CreateRoot(string defaultVm)
     {
         var root = Path.Combine(Path.GetTempPath(), "retrobox-boot-selector-tests", Guid.NewGuid().ToString("N"));

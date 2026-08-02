@@ -7,27 +7,27 @@ public sealed record RetroBoxCatalogData(
 
 public sealed record RetroBoxConfig
 {
-    public string DefaultVm { get; init; } = string.Empty;
+    public string DefaultVm { get; set; } = string.Empty;
 
-    public string? FloppyControlSocketPath { get; init; }
+    public string? FloppyControlSocketPath { get; set; }
 }
 
 public sealed record RetroBoxVm
 {
-    public string Label { get; init; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
 
-    public string Path { get; init; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
 }
 
 public sealed record RetroBoxFloppy
 {
-    public string Label { get; init; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
 
-    public string Image { get; init; } = string.Empty;
+    public string Image { get; set; } = string.Empty;
 
-    public string Mode { get; init; } = RetroBoxFloppyCatalogRules.ReadOnlyMode;
+    public string Mode { get; set; } = RetroBoxFloppyCatalogRules.ReadOnlyMode;
 
-    public string Size { get; init; } = RetroBoxFloppyCatalogRules.DefaultImportSize;
+    public string Size { get; set; } = RetroBoxFloppyCatalogRules.DefaultImportSize;
 }
 
 public sealed record RetroBoxGame
@@ -41,10 +41,10 @@ public sealed record RetroBoxGame
 
 internal sealed record RetroBoxVmCatalog
 {
-    public Dictionary<string, RetroBoxVm> Vms { get; init; } = new(StringComparer.Ordinal);
+    public Dictionary<string, RetroBoxVm> Vms { get; set; } = new(StringComparer.Ordinal);
 }
 
 internal sealed record RetroBoxFloppyCatalog
 {
-    public Dictionary<string, RetroBoxFloppy> Floppies { get; init; } = new(StringComparer.Ordinal);
+    public Dictionary<string, RetroBoxFloppy> Floppies { get; set; } = new(StringComparer.Ordinal);
 }

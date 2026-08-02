@@ -14,13 +14,14 @@ INSTALL_SRC="$MEDIUM/install"
 TARGET_SQUASHFS="$INSTALL_SRC/target-rootfs.squashfs"
 RETROBOX_SRC="$INSTALL_SRC/retrobox"
 BOX86_SRC="$INSTALL_SRC/86box.AppImage"
+BOX86_ROMS_SRC="$INSTALL_SRC/roms"
 
 # Where the target root filesystem is assembled during install.
 TARGET_MNT="/mnt/target"
 
 # Target-side paths (inside TARGET_MNT).
 RETROBOX_OPT="/opt/retrobox"
-BOX86_OPT="/opt/86box"
+BOX86_OPT="/opt/86Box"
 DATA_DIR="/data"
 
 # Runtime user/group for the appliance.

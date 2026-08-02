@@ -5,6 +5,12 @@ configuration file is the hardware source of truth. RetroBox YAML catalogs may
 refer to a profile for display or selection, but YAML is metadata only and is
 not required by 86Box.
 
+The appliance installs the catalog at `/data/retrobox/vms.yaml` and profiles at
+`/data/vms/<id>`. The catalog intentionally has no `defaultVm`; `retrobox boot`
+selects a VM when needed. 86Box is launched with the selected profile as its
+working directory, so relative disk paths remain valid; shader paths use the
+absolute `/data/vms/<id>/shaders/syncmaster3.glsl` form required by 86Box.
+
 ## 386SX-16
 
 Path: `profiles/386sx16`

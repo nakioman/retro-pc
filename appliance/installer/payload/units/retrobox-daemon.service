@@ -6,9 +6,6 @@ After=local-fs.target
 # Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
 # path and leaves a normal login on tty1 for maintenance.
 ConditionKernelCommandLine=!retropc.norun
-# Skip cleanly when only a placeholder was installed (no real binary yet),
-# instead of failing and restart-looping on the console.
-ConditionPathExists=/opt/retrobox/retrobox
 
 [Service]
 Type=simple

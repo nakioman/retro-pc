@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 [assembly: InternalsVisibleTo("RetroBox.Tests")]
 
@@ -50,12 +51,6 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
 {
     private static readonly byte[] NewLine = [(byte)'\n'];
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private readonly Func<CancellationToken, Task<Stream>> streamFactory;
     private long nextRequestId;
 
@@ -97,6 +92,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         return SendAsync(
             "floppy.insert",
             new FloppyInsertParameters(drive, imagePath, readOnly),
+            RetroBoxFloppyJsonContext.Default.FloppyControlRequestFloppyInsertParameters,
             cancellationToken);
     }
 
@@ -107,6 +103,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         return SendAsync(
             "floppy.eject",
             new FloppyDriveParameters(drive),
+            RetroBoxFloppyJsonContext.Default.FloppyControlRequestFloppyDriveParameters,
             cancellationToken);
     }
 
@@ -117,23 +114,25 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         return SendAsync(
             "floppy.status",
             new FloppyDriveParameters(drive),
+            RetroBoxFloppyJsonContext.Default.FloppyControlRequestFloppyDriveParameters,
             cancellationToken);
     }
 
-    private async Task<RetroBoxFloppyStatus> SendAsync(
+    private async Task<RetroBoxFloppyStatus> SendAsync<TParameters>(
         string command,
-        object parameters,
+        TParameters parameters,
+        JsonTypeInfo<FloppyControlRequest<TParameters>> requestTypeInfo,
         CancellationToken cancellationToken)
     {
         try
         {
             await using var stream = await streamFactory(cancellationToken);
-            var request = new FloppyControlRequest(
+            var request = new FloppyControlRequest<TParameters>(
                 $"req-{Interlocked.Increment(ref nextRequestId)}",
                 command,
                 parameters);
 
-            await JsonSerializer.SerializeAsync(stream, request, JsonOptions, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, request, requestTypeInfo, cancellationToken);
             await stream.WriteAsync(NewLine, cancellationToken);
             await stream.FlushAsync(cancellationToken);
 
@@ -171,7 +170,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         var root = document.RootElement;
         if (root.GetProperty("ok").GetBoolean())
         {
-            return root.GetProperty("result").Deserialize<RetroBoxFloppyStatus>(JsonOptions)
+            return root.GetProperty("result").Deserialize(RetroBoxFloppyJsonContext.Default.RetroBoxFloppyStatus)
                 ?? throw new RetroBoxFloppyControlException(
                     "internal_failure",
                     "86Box floppy control response result is empty.");
@@ -184,15 +183,23 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         throw new RetroBoxFloppyControlException(code, message, detailsJson);
     }
 
-    private sealed record FloppyControlRequest(
+    internal sealed record FloppyControlRequest<TParameters>(
         string Id,
         string Command,
-        object Params);
+        TParameters Params);
 
-    private sealed record FloppyInsertParameters(
+    internal sealed record FloppyInsertParameters(
         int Drive,
         string Path,
         bool ReadOnly);
 
-    private sealed record FloppyDriveParameters(int Drive);
+    internal sealed record FloppyDriveParameters(int Drive);
 }
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(RetroBoxFloppyStatus))]
+[JsonSerializable(typeof(RetroBoxFloppyControlClient.FloppyControlRequest<RetroBoxFloppyControlClient.FloppyInsertParameters>), TypeInfoPropertyName = "FloppyControlRequestFloppyInsertParameters")]
+[JsonSerializable(typeof(RetroBoxFloppyControlClient.FloppyControlRequest<RetroBoxFloppyControlClient.FloppyDriveParameters>), TypeInfoPropertyName = "FloppyControlRequestFloppyDriveParameters")]
+internal partial class RetroBoxFloppyJsonContext : JsonSerializerContext;

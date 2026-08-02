@@ -19,6 +19,7 @@ grub-pc
 systemd-zram-generator
 plymouth
 plymouth-themes
+systemd-resolved
 
 # Appliance administration and file transfer
 openssh-server
@@ -29,6 +30,13 @@ sudo
 alsa-utils
 kmod
 fuse3
+libgles2
+libgbm1
+libdrm2
+libegl-mesa0
+mesa-libgallium
+libgl1-mesa-dri
+libegl1
 
 # Small maintenance/networking toolset
 procps

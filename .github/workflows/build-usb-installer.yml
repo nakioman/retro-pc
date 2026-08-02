@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   shellcheck:
@@ -37,19 +38,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download latest successful RetroBox build from main
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          workflow: build-retrobox.yml
+          workflow_conclusion: success
+          branch: main
+          name: retrobox-linux-x64
+          path: .artifacts/retrobox
+          search_artifacts: true
+
       - name: Install Debian image tooling
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             mmdebstrap squashfs-tools xorriso \
             isolinux syslinux-common dosfstools \
-            debian-archive-keyring zstd xz-utils e2fsprogs file
+            debian-archive-keyring zstd xz-utils e2fsprogs file curl
 
       - name: Build installer image
-        # Offline, blob-free CI build: the retrobox binary and 86Box AppImage
-        # are staged as placeholders (see build-usb-installer.sh). Output lands
-        # in the script's default OUT_DIR (appliance/installer/out).
-        run: sudo bash appliance/installer/build-usb-installer.sh
+        env:
+          RETROBOX_BIN: ${{ github.workspace }}/.artifacts/retrobox/retrobox
+        run: sudo -E bash appliance/installer/build-usb-installer.sh
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -89,8 +99,6 @@ jobs:
             echo '```'
             echo "sudo dd if=$(basename "$ISO") of=/dev/sdX bs=4M status=progress"
             echo '```'
-            echo
-            echo "CI builds stage the retrobox binary and 86Box AppImage as placeholders."
           } > notes.md
           gh release create "$TAG" "$ISO" \
             --repo "${{ github.repository }}" \
