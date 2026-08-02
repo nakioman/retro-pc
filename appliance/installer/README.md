@@ -143,6 +143,10 @@ Manual (on real hardware / a spare disk):
 - `/data` is writable; `/etc/fstab` uses UUIDs; root is read-only.
 - CD-ROM and ESP8266 device choices are recorded in
   `/data/retrobox/install-report.txt`.
+- With a detected CD-ROM drive, the installer configures the first active
+  optical slot in each applicable installed profile with its `ioctl://` path;
+  templates remain portable. See [`../../docs/cdrom-passthrough.md`](../../docs/cdrom-passthrough.md)
+  for target-hardware validation.
 
 ## Scope & deferrals
 
@@ -159,9 +163,9 @@ Deferred and recorded in `install-report.txt` rather than failing the install:
 - **RetroBox binary / 86Box AppImage / ROMs** — required at build time; the
   AppImage and ROM tarball are downloaded and checksum-verified from
   `appliance/86box.env`.
-- **ESP8266 serial + physical CD-ROM** — detected when present; otherwise the
-  daemon/hardware config keeps a documented placeholder path. Electronics and
-  passthrough validation are tracked in #22 / #35 / #25.
+- **ESP8266 serial** — detected when present; otherwise the daemon config
+  keeps a documented placeholder path. Electronics validation is tracked in
+  #22 / #35.
 - **Fullscreen 86Box boot path** — `retrobox boot` is wired via
   `retrobox-boot.service` but the graphics stack lands with #26; until then tty1
   shows the placeholder boot service (use SSH or the recovery entry for a shell).

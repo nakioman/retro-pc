@@ -17,6 +17,105 @@ detect_cdrom() {
     CDROM_DEVICE="/dev/sr0"; CDROM_STATUS="NOT_DETECTED"
 }
 
+# Configure only the first active optical slot in each installed profile. The
+# payload profiles stay portable; this is the point where the host-specific
+# ioctl path is written to their copies under /data.
+configure_cdrom_passthrough() {
+    local config config_dir slot tmp image_path
+
+    [ "$CDROM_STATUS" = "DETECTED" ] || return 0
+    [ -d "$TARGET_MNT/data/vms" ] || return 0
+    image_path="ioctl://$CDROM_DEVICE"
+
+    while IFS= read -r -d '' config; do
+        if [ ! -r "$config" ] || [ ! -w "$config" ]; then
+            warn "Skipping unreadable CD-ROM profile config: $config"
+            continue
+        fi
+
+        # Parameters are "enabled, bus". Pick the lowest numbered enabled
+        # slot that has a real bus; a profile with no optical slot is valid.
+        slot="$(awk '
+            /^[[:space:]]*cdrom_[0-9][0-9]_parameters[[:space:]]*=/ {
+                key = $1
+                sub(/^cdrom_/, "", key)
+                sub(/_parameters$/, "", key)
+                value = $0
+                sub(/^[^=]*=[[:space:]]*/, "", value)
+                count = split(value, fields, ",")
+                enabled = fields[1]
+                bus = fields[2]
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", enabled)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", bus)
+                if (count < 2 || enabled !~ /^[0-9]+$/ || bus == "") {
+                    malformed = 1
+                    next
+                }
+                seen[key]++
+                if (seen[key] > 1) {
+                    malformed = 1
+                    next
+                }
+                if (enabled != "0" && tolower(bus) != "none" &&
+                    (!found || key + 0 < selected + 0)) {
+                    selected = key
+                    found = 1
+                }
+            }
+            END {
+                if (malformed) exit 2
+                if (found) print selected
+            }
+        ' "$config")"
+        case $? in
+            0) ;;
+            *)
+                warn "Skipping malformed CD-ROM profile config: $config"
+                continue
+                ;;
+        esac
+        [ -n "$slot" ] || continue
+
+        config_dir="${config%/*}"
+        if [ ! -w "$config_dir" ]; then
+            warn "Skipping unwritable CD-ROM profile directory: $config_dir"
+            continue
+        fi
+        if ! tmp="$(mktemp "$config_dir/.86box.cfg.cdrom.XXXXXX")"; then
+            warn "Could not create temporary CD-ROM profile config: $config"
+            continue
+        fi
+        if ! cp -p "$config" "$tmp"; then
+            warn "Could not preserve CD-ROM profile config metadata: $config"
+            rm -f "$tmp"
+            continue
+        fi
+        if ! awk -v slot="$slot" -v image_path="$image_path" '
+            BEGIN { key = "cdrom_" slot "_image_path" }
+            $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+                if (!written++) print key " = " image_path
+                next
+            }
+            { print }
+            END { if (!written) print key " = " image_path }
+        ' "$config" > "$tmp"; then
+            warn "Could not update CD-ROM profile config: $config"
+            rm -f "$tmp"
+            continue
+        fi
+        if cmp -s "$config" "$tmp"; then
+            rm -f "$tmp"
+            continue
+        fi
+        if ! mv "$tmp" "$config"; then
+            warn "Could not install CD-ROM passthrough config: $config"
+            rm -f "$tmp"
+            continue
+        fi
+        log "Configured CD-ROM passthrough in $config (cdrom_$slot)"
+    done < <(find "$TARGET_MNT/data/vms" -type f -name 86box.cfg -print0)
+}
+
 detect_serial() {
     SERIAL_BAUD="${RETROPC_SERIAL_BAUD:-115200}"
     local d
@@ -174,6 +273,7 @@ detect_and_record_hardware() {
     detect_cdrom
     detect_serial
     configure_audio_output
+    configure_cdrom_passthrough
     log "CD-ROM: $CDROM_DEVICE ($CDROM_STATUS)"
     log "Serial: $SERIAL_DEVICE @ ${SERIAL_BAUD} ($SERIAL_STATUS)"
     write_hardware_config

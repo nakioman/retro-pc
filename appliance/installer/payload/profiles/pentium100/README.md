@@ -12,8 +12,9 @@ VM. The 86Box configuration is the source of truth for hardware selection.
 - Sound: Sound Blaster 16
 - Hard disk: `HDD.vhd`, blank dynamic VHD with approximately 2.1 GB geometry
 - Floppy: one 3.5-inch 1.44 MB drive with `alps_df354h148f_80t` audio
-- CD-ROM: one ATAPI 4x slot; configure physical-drive passthrough later in
-  86Box, according to the host operating system and available drive
+- CD-ROM: one ATAPI 4x slot; its portable template has no host path. When an
+  appliance detects a physical drive, its installed copy receives an
+  `ioctl://<detected-device>` path for this first active slot
 - Expected OS: DOS and Windows 3.1, installed manually later
 
 ## Launch
@@ -35,11 +36,11 @@ shader0 = /data/vms/pentium100/shaders/syncmaster3.glsl
 The appliance uses the absolute path `/data/vms/pentium100/shaders/syncmaster3.glsl`
 because 86Box resolves shader paths independently of the VM working directory.
 
-Launching the profile should reach BIOS and then an empty/non-system disk
+Launching the template should reach BIOS and then an empty/non-system disk
 state. Install DOS and Windows 3.1 manually later if the VM needs to become
-bootable. Configure the physical CD-ROM passthrough later in 86Box; that
-setting depends on the host operating system and available drive, so it is
-intentionally not included or validated by this profile template.
+bootable. The appliance installer, not this portable template, configures a
+detected physical drive. Validate installed passthrough with
+[`docs/cdrom-passthrough.md`](../../../../docs/cdrom-passthrough.md).
 
 ## Blank Disk
 
