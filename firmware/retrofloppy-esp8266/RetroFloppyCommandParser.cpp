@@ -1,49 +1,52 @@
 #include "RetroFloppyCommandParser.h"
 
+namespace {
+struct VerbEntry {
+  const char* verb;
+  CommandType type;
+};
+
+const VerbEntry VERB_TABLE[] = {
+  { "WRITE", CommandType::WRITE },
+  { "INSERT", CommandType::INSERT },
+  { "TAGID", CommandType::TAGID },
+};
+
+void copyRaw(char* dest, const char* src) {
+  strncpy(dest, src, MAX_COMMAND_LENGTH);
+  dest[MAX_COMMAND_LENGTH] = '\0';
+}
+}  // namespace
+
 RetroFloppyCommandParser::RetroFloppyCommandParser() {}
 
-bool RetroFloppyCommandParser::parseCommand(const String &cmdStr, String &outVerb, String &outArgs)
-{
-  int space = cmdStr.indexOf(VERB_DELIMITER);
-
-  if (space == -1)
-  {
-    outVerb = cmdStr;
-    outVerb.trim();
-    return true;
+CommandType RetroFloppyCommandParser::parseType(const char* verb, size_t length) {
+  for (const VerbEntry &entry : VERB_TABLE) {
+    if (strlen(entry.verb) == length && strncmp(verb, entry.verb, length) == 0) {
+      return entry.type;
+    }
   }
-
-  outVerb = cmdStr.substring(0, space);
-  outVerb.trim();
-
-  outArgs = cmdStr.substring(space + 1);
-  outArgs.trim();
-
-  return true;
-}
-
-CommandType RetroFloppyCommandParser::parseType(const String &verb) {
-  if(verb == "WRITE") return CommandType::WRITE;
-  if(verb == "INSERT") return CommandType::INSERT;
-  if(verb == "TAGID") return CommandType::TAGID;
 
   return CommandType::ERROR;
 }
 
-bool RetroFloppyCommandParser::readCommand(const String &cmdStr, Command &out)
-{
-  String verb;
-  String args;
+void RetroFloppyCommandParser::readCommand(const char* cmdStr, Command &out) {
+  copyRaw(out.raw, cmdStr);
 
-  if (parseCommand(cmdStr, verb, args))
-  {
-    out.type = parseType(verb);
-    out.isValid = out.type != CommandType::ERROR;
-    out.args = args;
-    out.str = cmdStr;
+  const char* space = strchr(out.raw, VERB_DELIMITER);
+  size_t verbLength = space ? static_cast<size_t>(space - out.raw) : strlen(out.raw);
 
-    return true;
-  }
+  size_t offset = verbLength;
+  while (out.raw[offset] == VERB_DELIMITER) offset++;
+  out.argsOffset = static_cast<uint8_t>(offset);
 
-  return false;
+  out.type = parseType(out.raw, verbLength);
+  out.isValid = out.type != CommandType::ERROR;
+}
+
+void RetroFloppyCommandParser::makeInsert(const char* text, Command &out) {
+  copyRaw(out.raw, text);
+  out.type = CommandType::INSERT;
+  out.argsOffset = 0;
+  out.isValid = true;
 }

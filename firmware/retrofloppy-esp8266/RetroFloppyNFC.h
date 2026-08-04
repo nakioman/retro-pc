@@ -14,16 +14,17 @@ private:
 
   static constexpr uint8_t FIRST_PAGE = 4;
   static constexpr uint8_t PAGE_COUNT = 8;
+  static constexpr uint8_t BYTES_PER_PAGE = 4;
 
   bool detectCard(uint8_t *uid, uint8_t &uidLength);
 public:
   RetroFloppyNFC();
 
   void setup();
-  String readCardId();
+  bool readCardId(char* out, size_t size);
 
-  bool write(const String &text);
-  bool readTag(String &out);
+  bool write(const char* text);
+  bool readTag(char* out, size_t size);
 };
 
 #endif

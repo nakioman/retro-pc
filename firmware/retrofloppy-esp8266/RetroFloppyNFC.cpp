@@ -1,5 +1,16 @@
 #include "RetroFloppyNFC.h"
 
+namespace {
+void trimTrailing(char* text) {
+  size_t length = strlen(text);
+  while (length > 0) {
+    char last = text[length - 1];
+    if (last != '\r' && last != '\n' && last != ' ' && last != '\t') break;
+    text[--length] = '\0';
+  }
+}
+}  // namespace
+
 RetroFloppyNFC::RetroFloppyNFC()
   : pn532_i2c(Wire), nfc(pn532_i2c) {}
 
@@ -12,24 +23,28 @@ bool RetroFloppyNFC::detectCard(uint8_t* uid, uint8_t& uidLength) {
   return nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000);
 }
 
-String RetroFloppyNFC::readCardId() {
+bool RetroFloppyNFC::readCardId(char* out, size_t size) {
   uint8_t uid[7];
   uint8_t uidLength;
 
-  if (detectCard(uid, uidLength)) {
-    String cardID = "";
-    for (uint8_t i = 0; i < uidLength; i++) {
-      if (uid[i] < 0x10) cardID += "0";
-      cardID += String(uid[i], HEX);
-    }
-    cardID.toUpperCase();
-    nfc.inRelease();
-    return cardID;
+  if (size == 0) return false;
+  out[0] = '\0';
+
+  if (!detectCard(uid, uidLength)) {
+    return false;
   }
-  return "";
+
+  size_t pos = 0;
+  for (uint8_t i = 0; i < uidLength && pos + 2 < size; i++) {
+    pos += snprintf(out + pos, size - pos, "%02X", uid[i]);
+  }
+  out[pos] = '\0';
+
+  nfc.inRelease();
+  return pos > 0;
 }
 
-bool RetroFloppyNFC::write(const String& text) {
+bool RetroFloppyNFC::write(const char* text) {
   uint8_t uid[7];
   uint8_t uidLength;
 
@@ -37,9 +52,10 @@ bool RetroFloppyNFC::write(const String& text) {
     return false;
   }
 
-  constexpr size_t maxLength = PAGE_COUNT * 4;
+  size_t textLength = strlen(text);
+  constexpr size_t maxLength = PAGE_COUNT * BYTES_PER_PAGE;
 
-  if (text.length() > maxLength) {
+  if (textLength > maxLength) {
     nfc.inRelease();
     return false;
   }
@@ -47,10 +63,10 @@ bool RetroFloppyNFC::write(const String& text) {
   for (uint8_t page = FIRST_PAGE;
        page < FIRST_PAGE + PAGE_COUNT;
        ++page) {
-    uint8_t data[4] = { 0, 0, 0, 0 };
-    size_t offset = (page - FIRST_PAGE) * 4;
+    uint8_t data[BYTES_PER_PAGE] = { 0, 0, 0, 0 };
+    size_t offset = (page - FIRST_PAGE) * BYTES_PER_PAGE;
 
-    for (uint8_t i = 0; i < 4 && offset + i < text.length(); ++i) {
+    for (uint8_t i = 0; i < BYTES_PER_PAGE && offset + i < textLength; ++i) {
       data[i] = static_cast<uint8_t>(text[offset + i]);
     }
 
@@ -64,38 +80,41 @@ bool RetroFloppyNFC::write(const String& text) {
   return true;
 }
 
-bool RetroFloppyNFC::readTag(String& out) {
+bool RetroFloppyNFC::readTag(char* out, size_t size) {
   uint8_t uid[7];
   uint8_t uidLength;
+
+  if (size == 0) return false;
 
   if (!detectCard(uid, uidLength)) {
     return false;
   }
 
-  out = "";
+  size_t pos = 0;
+  bool done = false;
 
   for (uint8_t page = FIRST_PAGE;
-       page < FIRST_PAGE + PAGE_COUNT;
+       page < FIRST_PAGE + PAGE_COUNT && !done;
        ++page) {
-    uint8_t data[4];
+    uint8_t data[BYTES_PER_PAGE];
 
     if (!nfc.mifareultralight_ReadPage(page, data)) {
       nfc.inRelease();
       return false;
     }
 
-    for (uint8_t i = 0; i < 4; ++i) {
-      if (data[i] == '\0') {
-        out.trim();
-        nfc.inRelease();
-        return out.length() > 0;
+    for (uint8_t i = 0; i < BYTES_PER_PAGE; ++i) {
+      if (data[i] == '\0' || pos >= size - 1) {
+        done = true;
+        break;
       }
-
-      out += static_cast<char>(data[i]);
+      out[pos++] = static_cast<char>(data[i]);
     }
   }
 
+  out[pos] = '\0';
   nfc.inRelease();
-  out.trim();
-  return out.length() > 0;
+
+  trimTrailing(out);
+  return strlen(out) > 0;
 }

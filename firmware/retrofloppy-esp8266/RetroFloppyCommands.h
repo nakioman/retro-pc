@@ -3,25 +3,26 @@
 
 #include <Arduino.h>
 
+// Upper bound for a full command line (verb + args). NFC payloads are at most
+// PAGE_COUNT * BYTES_PER_PAGE (32) bytes, so this comfortably covers both the
+// serial and NFC paths without any heap allocation.
+static constexpr size_t MAX_COMMAND_LENGTH = 48;
+
 enum class CommandType {
   INSERT,
   WRITE,
-  EJECT,
   ERROR,
   TAGID
 };
 
-enum class FloppyAccessMode {
-  READ_ONLY,
-  READ_WRITE,
-  UNKNOWN
-};
-
 struct Command {
   CommandType type = CommandType::ERROR;
-  String args;   
+  char raw[MAX_COMMAND_LENGTH + 1] = { 0 };
+  uint8_t argsOffset = 0;
   bool isValid = false;
-  String str;
+
+  // View into `raw` pointing at the argument portion (after the verb).
+  const char* args() const { return raw + argsOffset; }
 };
 
 #endif

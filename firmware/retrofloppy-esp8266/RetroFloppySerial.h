@@ -1,13 +1,12 @@
-#include <sys/_intsup.h>
 #ifndef RETRO_FLOPPY_SERIAL_H
 #define RETRO_FLOPPY_SERIAL_H
 
 #include <Arduino.h>
 
 class RetroFloppySerial {
-  private:   
+  private:
     static constexpr unsigned long SERIAL_BAUD = 115200;
-    static constexpr const char COMMAND_TERMINATOR = '\n';
+    static constexpr char COMMAND_TERMINATOR = '\n';
 
     HardwareSerial &serialPort;
 
@@ -15,8 +14,8 @@ class RetroFloppySerial {
     RetroFloppySerial(HardwareSerial &port = Serial);
 
     void setup();
-    void write(const char* format, ...);
-    bool read(String &command);
+    void write(const __FlashStringHelper* format, ...);
+    bool read(char* buffer, size_t size);
     void sendInit(unsigned int version);
 };
 

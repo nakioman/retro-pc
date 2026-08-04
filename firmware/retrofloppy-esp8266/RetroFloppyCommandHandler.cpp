@@ -8,31 +8,31 @@ void RetroFloppyCommandHandler::execute(const Command &cmd) {
   switch (cmd.type) {
     case CommandType::WRITE:
       {
-        if (nfcModule.write(cmd.args)) {
-          serial.write("OK");
+        if (nfcModule.write(cmd.args())) {
+          serial.write(F("OK"));
         } else {
-          serial.write("ERROR not written");
+          serial.write(F("ERROR not written"));
         }
         break;
       }
     case CommandType::INSERT:
       {
-        serial.write("INSERT %s", cmd.args);
+        serial.write(F("INSERT %s"), cmd.args());
         break;
       }
     case CommandType::TAGID:
       {
-        String id = nfcModule.readCardId();
-        if (id.length() == 0) {
-          serial.write("ERROR no-tag-detected");
+        char id[16];
+        if (!nfcModule.readCardId(id, sizeof(id))) {
+          serial.write(F("ERROR no-tag-detected"));
         } else {
-          serial.write("Tag ID: %s", id.c_str());
+          serial.write(F("Tag ID: %s"), id);
         }
         break;
       }
     default:
       {
-        serial.write("ERROR %s", cmd.str);
+        serial.write(F("ERROR %s"), cmd.raw);
         break;
       }
   }

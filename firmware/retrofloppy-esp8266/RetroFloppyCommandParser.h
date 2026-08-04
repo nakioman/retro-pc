@@ -6,15 +6,15 @@
 
 class RetroFloppyCommandParser {
   private:
-    static constexpr const char* VERB_DELIMITER = " ";
-  
-    bool parseCommand(const String &cmdStr, String& outVerb, String& outArgs);
-    CommandType parseType(const String &verb);
+    static constexpr char VERB_DELIMITER = ' ';
+
+    CommandType parseType(const char* verb, size_t length);
 
   public:
     RetroFloppyCommandParser();
 
-    bool readCommand(const String &cmdStr, Command &out);
+    void readCommand(const char* cmdStr, Command &out);
+    void makeInsert(const char* text, Command &out);
 };
 
 #endif

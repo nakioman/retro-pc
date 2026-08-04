@@ -1,6 +1,7 @@
 #include "RetroFloppyApp.h"
 
-RetroFloppyApp::RetroFloppyApp(): nfcModule(), serial(), commandParser(), commandHandler(serial, nfcModule) {}
+RetroFloppyApp::RetroFloppyApp()
+  : commandParser(), nfcModule(), serial(), commandHandler(serial, nfcModule) {}
 
 void RetroFloppyApp::setup() {
   serial.setup();
@@ -11,21 +12,14 @@ void RetroFloppyApp::setup() {
 
 void RetroFloppyApp::update() {
   Command cmd;
-  String cmdStr;
-  bool isValidCommand = false;
+  char cmdStr[MAX_COMMAND_LENGTH + 1];
 
-  if (serial.read(cmdStr)) {
-    isValidCommand = commandParser.readCommand(cmdStr, cmd);
+  if (serial.read(cmdStr, sizeof(cmdStr))) {
+    commandParser.readCommand(cmdStr, cmd);
+    commandHandler.execute(cmd);
   }
-  else if(nfcModule.readTag(cmdStr)) {
-    cmd.type = CommandType::INSERT;
-    cmd.args = cmdStr;
-    cmd.str = cmdStr;
-    cmd.isValid = true;
-    isValidCommand = true;
-  }
-
-  if(isValidCommand) {
+  else if (nfcModule.readTag(cmdStr, sizeof(cmdStr))) {
+    commandParser.makeInsert(cmdStr, cmd);
     commandHandler.execute(cmd);
   }
 }
