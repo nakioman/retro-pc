@@ -55,9 +55,36 @@ public static class RetroBoxArduinoSerialProtocol
         return $"WRITE {id},{mode}";
     }
 
-    public static string BuildReadCommand()
+    public static string BuildPingCommand()
     {
-        return "READ";
+        return "PING";
+    }
+
+    public static NfcResponse ParseResponse(string? line)
+    {
+        var trimmedLine = line?.Trim();
+        if (string.IsNullOrEmpty(trimmedLine))
+        {
+            return new NfcResponse.Unknown(line);
+        }
+
+        if (trimmedLine == "PONG")
+        {
+            return new NfcResponse.Pong();
+        }
+
+        if (trimmedLine == "OK")
+        {
+            return new NfcResponse.Ok();
+        }
+
+        const string ErrorPrefix = "ERROR ";
+        if (trimmedLine.StartsWith(ErrorPrefix, StringComparison.Ordinal))
+        {
+            return new NfcResponse.Error(trimmedLine[ErrorPrefix.Length..]);
+        }
+
+        return new NfcResponse.Unknown(line);
     }
 
     private static RetroBoxArduinoInsertEvent ParseInsertEvent(string payload)
@@ -115,4 +142,12 @@ public static class RetroBoxArduinoSerialProtocol
         throw new RetroBoxArduinoSerialProtocolException(
             $"Invalid Arduino floppy mode '{mode}' for floppy '{id}'.");
     }
+}
+
+public abstract record NfcResponse
+{
+    public sealed record Pong() : NfcResponse;
+    public sealed record Ok() : NfcResponse;
+    public sealed record Error(string Message) : NfcResponse;
+    public sealed record Unknown(string? Line) : NfcResponse;
 }

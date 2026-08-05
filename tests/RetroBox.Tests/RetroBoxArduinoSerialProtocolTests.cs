@@ -71,11 +71,60 @@ public sealed class RetroBoxArduinoSerialProtocolTests
     }
 
     [Fact]
-    public void Build_read_command()
+    public void Build_ping_command()
     {
-        var command = RetroBoxArduinoSerialProtocol.BuildReadCommand();
+        var command = RetroBoxArduinoSerialProtocol.BuildPingCommand();
 
-        Assert.Equal("READ", command);
+        Assert.Equal("PING", command);
+    }
+
+    [Fact]
+    public void Parse_pong_response()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("PONG");
+
+        Assert.IsType<NfcResponse.Pong>(response);
+    }
+
+    [Fact]
+    public void Parse_ok_response()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("OK");
+
+        Assert.IsType<NfcResponse.Ok>(response);
+    }
+
+    [Theory]
+    [InlineData("ERROR not written", "not written")]
+    [InlineData("ERROR floppy missing", "floppy missing")]
+    public void Parse_error_response(string line, string expectedMessage)
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse(line);
+
+        var error = Assert.IsType<NfcResponse.Error>(response);
+        Assert.Equal(expectedMessage, error.Message);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", "")]
+    [InlineData("   ", "   ")]
+    [InlineData("BOGUS", "BOGUS")]
+    [InlineData("UNKNOWN_COMMAND", "UNKNOWN_COMMAND")]
+    public void Parse_unknown_response(string? line, string? expectedLine)
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse(line);
+
+        var unknown = Assert.IsType<NfcResponse.Unknown>(response);
+        Assert.Equal(expectedLine, unknown.Line);
+    }
+
+    [Fact]
+    public void Parse_strips_whitespace_before_matching()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("  PONG\r\n");
+
+        Assert.IsType<NfcResponse.Pong>(response);
     }
 
     [Theory]
