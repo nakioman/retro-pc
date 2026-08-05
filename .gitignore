@@ -16,6 +16,9 @@ coverage*.info
 # USB installer build artifacts
 appliance/installer/out/
 
+# Agent tooling (skill registry cache, per-project indexes)
+.atl/
+
 # Local IDE/user files
 .vs/
 .vscode/
