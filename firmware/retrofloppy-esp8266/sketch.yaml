@@ -1,0 +1,13 @@
+profiles:
+  esp8266:
+    notes: Retro floppy es8266 firmware
+    fqbn: esp8266:esp8266:nodemcuv2
+    platforms:
+      - platform: esp8266:esp8266 (3.1.2)
+        platform_index_url: https://arduino.esp8266.com/stable/package_esp8266com_index.json
+    libraries:
+      - dir: lib/PN532
+      - dir: lib/PN532_I2C
+      - Bounce2 (2.71)
+
+default_profile: esp8266
