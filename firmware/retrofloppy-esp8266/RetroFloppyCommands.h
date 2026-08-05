@@ -13,7 +13,8 @@ enum class CommandType {
   WRITE,
   ERROR,
   TAGID,
-  EJECT
+  EJECT,
+  PING
 };
 
 struct Command {

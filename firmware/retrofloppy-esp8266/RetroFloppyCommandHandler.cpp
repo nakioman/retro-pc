@@ -35,6 +35,11 @@ void RetroFloppyCommandHandler::execute(const Command &cmd) {
         serial.write(F("EJECT"));
         break;
       }
+    case CommandType::PING:
+      {
+        serial.write(F("PONG"));
+        break;
+      }
     default:
       {
         serial.write(F("ERROR %s"), cmd.raw);
