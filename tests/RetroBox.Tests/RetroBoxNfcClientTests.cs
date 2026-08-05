@@ -48,6 +48,22 @@ public sealed class RetroBoxNfcClientTests
         await Assert.ThrowsAsync<NfcPortUnavailable>(() => client.PingAsync());
     }
 
+    // Regression: the inner StreamWriter/StreamReader must leave the underlying
+    // stream open so the writer's disposal-time Flush does not reach into a
+    // SerialPort whose BaseStream is only available while the port is open.
+    // Reproduces theInvalidOperationException raised by SerialPort.BaseStream
+    // when the reader (default leaveOpen:false) has already disposed the stream.
+    [Fact]
+    public async Task Ping_does_not_flush_stream_after_reader_disposes_it()
+    {
+        var stream = new PortLikeStream("PING\nPONG\n");
+
+        var client = new RetroBoxNfcSerialClient(_ => Task.FromResult<Stream>(stream));
+        var result = await client.PingAsync();
+
+        Assert.IsType<NfcResponse.Pong>(result);
+    }
+
     private static Stream CreateTestStream(string commandLine, string responseLine)
     {
         var cmdBytes = Encoding.ASCII.GetBytes(commandLine + "\n");
@@ -57,5 +73,72 @@ public sealed class RetroBoxNfcClientTests
         ms.Write(respBytes, 0, respBytes.Length);
         ms.Position = 0;
         return ms;
+    }
+
+    // Mimics SerialPort.BaseStream: Flush(), Read(), and Write() throw once the
+    // underlying "port" has been disposed - the exact behavior that surfaced as
+    // an unhandled InvalidOperationException at runtime.
+    private sealed class PortLikeStream : Stream
+    {
+        private readonly MemoryStream inner;
+        private bool portOpen = true;
+
+        public PortLikeStream(string content)
+        {
+            var bytes = Encoding.ASCII.GetBytes(content);
+            inner = new MemoryStream(bytes);
+        }
+
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+            if (!portOpen)
+            {
+                throw new InvalidOperationException(
+                    "The BaseStream is only available when the port is open.");
+            }
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (!portOpen)
+            {
+                throw new InvalidOperationException(
+                    "The BaseStream is only available when the port is open.");
+            }
+            return inner.Read(buffer, offset, count);
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (!portOpen)
+            {
+                throw new InvalidOperationException(
+                    "The BaseStream is only available when the port is open.");
+            }
+            inner.Write(buffer, offset, count);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                portOpen = false;
+                inner.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

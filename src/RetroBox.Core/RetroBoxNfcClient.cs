@@ -100,7 +100,7 @@ public sealed class RetroBoxNfcSerialClient : IRetroBoxNfcClient
 
             await writer.WriteLineAsync(command.AsMemory(), cancellationToken);
 
-            using var reader = new StreamReader(stream);
+            using var reader = new StreamReader(stream, leaveOpen: true);
             var line = await reader.ReadLineAsync(cancellationToken);
 
             return RetroBoxArduinoSerialProtocol.ParseResponse(line);
