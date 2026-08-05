@@ -50,3 +50,15 @@ void RetroFloppyCommandParser::makeInsert(const char* text, Command &out) {
   out.argsOffset = 0;
   out.isValid = true;
 }
+
+void RetroFloppyCommandParser::makeError(const char* text, Command &out) {
+copyRaw(out.raw, text);
+  out.type = CommandType::ERROR;
+  out.argsOffset = 0;
+  out.isValid = true;
+}
+    void RetroFloppyCommandParser::makeEject(Command &out) {
+  out.type = CommandType::EJECT;
+  out.argsOffset = 0;
+  out.isValid = true;
+    }

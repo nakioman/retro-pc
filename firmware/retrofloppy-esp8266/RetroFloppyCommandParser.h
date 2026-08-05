@@ -15,6 +15,8 @@ class RetroFloppyCommandParser {
 
     void readCommand(const char* cmdStr, Command &out);
     void makeInsert(const char* text, Command &out);
+    void makeError(const char* text, Command &out);
+    void makeEject(Command &out);
 };
 
 #endif

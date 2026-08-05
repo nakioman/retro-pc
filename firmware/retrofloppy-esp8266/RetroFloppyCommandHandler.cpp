@@ -30,6 +30,11 @@ void RetroFloppyCommandHandler::execute(const Command &cmd) {
         }
         break;
       }
+    case CommandType::EJECT:
+      {
+        serial.write(F("EJECT"));
+        break;
+      }
     default:
       {
         serial.write(F("ERROR %s"), cmd.raw);

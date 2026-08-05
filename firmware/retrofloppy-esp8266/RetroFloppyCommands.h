@@ -12,7 +12,8 @@ enum class CommandType {
   INSERT,
   WRITE,
   ERROR,
-  TAGID
+  TAGID,
+  EJECT
 };
 
 struct Command {

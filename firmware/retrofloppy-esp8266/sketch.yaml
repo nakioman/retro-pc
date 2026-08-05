@@ -8,5 +8,6 @@ profiles:
     libraries:
       - dir: lib/PN532
       - dir: lib/PN532_I2C
+      - Bounce2 (2.71)
 
 default_profile: esp8266
