@@ -10,6 +10,15 @@ run = "dotnet restore RetroBox.slnx"
 description = "Run the .NET test suite"
 run = "dotnet test RetroBox.slnx"
 
+[tasks.format]
+description = "Apply dotnet formatting rules to the solution"
+run = "dotnet format RetroBox.slnx"
+
+[tasks.format-check]
+description = "Verify formatting compliance without changing files"
+depends = ["restore"]
+run = "dotnet format RetroBox.slnx --verify-no-changes --no-restore"
+
 [tasks.cli]
 description = "Run the retrobox CLI from source"
 raw_args = true

@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+dotnet_sort_system_directives_first = true
+csharp_preferred_using_directive_placement = outside_namespace:suggestion
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:suggestion
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_style_primary_constructors = true:suggestion
+csharp_indent_case_labels = false
+csharp_indent_switch_labels = true
+csharp_indent_braces = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_before_colon_in_inheritance = true
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = true

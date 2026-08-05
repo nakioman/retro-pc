@@ -31,6 +31,9 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@v2
 
+      - name: Check formatting
+        run: mise run format-check
+
       - name: Run tests
         run: mise run test
 
