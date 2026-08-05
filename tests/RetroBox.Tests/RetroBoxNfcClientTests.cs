@@ -48,7 +48,7 @@ public sealed class RetroBoxNfcClientTests
         await Assert.ThrowsAsync<NfcPortUnavailable>(() => client.PingAsync());
     }
 
-// Regression: the inner StreamWriter/StreamReader must leave the underlying
+    // Regression: the inner StreamWriter/StreamReader must leave the underlying
     // stream open so the writer's disposal-time Flush does not reach into a
     // SerialPort whose BaseStream is only available while the port is open.
     // Reproduces the InvalidOperationException raised by SerialPort.BaseStream
