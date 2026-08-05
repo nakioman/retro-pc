@@ -48,10 +48,10 @@ public sealed class RetroBoxNfcClientTests
         await Assert.ThrowsAsync<NfcPortUnavailable>(() => client.PingAsync());
     }
 
-    // Regression: the inner StreamWriter/StreamReader must leave the underlying
+// Regression: the inner StreamWriter/StreamReader must leave the underlying
     // stream open so the writer's disposal-time Flush does not reach into a
     // SerialPort whose BaseStream is only available while the port is open.
-    // Reproduces theInvalidOperationException raised by SerialPort.BaseStream
+    // Reproduces the InvalidOperationException raised by SerialPort.BaseStream
     // when the reader (default leaveOpen:false) has already disposed the stream.
     [Fact]
     public async Task Ping_does_not_flush_stream_after_reader_disposes_it()
@@ -62,6 +62,36 @@ public sealed class RetroBoxNfcClientTests
         var result = await client.PingAsync();
 
         Assert.IsType<NfcResponse.Pong>(result);
+    }
+
+    // Regression: many boards emit a boot banner (e.g. "READY ...") before
+    // responding; non-protocol lines must be skipped until PONG arrives.
+    [Fact]
+    public async Task Ping_skips_boot_banner_before_pong()
+    {
+        var stream = new MemoryStream(Encoding.ASCII.GetBytes(
+            "READY retrofloppy-esp8266 0.1\nPONG\n"));
+        stream.Position = 0;
+
+        var client = new RetroBoxNfcSerialClient(_ => Task.FromResult<Stream>(stream));
+        var result = await client.PingAsync();
+
+        Assert.IsType<NfcResponse.Pong>(result);
+    }
+
+    // Regression: a closed stream (EOF before any response) must surface as
+    // Unknown rather than looping forever.
+    [Fact]
+    public async Task Ping_returns_unknown_when_stream_closes_without_response()
+    {
+        // Use an expandable MemoryStream (no fixed backing array) so the writer
+        // can append the command, then the reader hits EOF without a response.
+        var stream = new MemoryStream();
+
+        var client = new RetroBoxNfcSerialClient(_ => Task.FromResult<Stream>(stream));
+        var result = await client.PingAsync();
+
+        Assert.IsType<NfcResponse.Unknown>(result);
     }
 
     private static Stream CreateTestStream(string commandLine, string responseLine)
