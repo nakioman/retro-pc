@@ -187,7 +187,7 @@ public sealed class RetroBoxConfigStoreTests
                 image: "{{floppyImage}}"
                 mode: "ro"
                 size: "720K"
-            """);        
+            """);
 
         return root;
     }

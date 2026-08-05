@@ -31,7 +31,7 @@ internal sealed record TestRetroBoxLayout(string Root, string ConfigRoot, string
                 ? CreateExistingFloppyYaml(catalogedRoot)
                 : """
                   floppies: {}
-                  """);        
+                  """);
 
         return new TestRetroBoxLayout(root, configRoot, scratchRoot, catalogedRoot);
     }

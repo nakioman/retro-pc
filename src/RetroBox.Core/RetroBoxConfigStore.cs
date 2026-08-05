@@ -16,7 +16,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .WithDuplicateKeyChecking()
             .Build();
-            
+
     private readonly ISerializer serializer = new StaticSerializerBuilder(new RetroBoxYamlContext())
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
@@ -41,7 +41,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         SaveYamlSet([
             ("config.yaml", serializer.Serialize(data.Config)),
             ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
-            ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),            
+            ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
         ]);
     }
 
@@ -178,7 +178,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             {
                 throw new RetroBoxCatalogException($"Invalid floppy size '{floppy.Size}' for floppy '{id}'.");
             }
-        }        
+        }
     }
 
 }
