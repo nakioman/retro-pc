@@ -6,7 +6,10 @@ namespace RetroBox.Cli;
 
 public sealed record RetroBoxDaemonCommandRequest(
     string ConfigRoot,
-    string? FloppyControlSocketPath);
+    string? FloppyControlSocketPath,
+    string? SerialPort,
+    int? SerialBaud,
+    bool Echo);
 
 public sealed record RetroBoxBootCommandRequest(
     string ConfigRoot,
@@ -47,18 +50,37 @@ public static class CliCommandFactory
         {
             Description = "86Box floppy control Unix socket path.",
         };
+        var serialPortOption = new Option<string?>("--serial-port")
+        {
+            Description = "Floppy controller USB serial port device path.",
+        };
+        var serialBaudOption = new Option<int?>("--serial-baud")
+        {
+            Description = "Floppy controller USB serial baud rate.",
+            DefaultValueFactory = _ => RetroBoxArduinoSerialProtocol.DefaultBaudRate
+        };
+        var echoOption = new Option<bool>("--echo")
+        {
+            Description = "Print the 86Box socket request each event would send instead of connecting.",
+        };
 
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
             configRootOption,
             socketPathOption,
+            serialPortOption,
+            serialBaudOption,
+            echoOption,
         };
 
         command.SetAction(parseResult =>
         {
             var request = new RetroBoxDaemonCommandRequest(
                 parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath,
-                parseResult.GetValue(socketPathOption));
+                parseResult.GetValue(socketPathOption),
+                parseResult.GetValue(serialPortOption),
+                parseResult.GetValue(serialBaudOption),
+                parseResult.GetValue(echoOption));
 
             if (daemonRunner is not null)
             {
@@ -71,15 +93,41 @@ public static class CliCommandFactory
                 var socketPath = RetroBoxDaemon.ResolveFloppyControlSocketPath(
                     request.FloppyControlSocketPath,
                     catalog.Config.FloppyControlSocketPath);
+                var serialOptions = RetroBoxDaemon.ResolveSerialDeviceOptions(
+                    request.SerialPort,
+                    request.SerialBaud,
+                    catalog.Config.SerialPort,
+                    catalog.Config.SerialBaud);
+
+                IRetroBoxFloppyControlClient client = request.Echo
+                    ? RetroBoxFloppyControlClient.CreateEcho(Console.Out)
+                    : new RetroBoxFloppyControlClient(socketPath);
+
+                var runner = serialOptions is null
+                    ? null
+                    : new RetroBoxSerialDeviceRunner(serialOptions.Port, serialOptions.Baud);
+                using var reader = runner is null
+                    ? null
+                    : runner.OpenReaderAsync().GetAwaiter().GetResult();
+
+                using var cancellation = new CancellationTokenSource();
+                Console.CancelKeyPress += (_, e) =>
+                {
+                    e.Cancel = true;
+                    cancellation.Cancel();
+                };
+
                 var daemon = new RetroBoxDaemon(
                     catalog,
-                    new RetroBoxFloppyControlClient(socketPath),
-                    Console.In,
-                    Console.Out);
+                    client,
+                    reader ?? Console.In,
+                    Console.Out,
+                    request.Echo);
 
-                return daemon.RunAsync().GetAwaiter().GetResult();
+                return daemon.RunAsync(cancellation.Token).GetAwaiter().GetResult();
             }
-            catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException
+                or UnauthorizedAccessException or RetroBoxSerialDeviceException)
             {
                 return WriteError(parseResult, ex);
             }

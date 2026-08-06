@@ -105,6 +105,27 @@ public sealed class RetroBoxConfigStoreTests
         Assert.Contains("does not exist", error.Message);
     }
 
+    [Fact]
+    public void Load_rejects_relative_floppy_image_paths()
+    {
+        var root = CreateValidRoot();
+        File.WriteAllText(
+            Path.Combine(root, "floppies.yaml"),
+            """
+            floppies:
+              monkey1-disk1:
+                label: "Monkey Island - Disk 1"
+                image: "monkey_island_disk_1.img"
+                mode: "ro"
+                size: "720K"
+            """);
+
+        var store = new RetroBoxConfigStore(root);
+
+        var error = Assert.Throws<RetroBoxCatalogException>(() => store.Load());
+        Assert.Contains("must be absolute", error.Message);
+    }
+
     [Theory]
     [InlineData("floppies.yaml", "mode: \"writeable\"", "Invalid floppy mode 'writeable'")]
     [InlineData("floppies.yaml", "size: \"800K\"", "Invalid floppy size '800K'")]

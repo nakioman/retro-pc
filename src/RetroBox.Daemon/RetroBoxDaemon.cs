@@ -6,7 +6,8 @@ public sealed class RetroBoxDaemon(
     RetroBoxCatalogData catalog,
     IRetroBoxFloppyControlClient floppyControlClient,
     TextReader input,
-    TextWriter output)
+    TextWriter output,
+    bool echoEvents = false)
 {
     public const string DefaultFloppyControlSocketPath = "/run/retrobox/86box-floppy.sock";
 
@@ -15,34 +16,46 @@ public sealed class RetroBoxDaemon(
         var handler = new RetroBoxFloppyEventHandler(catalog, floppyControlClient);
         var exitCode = 0;
 
-        while (await input.ReadLineAsync(cancellationToken) is { } line)
+        try
         {
-            if (string.IsNullOrWhiteSpace(line))
+            while (await input.ReadLineAsync(cancellationToken) is { } line)
             {
-                continue;
-            }
-
-            try
-            {
-                var serialEvent = RetroBoxArduinoSerialProtocol.ParseEvent(line);
-                var result = await handler.HandleAsync(serialEvent, cancellationToken);
-                await output.WriteLineAsync(result.Message);
-
-                if (result.Action == RetroBoxFloppyEventHandlerAction.Failed)
+                if (string.IsNullOrWhiteSpace(line))
                 {
+                    continue;
+                }
+
+                try
+                {
+                    var serialEvent = RetroBoxArduinoSerialProtocol.ParseEvent(line);
+                    var result = await handler.HandleAsync(serialEvent, cancellationToken);
+
+                    if (!echoEvents
+                        || result.Action is not (RetroBoxFloppyEventHandlerAction.Inserted
+                            or RetroBoxFloppyEventHandlerAction.Ejected))
+                    {
+                        await output.WriteLineAsync(result.Message);
+                    }
+
+                    if (result.Action == RetroBoxFloppyEventHandlerAction.Failed)
+                    {
+                        exitCode = 1;
+                    }
+                }
+                catch (RetroBoxArduinoSerialProtocolException ex)
+                {
+                    await output.WriteLineAsync(ex.Message);
+                    exitCode = 1;
+                }
+                catch (RetroBoxFloppyControlException ex)
+                {
+                    await output.WriteLineAsync($"{ex.Code}: {ex.Message}");
                     exitCode = 1;
                 }
             }
-            catch (RetroBoxArduinoSerialProtocolException ex)
-            {
-                await output.WriteLineAsync(ex.Message);
-                exitCode = 1;
-            }
-            catch (RetroBoxFloppyControlException ex)
-            {
-                await output.WriteLineAsync($"{ex.Code}: {ex.Message}");
-                exitCode = 1;
-            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
 
         return exitCode;
@@ -61,5 +74,22 @@ public sealed class RetroBoxDaemon(
         }
 
         return DefaultFloppyControlSocketPath;
+    }
+
+    public static RetroBoxSerialDeviceOptions? ResolveSerialDeviceOptions(
+        string? cliSerialPort,
+        int? cliSerialBaud,
+        string? configSerialPort,
+        int? configSerialBaud)
+    {
+        var port = string.IsNullOrWhiteSpace(cliSerialPort) ? configSerialPort : cliSerialPort;
+        if (string.IsNullOrWhiteSpace(port))
+        {
+            return null;
+        }
+
+        return new RetroBoxSerialDeviceOptions(
+            port,
+            cliSerialBaud ?? configSerialBaud ?? RetroBoxSerialDeviceOptions.DefaultBaud);
     }
 }

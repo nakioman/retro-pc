@@ -55,6 +55,48 @@ public sealed class CliHelpSmokeTests
     }
 
     [Fact]
+    public void Daemon_invokes_configured_runner_with_serial_options_and_echo()
+    {
+        RetroBoxDaemonCommandRequest? request = null;
+        var command = CliCommandFactory.CreateRootCommand(daemonRunner: captured =>
+        {
+            request = captured;
+            return 0;
+        });
+
+        var exitCode = command.Parse([
+            "daemon",
+            "--serial-port",
+            "/dev/ttyUSB0",
+            "--serial-baud",
+            "9600",
+            "--echo",
+        ]).Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(request);
+        Assert.Equal("/dev/ttyUSB0", request.SerialPort);
+        Assert.Equal(9600, request.SerialBaud);
+        Assert.True(request.Echo);
+    }
+
+    [Fact]
+    public void Daemon_help_documents_serial_and_echo_options()
+    {
+        var output = new StringWriter();
+        var command = CliCommandFactory.CreateRootCommand();
+        var parseResult = command.Parse(["daemon", "--help"]);
+        parseResult.InvocationConfiguration.Output = output;
+
+        Assert.Equal(0, parseResult.Invoke());
+
+        var help = output.ToString();
+        Assert.Contains("--serial-port", help);
+        Assert.Contains("--serial-baud", help);
+        Assert.Contains("--echo", help);
+    }
+
+    [Fact]
     public void Daemon_returns_failure_for_missing_catalog_root()
     {
         var command = CliCommandFactory.CreateRootCommand();

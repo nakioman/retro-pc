@@ -60,6 +60,24 @@ public sealed class RetroBoxArduinoSerialProtocolTests
             RetroBoxArduinoSerialProtocol.ParseEvent(line));
     }
 
+    [Fact]
+    public void Parse_init_event()
+    {
+        var serialEvent = RetroBoxArduinoSerialProtocol.ParseEvent("INIT 1");
+
+        var init = Assert.IsType<RetroBoxArduinoInitEvent>(serialEvent);
+        Assert.Equal("1", init.Version);
+    }
+
+    [Theory]
+    [InlineData("INIT")]
+    [InlineData("INIT   ")]
+    public void Parse_rejects_malformed_init_events(string line)
+    {
+        Assert.Throws<RetroBoxArduinoSerialProtocolException>(() =>
+            RetroBoxArduinoSerialProtocol.ParseEvent(line));
+    }
+
     [Theory]
     [InlineData("monkey1-disk1", "ro", "WRITE monkey1-disk1,ro")]
     [InlineData("monkey1-disk1", "rw", "WRITE monkey1-disk1,rw")]

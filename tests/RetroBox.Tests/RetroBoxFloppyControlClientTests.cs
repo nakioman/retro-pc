@@ -150,6 +150,49 @@ public sealed class RetroBoxFloppyControlClientTests
         Assert.Contains("malformed", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CreateEcho_writes_the_same_request_line_as_the_socket()
+    {
+        var server = new ScriptedFloppySocket(SuccessResponse());
+        var socketClient = new RetroBoxFloppyControlClient(server.OpenAsync);
+        var output = new StringWriter();
+        var echoClient = RetroBoxFloppyControlClient.CreateEcho(output);
+
+        await socketClient.InsertAsync(0, "/data/floppies/test.img", readOnly: true);
+        await echoClient.InsertAsync(0, "/data/floppies/test.img", readOnly: true);
+
+        Assert.Equal(server.RequestText, output.ToString());
+    }
+
+    [Fact]
+    public async Task CreateEcho_returns_parsed_status_for_insert()
+    {
+        var client = RetroBoxFloppyControlClient.CreateEcho(new StringWriter());
+
+        var status = await client.InsertAsync(0, "/data/floppies/test.img", readOnly: true);
+
+        Assert.Equal(0, status.Drive);
+        Assert.True(status.Inserted);
+        Assert.Equal("/data/floppies/test.img", status.Path);
+        Assert.True(status.ReadOnly);
+        Assert.False(status.Busy);
+        Assert.True(status.Changed);
+    }
+
+    [Fact]
+    public async Task CreateEcho_returns_parsed_status_for_eject()
+    {
+        var client = RetroBoxFloppyControlClient.CreateEcho(new StringWriter());
+
+        var status = await client.EjectAsync(0);
+
+        Assert.Equal(0, status.Drive);
+        Assert.False(status.Inserted);
+        Assert.Null(status.Path);
+        Assert.False(status.ReadOnly);
+        Assert.True(status.Changed);
+    }
+
     private static string SuccessResponse(
         bool inserted = true,
         string? path = "/data/floppies/test.img",

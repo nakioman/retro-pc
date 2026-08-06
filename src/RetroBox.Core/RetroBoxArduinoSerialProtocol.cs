@@ -6,6 +6,8 @@ public sealed record RetroBoxArduinoInsertEvent(string Id, string Mode) : RetroB
 
 public sealed record RetroBoxArduinoEjectEvent : RetroBoxArduinoSerialEvent;
 
+public sealed record RetroBoxArduinoInitEvent(string Version) : RetroBoxArduinoSerialEvent;
+
 public sealed record RetroBoxArduinoErrorEvent(string Message) : RetroBoxArduinoSerialEvent;
 
 public sealed class RetroBoxArduinoSerialProtocolException : Exception
@@ -18,8 +20,11 @@ public sealed class RetroBoxArduinoSerialProtocolException : Exception
 
 public static class RetroBoxArduinoSerialProtocol
 {
+    private const string InitPrefix = "INIT ";
     private const string InsertPrefix = "INSERT ";
     private const string ErrorPrefix = "ERROR ";
+
+    public const int DefaultBaudRate = 115200;
 
     public static RetroBoxArduinoSerialEvent ParseEvent(string? line)
     {
@@ -32,6 +37,11 @@ public static class RetroBoxArduinoSerialProtocol
         if (trimmedLine == "EJECT")
         {
             return new RetroBoxArduinoEjectEvent();
+        }
+
+        if (trimmedLine.StartsWith(InitPrefix, StringComparison.Ordinal))
+        {
+            return ParseInitEvent(trimmedLine[InitPrefix.Length..]);
         }
 
         if (trimmedLine.StartsWith(InsertPrefix, StringComparison.Ordinal))
@@ -85,6 +95,16 @@ public static class RetroBoxArduinoSerialProtocol
         }
 
         return new NfcResponse.Unknown(line);
+    }
+
+    private static RetroBoxArduinoInitEvent ParseInitEvent(string version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            throw new RetroBoxArduinoSerialProtocolException("Arduino INIT event version is required.");
+        }
+
+        return new RetroBoxArduinoInitEvent(version.Trim());
     }
 
     private static RetroBoxArduinoInsertEvent ParseInsertEvent(string payload)

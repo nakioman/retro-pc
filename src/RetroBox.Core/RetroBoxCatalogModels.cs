@@ -10,6 +10,10 @@ public sealed record RetroBoxConfig
     public string DefaultVm { get; set; } = string.Empty;
 
     public string? FloppyControlSocketPath { get; set; }
+
+    public string? SerialPort { get; set; }
+
+    public int? SerialBaud { get; set; }
 }
 
 public sealed record RetroBoxVm
