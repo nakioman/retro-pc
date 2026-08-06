@@ -72,6 +72,15 @@ select_target_disk() {
 
     local disk="/dev/${candidates[$((choice - 1))]}"
 
+    local existing_data
+    existing_data="$(existing_data_partition "$disk" || true)"
+    if [ -n "$existing_data" ]; then
+        printf '\n' >&2
+        warn "Existing RetroBox install detected (/data at $existing_data)."
+        warn "Reinstall will offer to preserve /data — set RETROPC_WIPE_DATA=1 for a full wipe."
+        printf '\n' >&2
+    fi
+
     printf '\n' >&2
     warn "About to ERASE and repartition: $disk"
     lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL "$disk" >&2 || true

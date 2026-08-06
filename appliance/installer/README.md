@@ -30,7 +30,8 @@ Write image to a USB stick       (dd)
 Boot the retro PC from USB       (BIOS/legacy)
 Installer auto-starts on tty1    (install-retropc.sh)
 Pick the internal disk           (USB device excluded; typed confirmation)
-Partition + format               (MBR: p1 root ro, p2 /data rw)
+Partition + format               (fresh: MBR p1 root ro, p2 /data rw)
+Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root only)
 Extract appliance rootfs         (offline, from the USB)
 Write UUID fstab, users, GRUB    (root locked; retrobox password prompted)
 Remove USB and reboot            (target boots the installed appliance)
@@ -104,6 +105,19 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
    from it). Remove the USB while the machine restarts — at the BIOS/logo screen
    — so it boots from the internal disk.
 
+## Reinstall & data preservation
+
+Re-running the installer over an existing appliance keeps your data by default:
+
+- The `/data` partition is **not** reformatted. Only the read-only root
+  filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
+- Everything on `/data` survives: VMs (`.vhd`), the VM catalog (`vms.yaml`),
+  floppies, snapshots, and Samba scratch.
+- OS-managed profile files (`86box.cfg`, shaders) **are** refreshed; `.vhd` and
+  `.yaml` files are never overwritten.
+- Set `RETROPC_WIPE_DATA=1` to force a full wipe of `/data` on reinstall
+  (or answer `n` to the "Preserve /data?" prompt during the install).
+
 ## Accounts & maintenance
 
 - `root` is **locked**. `retrobox` is the sole account — the service runtime user
@@ -155,8 +169,9 @@ partition/format, offline rootfs extract, UUID fstab, read-only root via `ro` +
 tmpfs + `/var` overlay on `/data`, `retrobox` account (root locked) with prompted
 password, SSH, Samba scratch share, DHCP networking, Plymouth boot splash, GRUB
 BIOS install with hidden 1280x960 menu + recovery entry, zram + `/data` swapfile
-backstop for the low-RAM machine, and the `retrobox-daemon` / `retrobox-boot`
-systemd units.
+backstop for the low-RAM machine, the `retrobox-daemon` / `retrobox-boot`
+systemd units, and reinstall data preservation (existing `/data`, `.vhd`, and
+`.yaml` are kept unless `RETROPC_WIPE_DATA=1`).
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 

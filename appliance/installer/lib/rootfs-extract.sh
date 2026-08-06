@@ -50,7 +50,13 @@ stage_binaries() {
     ok "Staged 86Box ROMs -> $BOX86_OPT/roms"
 
     [ -f "$PAYLOAD_DIR/retrobox/vms.yaml" ] || die "VM catalog payload is missing"
-    install -m 0644 "$PAYLOAD_DIR/retrobox/vms.yaml" "$TARGET_MNT/data/retrobox/vms.yaml"
+    # On a reinstall that preserves /data, keep the existing catalog so user
+    # edits (and any VMs they added) survive; otherwise (re)write the payload.
+    if [ "$PRESERVE_DATA" = "1" ] && [ -f "$TARGET_MNT/data/retrobox/vms.yaml" ]; then
+        log "Preserving existing /data/retrobox/vms.yaml"
+    else
+        install -m 0644 "$PAYLOAD_DIR/retrobox/vms.yaml" "$TARGET_MNT/data/retrobox/vms.yaml"
+    fi
     profile_root="$PAYLOAD_DIR/profiles"
     [ -d "$profile_root" ] || die "VM profiles payload is missing"
     for profile in "$profile_root"/*/; do
@@ -62,7 +68,13 @@ stage_binaries() {
             [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
         done
         mkdir -p "$TARGET_MNT/data/vms/$vm"
-        cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
+        if [ "$PRESERVE_DATA" = "1" ] && [ -d "$TARGET_MNT/data/vms/$vm" ]; then
+            # Reinstall: refresh the OS-managed files but never clobber the
+            # user's VM disks (.vhd) or catalog (.yaml).
+            rsync -a --exclude='*.vhd' --exclude='*.yaml' "$profile/." "$TARGET_MNT/data/vms/$vm/"
+        else
+            cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
+        fi
         for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
             [ -f "$TARGET_MNT/data/vms/$vm/$required" ] \
                 || die "Installed VM profile $vm is missing $required"
