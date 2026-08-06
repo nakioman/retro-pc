@@ -36,6 +36,12 @@ stage_binaries() {
 
     [ -x "$RETROBOX_SRC" ] || die "Executable RetroBox binary not on medium: $RETROBOX_SRC"
     install -m 0755 "$RETROBOX_SRC" "$TARGET_MNT$RETROBOX_OPT/retrobox"
+    # System.IO.Ports P/Invoke native library: NativeAOT leaves it as a dynamic
+    # dependency, so it must sit next to the binary (see build-usb-installer.sh).
+    [ -f "$INSTALL_SRC/libSystem.IO.Ports.Native.so" ] \
+        || die "libSystem.IO.Ports.Native.so not on medium: $INSTALL_SRC/libSystem.IO.Ports.Native.so"
+    install -m 0755 "$INSTALL_SRC/libSystem.IO.Ports.Native.so" \
+        "$TARGET_MNT$RETROBOX_OPT/libSystem.IO.Ports.Native.so"
     RETROBOX_STATUS="installed"
     ok "Staged retrobox binary -> $RETROBOX_OPT/retrobox"
 

@@ -128,6 +128,16 @@ if [ -z "${RETROBOX_BIN:-}" ] || [ ! -f "${RETROBOX_BIN:-}" ]; then
 fi
 install -m 0755 "$RETROBOX_BIN" "$ISO/install/retrobox"
 
+# NativeAOT cannot statically link libSystem.IO.Ports.Native (the runtime only
+# ships it as a shared .so), so the daemon/NFC serial P/Invoke resolves it from
+# the executable's directory. Ship it next to the binary or serial access fails
+# with DllNotFoundException on the appliance.
+if [ ! -f "$(dirname "$RETROBOX_BIN")/libSystem.IO.Ports.Native.so" ]; then
+    die "libSystem.IO.Ports.Native.so not found next to $RETROBOX_BIN"
+fi
+install -m 0755 "$(dirname "$RETROBOX_BIN")/libSystem.IO.Ports.Native.so" \
+    "$ISO/install/libSystem.IO.Ports.Native.so"
+
 APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
 ROMS_CACHE="${BOX86_ROMS_ARCHIVE:-$WORK/86box-roms-${BOX86_ROMS_VERSION}.tar.gz}"
 download_and_verify "$APPIMAGE_CACHE" "$BOX86_APPIMAGE_URL" "$BOX86_APPIMAGE_SHA256" "86Box AppImage"
@@ -198,6 +208,8 @@ for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; d
         || die "Expected package binary missing from target rootfs: /$bin"
 done
 [ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
+[ -f "$ISO/install/libSystem.IO.Ports.Native.so" ] \
+    || die "ISO is missing /install/libSystem.IO.Ports.Native.so"
 [ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
 [ -f "$ISO/install/vms.yaml" ] || die "ISO is missing vms.yaml"
 [ -d "$ISO/install/profiles" ] || die "ISO is missing VM profiles"

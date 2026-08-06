@@ -46,7 +46,8 @@ jobs:
       - name: Smoke test published binary
         run: |
           set -euo pipefail
-          artifact="src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/retrobox"
+          publish_dir="src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish"
+          artifact="$publish_dir/retrobox"
           fixture="$(mktemp -d)"
           trap 'rm -rf "$fixture"' EXIT
           mkdir -p "$fixture/vms/386sx16" "$fixture/vms/pentium100"
@@ -60,6 +61,9 @@ jobs:
             '    label: "Pentium 100"' \
             "    path: \"$fixture/vms/pentium100\"" \
             > "$fixture/vms.yaml"
+          # NativeAOT cannot statically link System.IO.Ports; the .so must ship
+          # next to the binary or serial access fails at runtime.
+          test -f "$publish_dir/libSystem.IO.Ports.Native.so"
           "$artifact" --help
           "$artifact" boot --dry-run --config-root "$fixture" --select 386sx16
           "$artifact" boot --dry-run --config-root "$fixture" --select pentium100
@@ -69,6 +73,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: retrobox-linux-x64
-          path: src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/retrobox
+          path: src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/
           if-no-files-found: error
           retention-days: 14
