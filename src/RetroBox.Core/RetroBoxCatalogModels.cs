@@ -28,6 +28,8 @@ public sealed record RetroBoxFloppy
     public string Mode { get; set; } = RetroBoxFloppyCatalogRules.ReadOnlyMode;
 
     public string Size { get; set; } = RetroBoxFloppyCatalogRules.DefaultImportSize;
+
+    public bool Nfc { get; set; }
 }
 
 public sealed record RetroBoxGame

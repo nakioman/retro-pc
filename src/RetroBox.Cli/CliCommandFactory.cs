@@ -21,7 +21,8 @@ public static class CliCommandFactory
         Func<RetroBoxDaemonCommandRequest, int>? daemonRunner = null,
         Func<RetroBoxBootCommandRequest, int>? bootRunner = null,
         IRetroBoxBootHotkeyDetector? hotkeyDetector = null,
-        IRetroBoxBootSelectorUi? selectorUi = null)
+        IRetroBoxBootSelectorUi? selectorUi = null,
+        Func<string, IRetroBoxNfcClient>? nfcClientFactory = null)
     {
         var rootCommand = new RootCommand("Retro PC appliance control tool.");
 
@@ -31,9 +32,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
             "floppy",
             "Manage cataloged floppy images."));
-        rootCommand.Subcommands.Add(CreatePlaceholderCommand(
-            "nfc",
-            "Read or write NFC-backed floppy labels."));
+        rootCommand.Subcommands.Add(CreateNfcCommand(nfcClientFactory));
         rootCommand.Subcommands.Add(CreateImportCommand());
 
         rootCommand.SetAction(_ => 0);
@@ -347,6 +346,112 @@ public static class CliCommandFactory
                 return WriteError(parseResult, ex);
             }
         });
+
+        return command;
+    }
+
+    private static Command CreateNfcCommand(Func<string, IRetroBoxNfcClient>? nfcClientFactory)
+    {
+        var portOption = new Option<string>("--port")
+        {
+            Description = "Serial port for the NFC reader/writer.",
+            Required = true,
+        };
+
+        var readCommand = new Command("read", "Check NFC connectivity via PING/PONG.")
+        {
+            portOption,
+        };
+        readCommand.SetAction(parseResult =>
+        {
+            try
+            {
+                var port = parseResult.GetValue(portOption) ?? string.Empty;
+                var client = nfcClientFactory?.Invoke(port)
+                    ?? new RetroBoxNfcSerialClient(port);
+                var response = client.PingAsync().GetAwaiter().GetResult();
+
+                if (response is NfcResponse.Pong)
+                {
+                    parseResult.InvocationConfiguration.Output.WriteLine(
+                        $"NFC reader on {port} is alive.");
+                    return 0;
+                }
+
+                parseResult.InvocationConfiguration.Output.WriteLine(
+                    $"NFC reader on {port} is dead.");
+                return 1;
+            }
+            catch (Exception ex) when (ex is NfcPortUnavailable or IOException or UnauthorizedAccessException)
+            {
+                return WriteError(parseResult, ex);
+            }
+        });
+
+        var writePortOption = new Option<string>("--port")
+        {
+            Description = "Serial port for the NFC reader/writer.",
+            Required = true,
+        };
+        var configRootOption = ConfigRootOption();
+        var idArgument = new Argument<string>("id")
+        {
+            Description = "Cataloged floppy ID to write to the NFC tag.",
+        };
+
+        var writeCommand = new Command("write", "Write a cataloged floppy label to an NFC tag.")
+        {
+            idArgument,
+            writePortOption,
+            configRootOption,
+        };
+        writeCommand.SetAction(parseResult =>
+        {
+            try
+            {
+                var id = parseResult.GetValue(idArgument) ?? string.Empty;
+                var port = parseResult.GetValue(writePortOption) ?? string.Empty;
+                var configRoot = parseResult.GetValue(configRootOption)
+                    ?? RetroBoxConfigStore.DefaultRootPath;
+
+                var client = nfcClientFactory?.Invoke(port)
+                    ?? new RetroBoxNfcSerialClient(port);
+                var store = new RetroBoxConfigStore(configRoot);
+                var writer = new RetroBoxNfcWriter(client, store);
+                var result = writer.WriteAsync(id).GetAwaiter().GetResult();
+
+                switch (result)
+                {
+                    case NfcWriteResult.Written:
+                        parseResult.InvocationConfiguration.Output.WriteLine(
+                            $"{id} written (nfc: true)");
+                        return 0;
+                    case NfcWriteResult.NotCataloged notCataloged:
+                        parseResult.InvocationConfiguration.Error.WriteLine(
+                            $"Floppy '{notCataloged.Id}' is not cataloged.");
+                        return 1;
+                    case NfcWriteResult.WriteFailed writeFailed:
+                        parseResult.InvocationConfiguration.Error.WriteLine(
+                            $"NFC write failed: {writeFailed.Message}");
+                        return 1;
+                    default:
+                        parseResult.InvocationConfiguration.Error.WriteLine(
+                            $"Unexpected NFC write result: {result.GetType().Name}");
+                        return 1;
+                }
+            }
+            catch (Exception ex) when (ex is NfcPortUnavailable or IOException or UnauthorizedAccessException)
+            {
+                return WriteError(parseResult, ex);
+            }
+        });
+
+        var command = new Command("nfc", "Read or write NFC-backed floppy labels.")
+        {
+            readCommand,
+            writeCommand,
+        };
+        command.SetAction(_ => 0);
 
         return command;
     }

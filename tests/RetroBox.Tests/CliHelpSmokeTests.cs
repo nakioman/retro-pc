@@ -13,6 +13,8 @@ public sealed class CliHelpSmokeTests
             new[] { "vm", "--help" },
             new[] { "floppy", "--help" },
             new[] { "nfc", "--help" },
+            new[] { "nfc", "read", "--help" },
+            new[] { "nfc", "write", "--help" },
             new[] { "import", "--help" },
             new[] { "import", "floppy", "--help" },
         };

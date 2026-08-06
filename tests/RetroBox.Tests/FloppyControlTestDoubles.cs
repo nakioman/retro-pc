@@ -61,3 +61,36 @@ internal sealed class RecordingFloppyControlClient : IRetroBoxFloppyControlClien
         return Task.FromResult(new RetroBoxFloppyStatus(drive, false, null, false, false, false));
     }
 }
+
+internal sealed class RecordingNfcClient : IRetroBoxNfcClient
+{
+    public List<string> Calls { get; } = [];
+
+    public NfcResponse? PingResponse { get; init; }
+
+    public NfcResponse? WriteResponse { get; init; }
+
+    public Exception? ThrowOnCall { get; init; }
+
+    public Task<NfcResponse> PingAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add("PING");
+        return Task.FromResult(PingResponse ?? new NfcResponse.Pong());
+    }
+
+    public Task<NfcResponse> WriteAsync(string id, string mode, CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add($"WRITE:{id}:{mode}");
+        return Task.FromResult(WriteResponse ?? new NfcResponse.Ok());
+    }
+}

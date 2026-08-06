@@ -154,6 +154,55 @@ public sealed class RetroBoxConfigStoreTests
         Assert.Contains("defaultVm: pentium100", File.ReadAllText(backups[0]));
     }
 
+    [Fact]
+    public void Save_persists_nfc_flag_in_yaml()
+    {
+        var root = CreateValidRoot();
+        var store = new RetroBoxConfigStore(root);
+        var original = store.Load();
+        var floppies = new Dictionary<string, RetroBoxFloppy>(original.Floppies, StringComparer.Ordinal);
+        floppies["monkey1-disk1"] = floppies["monkey1-disk1"] with { Nfc = true };
+        var data = original with { Floppies = floppies };
+
+        store.Save(data);
+
+        var yaml = File.ReadAllText(Path.Combine(root, "floppies.yaml"));
+        Assert.Contains("nfc: true", yaml);
+        var reloaded = new RetroBoxConfigStore(root).Load();
+        Assert.True(reloaded.Floppies["monkey1-disk1"].Nfc);
+    }
+
+    [Fact]
+    public void Load_defaults_nfc_to_false_when_key_absent()
+    {
+        var root = CreateValidRoot();
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.False(data.Floppies["monkey1-disk1"].Nfc);
+    }
+
+    [Fact]
+    public void Load_parses_nfc_true_from_yaml()
+    {
+        var root = CreateValidRoot();
+        File.WriteAllText(
+            Path.Combine(root, "floppies.yaml"),
+            $$"""
+            floppies:
+              monkey1-disk1:
+                label: "Monkey Island - Disk 1"
+                image: "{{Path.Combine(root, "monkey_island_disk_1.img")}}"
+                mode: "ro"
+                size: "720K"
+                nfc: true
+            """);
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.True(data.Floppies["monkey1-disk1"].Nfc);
+    }
+
     private static string CreateValidRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "retrobox-tests", Guid.NewGuid().ToString("N"));
