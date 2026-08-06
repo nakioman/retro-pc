@@ -164,6 +164,12 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             floppy.Image.RequireCatalogValue($"Floppy '{id}' image");
             floppy.Size.RequireCatalogValue($"Floppy '{id}' size");
 
+            if (!Path.IsPathRooted(floppy.Image))
+            {
+                throw new RetroBoxCatalogException(
+                    $"Floppy '{id}' image path '{floppy.Image}' must be absolute; 86Box requires absolute image paths.");
+            }
+
             if (!File.Exists(floppy.Image))
             {
                 throw new RetroBoxCatalogException($"Floppy '{id}' image path '{floppy.Image}' does not exist.");

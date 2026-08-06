@@ -4,6 +4,7 @@ namespace RetroBox.Daemon;
 
 public enum RetroBoxFloppyEventHandlerAction
 {
+    Initialized,
     Inserted,
     Ejected,
     IgnoredError,
@@ -29,6 +30,11 @@ public sealed class RetroBoxFloppyEventHandler(
         {
             RetroBoxArduinoInsertEvent insert => HandleInsertAsync(insert, cancellationToken),
             RetroBoxArduinoEjectEvent => HandleEjectAsync(cancellationToken),
+            RetroBoxArduinoInitEvent init => Task.FromResult(
+                new RetroBoxFloppyEventHandlerResult(
+                    RetroBoxFloppyEventHandlerAction.Initialized,
+                    $"Floppy controller initialized (version {init.Version}).",
+                    null)),
             RetroBoxArduinoErrorEvent error => Task.FromResult(
                 new RetroBoxFloppyEventHandlerResult(
                     RetroBoxFloppyEventHandlerAction.IgnoredError,

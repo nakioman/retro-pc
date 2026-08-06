@@ -83,6 +83,17 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         };
     }
 
+    public static RetroBoxFloppyControlClient CreateEcho(TextWriter output)
+    {
+        if (output is null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        return new RetroBoxFloppyControlClient(
+            _ => Task.FromResult<Stream>(new RetroBoxEchoTransportStream(output)));
+    }
+
     public Task<RetroBoxFloppyStatus> InsertAsync(
         int drive,
         string imagePath,
