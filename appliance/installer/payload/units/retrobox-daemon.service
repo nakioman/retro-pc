@@ -14,10 +14,13 @@ Group=retrobox
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides
 # SERIAL_DEVICE, SERIAL_BAUD, and FLOPPY_CONTROL_SOCKET.
 EnvironmentFile=/etc/retrobox/daemon.env
-# The daemon reads serial protocol lines on stdin and drives the 86Box floppy
-# control socket. Configure the serial line, then stream it into the daemon.
-ExecStartPre=/bin/sh -c 'test -e "$SERIAL_DEVICE" && stty -F "$SERIAL_DEVICE" "$SERIAL_BAUD" raw -echo || true'
-ExecStart=/bin/sh -c 'if [ -e "$SERIAL_DEVICE" ]; then exec /opt/retrobox/retrobox daemon --floppy-control-socket "$FLOPPY_CONTROL_SOCKET" < "$SERIAL_DEVICE"; else exec /opt/retrobox/retrobox daemon --floppy-control-socket "$FLOPPY_CONTROL_SOCKET"; fi'
+# Skip the unit (without failing) when the floppy controller is not attached:
+# with no SERIAL_DEVICE there is nothing for the daemon to watch. Exits 1-254
+# from ExecCondition= leave the unit inactive, so Restart= is not triggered.
+ExecCondition=/bin/sh -c 'test -e "$SERIAL_DEVICE"'
+# The daemon opens the serial device itself (--serial-port/--serial-baud) and
+# drives the 86Box floppy control socket.
+ExecStart=/opt/retrobox/retrobox daemon --serial-port "$SERIAL_DEVICE" --serial-baud "$SERIAL_BAUD" --floppy-control-socket "$FLOPPY_CONTROL_SOCKET"
 Restart=on-failure
 RestartSec=2
 

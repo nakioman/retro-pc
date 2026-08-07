@@ -30,6 +30,7 @@ ISOLINUX_LIB="/usr/lib/ISOLINUX"
 SYSLINUX_MOD="/usr/lib/syslinux/modules/bios"
 
 log()  { printf '\033[1;34m[build]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[build:warning]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[build:error]\033[0m %s\n' "$*" >&2; exit 1; }
 # latest GLOB... -> highest version-sorted path from the expanded glob args.
 latest() { printf '%s\n' "$@" | sort -V | tail -n1; }
@@ -128,6 +129,17 @@ if [ -z "${RETROBOX_BIN:-}" ] || [ ! -f "${RETROBOX_BIN:-}" ]; then
 fi
 install -m 0755 "$RETROBOX_BIN" "$ISO/install/retrobox"
 
+# NativeAOT cannot statically link libSystem.IO.Ports.Native (the runtime only
+# ships it as a shared .so), so the daemon/NFC serial P/Invoke resolves it from
+# the executable's directory. The publish workflow asserts it in the smoke test
+# and uploads it; warn (don't fail) on a stale artifact that predates that.
+if [ -f "$(dirname "$RETROBOX_BIN")/libSystem.IO.Ports.Native.so" ]; then
+    install -m 0755 "$(dirname "$RETROBOX_BIN")/libSystem.IO.Ports.Native.so" \
+        "$ISO/install/libSystem.IO.Ports.Native.so"
+else
+    warn "libSystem.IO.Ports.Native.so not found next to $RETROBOX_BIN; serial/NFC will be unavailable"
+fi
+
 APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
 ROMS_CACHE="${BOX86_ROMS_ARCHIVE:-$WORK/86box-roms-${BOX86_ROMS_VERSION}.tar.gz}"
 download_and_verify "$APPIMAGE_CACHE" "$BOX86_APPIMAGE_URL" "$BOX86_APPIMAGE_SHA256" "86Box AppImage"
@@ -198,6 +210,8 @@ for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; d
         || die "Expected package binary missing from target rootfs: /$bin"
 done
 [ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
+[ -f "$ISO/install/libSystem.IO.Ports.Native.so" ] \
+    || warn "ISO is missing /install/libSystem.IO.Ports.Native.so (stale runtime artifact)"
 [ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
 [ -f "$ISO/install/vms.yaml" ] || die "ISO is missing vms.yaml"
 [ -d "$ISO/install/profiles" ] || die "ISO is missing VM profiles"
