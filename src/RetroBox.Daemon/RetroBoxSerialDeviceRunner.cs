@@ -1,5 +1,6 @@
 using System.IO.Ports;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 [assembly: InternalsVisibleTo("RetroBox.Tests")]
 
@@ -57,10 +58,21 @@ public sealed class RetroBoxSerialDeviceRunner
 
     public async Task<TextReader> OpenReaderAsync(CancellationToken cancellationToken = default)
     {
-        Stream stream;
+        var stream = await OpenStreamAsync(cancellationToken);
+        return new SerialDeviceReader(stream);
+    }
+
+    public async Task<RetroBoxSerialDevice> OpenAsync(CancellationToken cancellationToken = default)
+    {
+        var stream = await OpenStreamAsync(cancellationToken);
+        return new RetroBoxSerialDevice(stream, new SerialDeviceReader(stream), new SerialDeviceWriter(stream));
+    }
+
+    private async Task<Stream> OpenStreamAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            stream = await streamFactory(cancellationToken);
+            return await streamFactory(cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException or InvalidOperationException)
         {
@@ -68,8 +80,6 @@ public sealed class RetroBoxSerialDeviceRunner
                 $"Floppy controller serial device is unavailable: {ex.Message}",
                 ex);
         }
-
-        return new SerialDeviceReader(stream);
     }
 
     private sealed class SerialDeviceReader : TextReader
@@ -166,5 +176,66 @@ public sealed class RetroBoxSerialDeviceRunner
 
             base.Dispose(disposing);
         }
+    }
+
+    private sealed class SerialDeviceWriter : TextWriter
+    {
+        private readonly StreamWriter inner;
+
+        public SerialDeviceWriter(Stream stream)
+        {
+            inner = new StreamWriter(stream)
+            {
+                AutoFlush = true,
+                NewLine = "\n",
+            };
+        }
+
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override void Write(char value) => inner.Write(value);
+
+        public override void Write(string? value) => inner.Write(value);
+
+        public override Task WriteAsync(string? value) => inner.WriteAsync(value);
+
+        public override Task WriteLineAsync(string? value) => inner.WriteLineAsync(value);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Flush();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+}
+
+/// <summary>
+/// A single opened serial device, exposing one reader and one writer over the
+/// same port so the daemon can receive events and send commands without
+/// re-opening the device.
+/// </summary>
+public sealed class RetroBoxSerialDevice : IDisposable
+{
+    private readonly Stream stream;
+
+    internal RetroBoxSerialDevice(Stream stream, TextReader reader, TextWriter writer)
+    {
+        this.stream = stream;
+        Reader = reader;
+        Writer = writer;
+    }
+
+    public TextReader Reader { get; }
+
+    public TextWriter Writer { get; }
+
+    public void Dispose()
+    {
+        Writer.Flush();
+        stream.Dispose();
     }
 }

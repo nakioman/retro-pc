@@ -126,6 +126,19 @@ console. Press a VM's displayed number to start it. Press `D`, then a VM number,
 to save it as the default and start it immediately. `Esc` cancels; if a default
 is already configured, cancellation starts that VM.
 
+Closing a VM returns to the selector so another VM can be started without a
+reboot. `Esc` on that returned selector ends the session and returns to the
+tty1 login; it does not restart the VM that just closed.
+
+The Plymouth splash stays up until 86Box's first frame: `retrobox boot`
+retains it before launching a VM and quits it before the selector, so boot and
+86Box loading text never flashes on the terminal.
+
+The floppy daemon re-syncs the drive when a VM starts: once the 86Box
+floppy-control socket is ready it sends `STATUS` to the floppy controller and
+applies the reported physical floppy, so swaps made while the VM was off are
+loaded on power-on.
+
 ## Recovery
 
 - Hold **Shift** (or press **Esc**) during boot to reveal the hidden GRUB menu.

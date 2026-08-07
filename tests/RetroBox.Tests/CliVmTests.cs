@@ -80,7 +80,7 @@ public sealed class CliVmTests
         Assert.Null(captured);
 
         var exitCode = command.Parse([
-            "boot", "--config-root", layout, "--binary", "/custom/86box", "--rompath", "/custom/roms",
+            "boot", "--select", "pentium100", "--config-root", layout, "--binary", "/custom/86box", "--rompath", "/custom/roms",
         ]).Invoke();
 
         Assert.Equal(23, exitCode);
@@ -120,7 +120,7 @@ public sealed class CliVmTests
     }
 
     [Fact]
-    public void Boot_selector_uses_injected_ui()
+    public void Boot_selector_uses_injected_ui_and_loops_until_cancel()
     {
         var layout = CreateVmLayout();
         var profile = Path.Combine(layout, "profiles", "386sx16");
@@ -135,15 +135,16 @@ public sealed class CliVmTests
                 label: "386SX-16"
                 path: "{{profile}}"
             """);
-        var ui = new FakeSelectorUi(new RetroBoxBootSelectionDecision(
-            RetroBoxBootSelectionAction.Run, "386sx16"));
+        var ui = new ScriptedSelectorUi(
+            new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Run, "386sx16"),
+            new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Cancel));
         RetroBoxBootCommandRequest? captured = null;
         var command = CliCommandFactory.CreateRootCommand(
             bootRunner: request => { captured = request; return 0; },
             selectorUi: ui);
 
         Assert.Equal(0, command.Parse(["boot", "--selector", "--config-root", layout]).Invoke());
-        Assert.Equal(1, ui.Calls);
+        Assert.Equal(2, ui.Calls);
         Assert.Equal("386sx16", captured?.VmId);
     }
 
@@ -174,8 +175,11 @@ public sealed class CliVmTests
         return root;
     }
 
-    private sealed class FakeSelectorUi(RetroBoxBootSelectionDecision decision) : IRetroBoxBootSelectorUi
+    private sealed class ScriptedSelectorUi(params RetroBoxBootSelectionDecision[] decisions) : IRetroBoxBootSelectorUi
     {
+        private readonly RetroBoxBootSelectionDecision[] decisions = decisions;
+        private int index;
+
         public int Calls { get; private set; }
 
         public RetroBoxBootSelectionDecision Select(
@@ -183,7 +187,7 @@ public sealed class CliVmTests
             string? defaultVmId)
         {
             Calls++;
-            return decision;
+            return decisions[Math.Min(index++, decisions.Length - 1)];
         }
     }
 }

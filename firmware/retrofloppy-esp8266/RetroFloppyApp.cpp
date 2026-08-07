@@ -2,7 +2,8 @@
 #include "RetroFloppyApp.h"
 
 RetroFloppyApp::RetroFloppyApp()
-  : commandParser(), nfcModule(), serial(), commandHandler(serial, nfcModule) {}
+  : commandParser(), nfcModule(), serial(),
+    commandHandler(serial, nfcModule, [this]() { return detectFloppyBtn.read() == HIGH; }) {}
 
 void RetroFloppyApp::setup() {
   serial.setup();

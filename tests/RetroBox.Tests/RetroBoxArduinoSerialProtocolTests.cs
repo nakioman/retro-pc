@@ -97,6 +97,14 @@ public sealed class RetroBoxArduinoSerialProtocolTests
     }
 
     [Fact]
+    public void Build_status_command()
+    {
+        var command = RetroBoxArduinoSerialProtocol.BuildStatusCommand();
+
+        Assert.Equal("STATUS", command);
+    }
+
+    [Fact]
     public void Parse_pong_response()
     {
         var response = RetroBoxArduinoSerialProtocol.ParseResponse("PONG");

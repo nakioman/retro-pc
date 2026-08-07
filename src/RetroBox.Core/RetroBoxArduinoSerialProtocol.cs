@@ -70,6 +70,11 @@ public static class RetroBoxArduinoSerialProtocol
         return "PING";
     }
 
+    public static string BuildStatusCommand()
+    {
+        return "STATUS";
+    }
+
     public static NfcResponse ParseResponse(string? line)
     {
         var trimmedLine = line?.Trim();

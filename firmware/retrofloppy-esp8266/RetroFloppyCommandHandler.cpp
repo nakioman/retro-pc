@@ -1,8 +1,8 @@
 #include "RetroFloppyCommandHandler.h"
 #include "RetroFloppyCommands.h"
 
-RetroFloppyCommandHandler::RetroFloppyCommandHandler(RetroFloppySerial &port, RetroFloppyNFC &nfc)
-  : serial(port), nfcModule(nfc) {}
+RetroFloppyCommandHandler::RetroFloppyCommandHandler(RetroFloppySerial &port, RetroFloppyNFC &nfc, std::function<bool()> floppyPresent)
+  : serial(port), nfcModule(nfc), isFloppyPresent(floppyPresent) {}
 
 void RetroFloppyCommandHandler::execute(const Command &cmd) {
   switch (cmd.type) {
@@ -38,6 +38,24 @@ void RetroFloppyCommandHandler::execute(const Command &cmd) {
     case CommandType::PING:
       {
         serial.write(F("PONG"));
+        break;
+      }
+    case CommandType::STATUS:
+      {
+        if (!isFloppyPresent) {
+          serial.write(F("ERROR no-floppy-detector"));
+          break;
+        }
+        if (isFloppyPresent()) {
+          char tag[MAX_COMMAND_LENGTH + 1];
+          if (nfcModule.readTag(tag, sizeof(tag))) {
+            serial.write(F("INSERT %s"), tag);
+          } else {
+            serial.write(F("ERROR no-tag-detected"));
+          }
+        } else {
+          serial.write(F("EJECT"));
+        }
         break;
       }
     default:

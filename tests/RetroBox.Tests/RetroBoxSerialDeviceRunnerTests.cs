@@ -20,6 +20,26 @@ public sealed class RetroBoxSerialDeviceRunnerTests
     }
 
     [Fact]
+    public async Task OpenAsync_reads_events_and_writes_commands_over_one_stream()
+    {
+        var stream = new MemoryStream();
+        var seed = Encoding.UTF8.GetBytes("INSERT disk1,ro\n");
+        stream.Write(seed, 0, seed.Length);
+        stream.Seek(0, SeekOrigin.Begin);
+        var runner = new RetroBoxSerialDeviceRunner(_ => Task.FromResult<Stream>(stream));
+
+        using var device = await runner.OpenAsync();
+
+        Assert.Equal("INSERT disk1,ro", await device.Reader.ReadLineAsync());
+        await device.Writer.WriteLineAsync("STATUS");
+        await device.Writer.FlushAsync();
+
+        stream.Seek(0, SeekOrigin.Begin);
+        var content = new StreamReader(stream).ReadToEnd();
+        Assert.Equal("INSERT disk1,ro\nSTATUS\n", content);
+    }
+
+    [Fact]
     public async Task OpenReaderAsync_reports_open_failure()
     {
         var runner = new RetroBoxSerialDeviceRunner(_ => throw new IOException("no such device"));
