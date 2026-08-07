@@ -2,8 +2,7 @@
 #include "RetroFloppyApp.h"
 
 RetroFloppyApp::RetroFloppyApp()
-  : commandParser(), nfcModule(), serial(),
-    commandHandler(serial, nfcModule, [this]() { return detectFloppyBtn.read() == HIGH; }) {}
+  : commandParser(), nfcModule(), serial(), commandHandler(serial, nfcModule) {}
 
 void RetroFloppyApp::setup() {
   serial.setup();
@@ -36,6 +35,23 @@ void RetroFloppyApp::update() {
     commandHandler.execute(cmd);
   } else if (serial.read(cmdStr, sizeof(cmdStr))) {
     commandParser.readCommand(cmdStr, cmd);
-    commandHandler.execute(cmd);
+    if (cmd.type == CommandType::STATUS) {
+      handleStatus();
+    } else {
+      commandHandler.execute(cmd);
+    }
+  }
+}
+
+void RetroFloppyApp::handleStatus() {
+  if (detectFloppyBtn.read() == HIGH) {
+    char tag[MAX_COMMAND_LENGTH + 1];
+    if (nfcModule.readTag(tag, sizeof(tag))) {
+      serial.write(F("INSERT %s"), tag);
+    } else {
+      serial.write(F("ERROR no-tag-detected"));
+    }
+  } else {
+    serial.write(F("EJECT"));
   }
 }

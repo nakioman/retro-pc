@@ -112,7 +112,7 @@ INIT 1
 | --- | --- | --- |
 | `WRITE <payload>` | `OK` | `ERROR not written` |
 | `TAGID` | `Tag ID: <uid-hex>` | `ERROR no-tag-detected` |
-| `STATUS` | `INSERT <payload>` (floppy present) / `EJECT` (drive empty or no detector) | `ERROR no-tag-detected` |
+| `STATUS` | `INSERT <payload>` (floppy present) / `EJECT` (drive empty) | `ERROR no-tag-detected` |
 
 `WRITE` takes the payload verbatim — for RetroBox that is `<id>,<mode>`, e.g.
 `WRITE monkey1-disk1,ro`. The firmware only rejects payloads longer than 32
