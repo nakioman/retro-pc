@@ -16,6 +16,7 @@ on:
       - "RetroBox.slnx"
       - "mise.toml"
       - ".github/workflows/build-retrobox.yml"
+  workflow_call:
   workflow_dispatch:
 
 permissions:

@@ -11,12 +11,7 @@ public interface IBootSplash
     void Cover();
 }
 
-/// <summary>
-/// Keeps the Plymouth splash on screen until 86Box takes over the display, so
-/// no boot or 86Box text is visible between the splash and the first VM frame.
-/// Every command is best-effort: outside the appliance (or without plymouth)
-/// the calls fail silently and the terminal is simply left usable.
-/// </summary>
+/// <summary>Keeps the Plymouth splash visible until 86Box takes over, failing silently off-appliance.</summary>
 public sealed class PlymouthBootSplash : IBootSplash
 {
     public void Quit() => Run("--quit");
@@ -59,10 +54,7 @@ public sealed class PlymouthBootSplash : IBootSplash
     }
 }
 
-/// <summary>
-/// Releases the boot splash before the terminal selector renders, so the ASCII
-/// menu is visible instead of hidden behind a retained splash frame.
-/// </summary>
+/// <summary>Releases the splash before the terminal selector renders.</summary>
 public sealed class SplashQuittingSelectorUi(
     IRetroBoxBootSelectorUi inner,
     IBootSplash splash) : IRetroBoxBootSelectorUi

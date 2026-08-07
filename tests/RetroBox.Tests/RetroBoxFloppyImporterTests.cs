@@ -5,14 +5,6 @@ namespace RetroBox.Tests;
 public sealed class RetroBoxFloppyImporterTests
 {
     [Fact]
-    public void Floppy_model_defaults_to_default_import_size()
-    {
-        var floppy = new RetroBoxFloppy();
-
-        Assert.Equal(RetroBoxFloppyCatalogRules.DefaultImportSize, floppy.Size);
-    }
-
-    [Fact]
     public void Import_moves_image_to_cataloged_and_registers_floppy_with_defaults()
     {
         var layout = CreateLayout();

@@ -7,11 +7,7 @@ public interface IRetroBoxVmSocketProbe
     Task<bool> IsSocketReadyAsync(CancellationToken cancellationToken);
 }
 
-/// <summary>
-/// Treats the 86Box floppy-control socket as the VM-running signal: a
-/// successful floppy.status request means 86Box is up and accepting control
-/// commands, so the daemon can safely ask the firmware for its current state.
-/// </summary>
+/// <summary>Treats a successful floppy.status request as the signal that 86Box is accepting control.</summary>
 public sealed class RetroBoxFloppyControlSocketProbe(
     IRetroBoxFloppyControlClient floppyControlClient) : IRetroBoxVmSocketProbe
 {

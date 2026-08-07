@@ -5,10 +5,18 @@ on:
     branches: [main]
     paths:
       - "appliance/**"
+      - "src/**"
+      - "tests/**"
+      - "RetroBox.slnx"
+      - "mise.toml"
       - ".github/workflows/build-usb-installer.yml"
   pull_request:
     paths:
       - "appliance/**"
+      - "src/**"
+      - "tests/**"
+      - "RetroBox.slnx"
+      - "mise.toml"
       - ".github/workflows/build-usb-installer.yml"
   workflow_dispatch:
 
@@ -32,21 +40,22 @@ jobs:
             appliance/installer/build-usb-installer.sh \
             appliance/installer/install-retropc.sh
 
+  # Reuse the .NET build workflow so the ISO always embeds the exact code at
+  # the tested commit, not a previously published artifact.
+  retrobox-build:
+    uses: ./.github/workflows/build-retrobox.yml
+
   build:
-    needs: shellcheck
+    needs: [shellcheck, retrobox-build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest successful RetroBox build from main
-        uses: dawidd6/action-download-artifact@v9
+      - name: Download RetroBox binary from the reusable build
+        uses: actions/download-artifact@v4
         with:
-          workflow: build-retrobox.yml
-          workflow_conclusion: success
-          branch: main
           name: retrobox-linux-x64
           path: .artifacts/retrobox
-          search_artifacts: true
 
       - name: Install Debian image tooling
         run: |
@@ -78,6 +87,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
         with:
@@ -92,6 +107,14 @@ jobs:
           TAG="appliance-$(date -u +%Y%m%d)-${{ github.run_number }}"
           ISO="dist/retropc-installer-${TAG}.iso"
           mv dist/retropc-installer.iso "$ISO"
+
+          # Previous release tag: the second-most-recent GitHub release; fall back
+          # to the newest prior git tag if only one release exists so far.
+          PREV_TAG="$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || true)"
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG="$(git tag --sort=-creatordate | sed -n '2p' || true)"
+          fi
+
           {
             echo "Automated bootable USB appliance installer built from ${{ github.sha }}."
             echo
@@ -99,6 +122,25 @@ jobs:
             echo '```'
             echo "sudo dd if=$(basename "$ISO") of=/dev/sdX bs=4M status=progress"
             echo '```'
+            echo
+            if [ -z "$PREV_TAG" ]; then
+              echo "## Changes"
+              echo
+              echo "- Initial release."
+            else
+              echo "## Changes since $PREV_TAG"
+              echo
+              git log --no-merges --pretty=format:'%s' "$PREV_TAG..HEAD" | sort -u \
+                | awk '
+                    /^feat/ { feat = feat "- " $0 "\n"; next }
+                    /^fix/  { fix  = fix  "- " $0 "\n"; next }
+                    { other = other "- " $0 "\n" }
+                    END {
+                      if (feat)  { print "### Features";  print feat }
+                      if (fix)   { print "### Fixes";     print fix }
+                      if (other) { print "### Other";     print other }
+                    }'
+            fi
           } > notes.md
           gh release create "$TAG" "$ISO" \
             --repo "${{ github.repository }}" \
