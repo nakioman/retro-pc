@@ -81,7 +81,9 @@ RETROBOX_BIN=path/to/retrobox BOX86_APPIMAGE=path/to/86box.AppImage \
 
 The publish output also contains `libSystem.IO.Ports.Native.so` (NativeAOT cannot
 statically link `System.IO.Ports`); the build stages it next to the binary and
-installs it to `/opt/retrobox/`, or fails the build.
+installs it to `/opt/retrobox/` when the publish output provides it. The publish
+workflow asserts it exists; an installer built from a stale runtime artifact
+warns instead of failing.
 
 The installer copies the runtime to `/opt`, `vms.yaml` to
 `/data/retrobox/vms.yaml`, and both complete profiles to `/data/vms`. It does
