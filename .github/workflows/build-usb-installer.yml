@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   shellcheck:
@@ -39,20 +40,22 @@ jobs:
             appliance/installer/build-usb-installer.sh \
             appliance/installer/install-retropc.sh
 
+  # Reuse the .NET build workflow so the ISO always embeds the exact code at
+  # the tested commit, not a previously published artifact.
+  retrobox-build:
+    uses: ./.github/workflows/build-retrobox.yml
+
   build:
-    needs: shellcheck
+    needs: [shellcheck, retrobox-build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up mise
-        uses: jdx/mise-action@v2
-
-      - name: Install Native AOT toolchain
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev binutils
-
-      - name: Publish RetroBox Linux x64 binary
-        run: mise run publish-linux-x64
+      - name: Download RetroBox binary from the reusable build
+        uses: actions/download-artifact@v4
+        with:
+          name: retrobox-linux-x64
+          path: .artifacts/retrobox
 
       - name: Install Debian image tooling
         run: |
@@ -64,7 +67,7 @@ jobs:
 
       - name: Build installer image
         env:
-          RETROBOX_BIN: ${{ github.workspace }}/src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/retrobox
+          RETROBOX_BIN: ${{ github.workspace }}/.artifacts/retrobox/retrobox
         run: sudo -E bash appliance/installer/build-usb-installer.sh
 
       - name: Upload installer artifact

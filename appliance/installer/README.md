@@ -41,11 +41,12 @@ Remove USB and reboot            (target boots the installed appliance)
 
 ### CI (recommended)
 
-`.github/workflows/build-usb-installer.yml` runs shellcheck, publishes the
-RetroBox Linux x64 binary, builds the image on a native Linux runner, and
-uploads `retropc-installer.iso` as an artifact. The workflow publishes the
-runtime itself (instead of reusing a `build-retrobox.yml` artifact), so the ISO
-always embeds the exact code at the tested commit.
+`.github/workflows/build-usb-installer.yml` runs shellcheck, calls the
+`build-retrobox.yml` workflow as a reusable workflow to build and publish the
+RetroBox Linux x64 binary, then builds the image on a native Linux runner and
+uploads `retropc-installer.iso` as an artifact. Because the installer workflow
+invokes the .NET build itself (instead of reusing an older published artifact),
+the ISO always embeds the exact code at the tested commit.
 Download it from the workflow run, then flash it (below).
 
 ### Local (macOS / Docker)

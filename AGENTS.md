@@ -107,10 +107,11 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
 ## CI
 
 - `.github/workflows/build-retrobox.yml` — format-check, test, Native AOT
-  publish, smoke test, artifact upload.
-- `.github/workflows/build-usb-installer.yml` — shellcheck, Native AOT publish +
-  installer ISO build (the runtime is published in this workflow so the ISO
-  always embeds the current commit), release job that tags
+  publish, smoke test, artifact upload. Callable as a reusable workflow via
+  `workflow_call`.
+- `.github/workflows/build-usb-installer.yml` — shellcheck, calls the
+  `build-retrobox.yml` reusable workflow to build the runtime, installer ISO
+  build (so the ISO always embeds the current commit), release job that tags
   `appliance-YYYYMMDD-<run>` and generates grouped change notes from
   `git log` between tags.
 
