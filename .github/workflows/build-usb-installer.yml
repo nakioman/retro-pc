@@ -5,16 +5,23 @@ on:
     branches: [main]
     paths:
       - "appliance/**"
+      - "src/**"
+      - "tests/**"
+      - "RetroBox.slnx"
+      - "mise.toml"
       - ".github/workflows/build-usb-installer.yml"
   pull_request:
     paths:
       - "appliance/**"
+      - "src/**"
+      - "tests/**"
+      - "RetroBox.slnx"
+      - "mise.toml"
       - ".github/workflows/build-usb-installer.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   shellcheck:
@@ -38,15 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest successful RetroBox build from main
-        uses: dawidd6/action-download-artifact@v9
-        with:
-          workflow: build-retrobox.yml
-          workflow_conclusion: success
-          branch: main
-          name: retrobox-linux-x64
-          path: .artifacts/retrobox
-          search_artifacts: true
+      - name: Set up mise
+        uses: jdx/mise-action@v2
+
+      - name: Install Native AOT toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev binutils
+
+      - name: Publish RetroBox Linux x64 binary
+        run: mise run publish-linux-x64
 
       - name: Install Debian image tooling
         run: |
@@ -58,7 +64,7 @@ jobs:
 
       - name: Build installer image
         env:
-          RETROBOX_BIN: ${{ github.workspace }}/.artifacts/retrobox/retrobox
+          RETROBOX_BIN: ${{ github.workspace }}/src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish/retrobox
         run: sudo -E bash appliance/installer/build-usb-installer.sh
 
       - name: Upload installer artifact

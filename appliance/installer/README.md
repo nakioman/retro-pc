@@ -41,8 +41,11 @@ Remove USB and reboot            (target boots the installed appliance)
 
 ### CI (recommended)
 
-`.github/workflows/build-usb-installer.yml` runs shellcheck, builds the image on
-a native Linux runner, and uploads `retropc-installer.iso` as an artifact.
+`.github/workflows/build-usb-installer.yml` runs shellcheck, publishes the
+RetroBox Linux x64 binary, builds the image on a native Linux runner, and
+uploads `retropc-installer.iso` as an artifact. The workflow publishes the
+runtime itself (instead of reusing a `build-retrobox.yml` artifact), so the ISO
+always embeds the exact code at the tested commit.
 Download it from the workflow run, then flash it (below).
 
 ### Local (macOS / Docker)
