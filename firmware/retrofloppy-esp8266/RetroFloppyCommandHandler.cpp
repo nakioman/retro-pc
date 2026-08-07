@@ -42,19 +42,15 @@ void RetroFloppyCommandHandler::execute(const Command &cmd) {
       }
     case CommandType::STATUS:
       {
-        if (!isFloppyPresent) {
-          serial.write(F("ERROR no-floppy-detector"));
+        if (!isFloppyPresent || !isFloppyPresent()) {
+          serial.write(F("EJECT"));
           break;
         }
-        if (isFloppyPresent()) {
-          char tag[MAX_COMMAND_LENGTH + 1];
-          if (nfcModule.readTag(tag, sizeof(tag))) {
-            serial.write(F("INSERT %s"), tag);
-          } else {
-            serial.write(F("ERROR no-tag-detected"));
-          }
+        char tag[MAX_COMMAND_LENGTH + 1];
+        if (nfcModule.readTag(tag, sizeof(tag))) {
+          serial.write(F("INSERT %s"), tag);
         } else {
-          serial.write(F("EJECT"));
+          serial.write(F("ERROR no-tag-detected"));
         }
         break;
       }
