@@ -102,6 +102,20 @@ public sealed class RetroBoxBootSelectorTests
     }
 
     [Fact]
+    public void Quit_on_cancel_propagates_cancel_instead_of_running_default()
+    {
+        var root = CreateRoot("pentium100");
+        var ui = new FakeSelectorUi(new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Cancel));
+
+        var result = new RetroBoxBootSelector(new RetroBoxConfigStore(root), ui).Resolve(
+            selectorRequested: true, quitOnCancel: true);
+
+        Assert.Equal(RetroBoxBootSelectionAction.Cancel, result.Action);
+        Assert.Null(result.VmId);
+        Assert.Equal(1, ui.Calls);
+    }
+
+    [Fact]
     public void Hotkey_detector_accepts_f12_ignores_other_keys_and_times_out()
     {
         var f12 = new FakeConsoleInput(new ConsoleKeyInfo('x', ConsoleKey.F12, false, false, false));

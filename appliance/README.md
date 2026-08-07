@@ -32,6 +32,19 @@ the VM's displayed number to start it, or press `D` and then a number to set
 that VM as the default and start it immediately. `Esc` cancels; when a default
 already exists, cancellation starts that default.
 
+When a VM is closed, the selector returns so another VM can be started without
+rebooting the appliance. `Esc` on that returned selector ends the session and
+returns to the tty1 login; it does not restart the previous VM.
+
+The Plymouth boot splash stays on screen until 86Box's first frame: `retrobox
+boot` retains it right before launching a VM (so no boot or 86Box loading text
+is visible) and quits it whenever the terminal selector is shown.
+
+The floppy daemon re-syncs the drive whenever a VM starts: once the 86Box
+floppy-control socket is ready it asks the floppy controller for the current
+physical floppy (`STATUS` over serial) and applies it, so floppy swaps made
+while the VM was off are loaded when it powers on.
+
 ## Accounts and permissions
 
 The appliance uses a single account, `retrobox`.

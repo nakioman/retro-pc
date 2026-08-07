@@ -112,11 +112,18 @@ INIT 1
 | --- | --- | --- |
 | `WRITE <payload>` | `OK` | `ERROR not written` |
 | `TAGID` | `Tag ID: <uid-hex>` | `ERROR no-tag-detected` |
+| `STATUS` | `INSERT <payload>` (floppy present) / `EJECT` (drive empty) | `ERROR no-tag-detected` |
 
 `WRITE` takes the payload verbatim — for RetroBox that is `<id>,<mode>`, e.g.
 `WRITE monkey1-disk1,ro`. The firmware only rejects payloads longer than 32
 bytes; it does not validate the `<id>,<mode>` shape, so the host is responsible
 for sending a well-formed payload.
+
+`STATUS` reports the drive's current physical state on demand, reusing the same
+event lines as the unsolicited insert/eject notifications so the daemon can
+re-sync a VM that just started without extra parsing. It reads the debounced
+disk-present switch and, when a floppy is seated, reads the NFC tag at that
+instant.
 
 Any other non-empty line is echoed back as `ERROR <line>`.
 

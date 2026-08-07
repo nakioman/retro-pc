@@ -25,11 +25,12 @@ public static class CliCommandFactory
         Func<RetroBoxBootCommandRequest, int>? bootRunner = null,
         IRetroBoxBootHotkeyDetector? hotkeyDetector = null,
         IRetroBoxBootSelectorUi? selectorUi = null,
-        Func<string, IRetroBoxNfcClient>? nfcClientFactory = null)
+        Func<string, IRetroBoxNfcClient>? nfcClientFactory = null,
+        IBootSplash? bootSplash = null)
     {
         var rootCommand = new RootCommand("Retro PC appliance control tool.");
 
-        rootCommand.Subcommands.Add(CreateBootCommand(bootRunner, hotkeyDetector, selectorUi));
+        rootCommand.Subcommands.Add(CreateBootCommand(bootRunner, hotkeyDetector, selectorUi, bootSplash));
         rootCommand.Subcommands.Add(CreateDaemonCommand(daemonRunner));
         rootCommand.Subcommands.Add(CreateVmCommand());
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
@@ -106,9 +107,9 @@ public static class CliCommandFactory
                 var runner = serialOptions is null
                     ? null
                     : new RetroBoxSerialDeviceRunner(serialOptions.Port, serialOptions.Baud);
-                using var reader = runner is null
+                using var device = runner is null
                     ? null
-                    : runner.OpenReaderAsync().GetAwaiter().GetResult();
+                    : runner.OpenAsync().GetAwaiter().GetResult();
 
                 using var cancellation = new CancellationTokenSource();
                 Console.CancelKeyPress += (_, e) =>
@@ -120,9 +121,10 @@ public static class CliCommandFactory
                 var daemon = new RetroBoxDaemon(
                     catalog,
                     client,
-                    reader ?? Console.In,
+                    device?.Reader ?? Console.In,
                     Console.Out,
-                    request.Echo);
+                    request.Echo,
+                    device?.Writer);
 
                 return daemon.RunAsync(cancellation.Token).GetAwaiter().GetResult();
             }
@@ -214,7 +216,8 @@ public static class CliCommandFactory
     private static Command CreateBootCommand(
         Func<RetroBoxBootCommandRequest, int>? bootRunner,
         IRetroBoxBootHotkeyDetector? hotkeyDetector,
-        IRetroBoxBootSelectorUi? selectorUi)
+        IRetroBoxBootSelectorUi? selectorUi,
+        IBootSplash? bootSplash)
     {
         var configRootOption = ConfigRootOption();
         var binaryOption = new Option<string>("--binary")
@@ -241,6 +244,7 @@ public static class CliCommandFactory
         };
         command.SetAction(parseResult =>
         {
+            var splash = bootSplash ?? new PlymouthBootSplash();
             try
             {
                 var configRoot = parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath;
@@ -248,51 +252,74 @@ public static class CliCommandFactory
                 var dryRun = parseResult.GetValue(dryRunOption);
                 var selectorRequested = parseResult.GetValue(selectorOption);
                 var explicitVmId = parseResult.GetValue(selectOption);
-                if (!dryRun && explicitVmId is null && !selectorRequested)
-                {
-                    selectorRequested = (hotkeyDetector ?? new RetroBoxBootHotkeyDetector(
-                        new RetroBoxConsoleInput(), new RetroBoxBootClock())).IsSelectorRequested();
-                }
+                var ui = new SplashQuittingSelectorUi(selectorUi ?? new RetroBoxConsoleSelector(), splash);
+                var bootSelector = new RetroBoxBootSelector(store, ui);
+                var firstPass = true;
 
-                var catalog = store.Load();
-                var ui = selectorUi ?? new RetroBoxConsoleSelector();
-                var selection = new RetroBoxBootSelector(store, ui).Resolve(
-                    catalog,
-                    explicitVmId,
-                    selectorRequested,
-                    persistDefault: !dryRun);
-                var vmId = selection.VmId
-                    ?? throw new RetroBoxCatalogException("No VM was selected.");
-                var vm = catalog.Vms[vmId];
-                if (!Directory.Exists(vm.Path))
+                while (true)
                 {
-                    throw new RetroBoxCatalogException($"VM '{vmId}' profile directory '{vm.Path}' does not exist.");
-                }
+                    if (firstPass && !dryRun && explicitVmId is null && !selectorRequested)
+                    {
+                        selectorRequested = (hotkeyDetector ?? new RetroBoxBootHotkeyDetector(
+                            new RetroBoxConsoleInput(), new RetroBoxBootClock())).IsSelectorRequested();
+                    }
 
-                var configPath = Path.Combine(vm.Path, "86box.cfg");
-                if (!File.Exists(configPath))
-                {
-                    throw new RetroBoxCatalogException($"VM '{vmId}' profile is invalid: '{configPath}' does not exist.");
-                }
-                var request = new RetroBoxBootCommandRequest(
-                    configRoot,
-                    parseResult.GetValue(binaryOption) ?? RetroBoxBoot.DefaultBinaryPath,
-                    parseResult.GetValue(romPathOption) ?? RetroBoxBoot.DefaultRomPath,
-                    vmId,
-                    vm.Path);
+                    var catalog = store.Load();
+                    var selection = bootSelector.Resolve(
+                        catalog,
+                        explicitVmId,
+                        selectorRequested,
+                        persistDefault: !dryRun,
+                        quitOnCancel: !firstPass);
+                    if (selection.Action == RetroBoxBootSelectionAction.Cancel)
+                    {
+                        return 0;
+                    }
 
-                if (dryRun)
-                {
-                    parseResult.InvocationConfiguration.Output.WriteLine($"{request.VmId}\t{vm.Label}\t{request.VmPath}");
-                    return 0;
-                }
+                    var vmId = selection.VmId
+                        ?? throw new RetroBoxCatalogException("No VM was selected.");
+                    var vm = catalog.Vms[vmId];
+                    if (!Directory.Exists(vm.Path))
+                    {
+                        throw new RetroBoxCatalogException($"VM '{vmId}' profile directory '{vm.Path}' does not exist.");
+                    }
 
-                return bootRunner is null
-                    ? RetroBoxBoot.Run(new RetroBoxBootRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath))
-                    : bootRunner(request);
+                    var configPath = Path.Combine(vm.Path, "86box.cfg");
+                    if (!File.Exists(configPath))
+                    {
+                        throw new RetroBoxCatalogException($"VM '{vmId}' profile is invalid: '{configPath}' does not exist.");
+                    }
+                    var request = new RetroBoxBootCommandRequest(
+                        configRoot,
+                        parseResult.GetValue(binaryOption) ?? RetroBoxBoot.DefaultBinaryPath,
+                        parseResult.GetValue(romPathOption) ?? RetroBoxBoot.DefaultRomPath,
+                        vmId,
+                        vm.Path);
+
+                    if (dryRun)
+                    {
+                        parseResult.InvocationConfiguration.Output.WriteLine($"{request.VmId}\t{vm.Label}\t{request.VmPath}");
+                        return 0;
+                    }
+
+                    splash.Cover();
+                    var exitCode = bootRunner is null
+                        ? RetroBoxBoot.Run(new RetroBoxBootRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath))
+                        : bootRunner(request);
+
+                    if (explicitVmId is not null)
+                    {
+                        return exitCode;
+                    }
+
+                    firstPass = false;
+                    explicitVmId = null;
+                    selectorRequested = true;
+                }
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
+                splash.Quit();
                 return WriteError(parseResult, ex);
             }
         });

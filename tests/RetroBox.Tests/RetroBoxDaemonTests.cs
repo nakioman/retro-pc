@@ -220,12 +220,120 @@ public sealed class RetroBoxDaemonTests
         Assert.Empty(client.Calls);
     }
 
+    [Fact]
+    public async Task RunAsync_sends_status_when_socket_ready_and_applies_response()
+    {
+        var client = new RecordingFloppyControlClient();
+        var serialOutput = new StringWriter();
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            client,
+            new StringReader("INSERT disk1,ro\n"),
+            new StringWriter(),
+            serialOutput: serialOutput,
+            socketProbe: new ScriptedSocketProbe(true));
+
+        var exitCode = await daemon.RunAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("STATUS\n", serialOutput.ToString());
+        Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
+    }
+
+    [Fact]
+    public async Task RunAsync_without_serial_output_does_not_query_socket()
+    {
+        var client = new RecordingFloppyControlClient();
+        var probe = new ScriptedSocketProbe(false);
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            client,
+            new StringReader("INSERT disk1,ro\n"),
+            new StringWriter(),
+            socketProbe: probe);
+
+        var exitCode = await daemon.RunAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, probe.Calls);
+        Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_queries_status_once_per_down_to_up_transition()
+    {
+        var serialOutput = new StringWriter();
+        using var cancellation = new CancellationTokenSource();
+
+        var watch = RetroBoxDaemon.WatchSocketAsync(
+            new ScriptedSocketProbe(false, true, true),
+            serialOutput,
+            TimeSpan.FromMilliseconds(5),
+            cancellation.Token);
+        await Task.Delay(100);
+        cancellation.Cancel();
+        await watch;
+
+        Assert.Equal("STATUS\n", serialOutput.ToString());
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_queries_status_again_after_socket_goes_down()
+    {
+        var serialOutput = new StringWriter();
+        using var cancellation = new CancellationTokenSource();
+
+        var watch = RetroBoxDaemon.WatchSocketAsync(
+            new ScriptedSocketProbe(true, false, true, true),
+            serialOutput,
+            TimeSpan.FromMilliseconds(5),
+            cancellation.Token);
+        await Task.Delay(100);
+        cancellation.Cancel();
+        await watch;
+
+        Assert.Equal("STATUS\nSTATUS\n", serialOutput.ToString());
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_does_not_probe_without_serial_output()
+    {
+        var probe = new ScriptedSocketProbe(true);
+        using var cancellation = new CancellationTokenSource();
+
+        var watch = RetroBoxDaemon.WatchSocketAsync(
+            probe,
+            null,
+            TimeSpan.FromMilliseconds(5),
+            cancellation.Token);
+        await Task.Delay(50);
+        cancellation.Cancel();
+        await watch;
+
+        Assert.Equal(0, probe.Calls);
+    }
+
     private sealed class BlockingTextReader : TextReader
     {
         public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return null;
+        }
+    }
+
+    private sealed class ScriptedSocketProbe(params bool[] results) : IRetroBoxVmSocketProbe
+    {
+        private readonly bool[] results = results;
+        private int index;
+
+        public int Calls { get; private set; }
+
+        public Task<bool> IsSocketReadyAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            var value = results.Length == 0 ? false : results[Math.Min(index++, results.Length - 1)];
+            return Task.FromResult(value);
         }
     }
 

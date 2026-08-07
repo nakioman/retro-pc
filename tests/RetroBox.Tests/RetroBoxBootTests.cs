@@ -20,7 +20,7 @@ public sealed class RetroBoxBootTests
         var binary = Path.Combine(root, "86box-test.sh");
         var vmPath = Path.Combine(root, "vm");
         Directory.CreateDirectory(vmPath);
-        File.WriteAllText(binary, $"#!/bin/sh\npwd > '{output}'\nprintf '%s\\n' \"$@\" >> '{output}'\n");
+        File.WriteAllText(binary, $"#!/bin/sh\nprintf 'child stdout noise\\n'\npwd > '{output}'\nprintf '%s\\n' \"$@\" >> '{output}'\n");
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(binary, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

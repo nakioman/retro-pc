@@ -10,7 +10,8 @@ const VerbEntry VERB_TABLE[] = {
   { "WRITE", CommandType::WRITE },
   { "INSERT", CommandType::INSERT },
   { "TAGID", CommandType::TAGID },
-  { "PING", CommandType::PING }
+  { "PING", CommandType::PING },
+  { "STATUS", CommandType::STATUS }
 };
 
 void copyRaw(char* dest, const char* src) {

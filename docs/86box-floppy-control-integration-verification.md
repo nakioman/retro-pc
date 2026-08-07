@@ -120,6 +120,22 @@ printf '{"id":"malformed","command":"floppy.status","params":{}\n' | nc -U "$SOC
 Expected: the server returns a structured failure when it can parse enough request context, or closes the client connection after the malformed JSON frame as allowed by the contract.
 86Box must keep running.
 
+## VM Start Floppy Re-sync
+
+When the daemon runs against the real floppy controller (`--serial-port`), it
+polls the 86Box socket and sends `STATUS` to the firmware as soon as the socket
+becomes ready. The firmware replies with `INSERT <id>` or `EJECT`, which the
+daemon applies like a normal event, so floppy swaps made while 86Box was off
+are loaded when the VM powers on.
+
+To verify:
+
+1. Start the daemon with the serial device and the local socket.
+2. Power on a VM and confirm, in the daemon journal, a status request followed
+   by an insert/eject diagnostic matching the physical floppy in the drive.
+3. Power the VM off, swap the floppy, and power it back on: the journal shows a
+   second insert/eject applying the new floppy, and the guest sees it loaded.
+
 ## Closeout Evidence
 
 Record these observations before closing `nakioman/retro-pc#6`:

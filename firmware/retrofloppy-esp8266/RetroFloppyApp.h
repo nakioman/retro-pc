@@ -22,6 +22,8 @@ class RetroFloppyApp {
     RetroFloppySerial serial;
     RetroFloppyCommandHandler commandHandler;
 
+    void handleStatus();
+
   public:
     RetroFloppyApp();
 

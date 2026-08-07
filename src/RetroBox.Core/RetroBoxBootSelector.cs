@@ -23,16 +23,18 @@ public sealed class RetroBoxBootSelector(RetroBoxConfigStore store, IRetroBoxBoo
     public RetroBoxBootSelectionDecision Resolve(
         string? explicitVmId = null,
         bool selectorRequested = false,
-        bool persistDefault = true)
+        bool persistDefault = true,
+        bool quitOnCancel = false)
     {
-        return Resolve(store.Load(), explicitVmId, selectorRequested, persistDefault);
+        return Resolve(store.Load(), explicitVmId, selectorRequested, persistDefault, quitOnCancel);
     }
 
     public RetroBoxBootSelectionDecision Resolve(
         RetroBoxCatalogData catalog,
         string? explicitVmId = null,
         bool selectorRequested = false,
-        bool persistDefault = true)
+        bool persistDefault = true,
+        bool quitOnCancel = false)
     {
         var virtualMachines = catalog.Vms
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
@@ -61,6 +63,11 @@ public sealed class RetroBoxBootSelector(RetroBoxConfigStore store, IRetroBoxBoo
         var decision = selectorUi.Select(virtualMachines, defaultVmId);
         if (decision.Action == RetroBoxBootSelectionAction.Cancel)
         {
+            if (quitOnCancel)
+            {
+                return decision;
+            }
+
             if (defaultVmId is not null)
             {
                 return new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Run, defaultVmId);

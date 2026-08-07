@@ -3,6 +3,12 @@ Description=RetroBox fullscreen boot launcher (default VM / F12 selector)
 Documentation=https://github.com/nakioman/retro-pc
 RequiresMountsFor=/data
 After=local-fs.target retrobox-daemon.service
+# Keep the Plymouth splash on screen until this session is done: stock
+# plymouth-quit.service runs before multi-user.target, which would expose boot
+# text and 86Box loading output before the VM's first frame. `retrobox boot`
+# retains the splash right before 86Box starts and quits it before the selector.
+After=plymouth-start.service
+Before=plymouth-quit.service
 # Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
 # path and leaves a normal login on tty1 for maintenance.
 ConditionKernelCommandLine=!retropc.norun
@@ -21,7 +27,13 @@ StandardInput=tty
 StandardOutput=tty
 StandardError=journal
 # `retrobox boot` owns VM selection: it starts the default VM after a one-second
-# F12 window, or opens the selector when F12 is pressed.
+# F12 window, or opens the selector when F12 is pressed. When a VM closes it
+# returns to the selector; pressing Esc in that selector ends the session and
+# leaves a normal login on tty1.
+#
+# The CLI controls the splash: it covers (retains) the splash right before
+# launching 86Box so no text is visible until the VM's first frame, and quits
+# it whenever the terminal selector is shown or the session fails.
 ExecStart=/opt/retrobox/retrobox boot
 Restart=on-failure
 RestartSec=3

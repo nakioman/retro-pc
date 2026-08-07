@@ -14,7 +14,8 @@ enum class CommandType {
   ERROR,
   TAGID,
   EJECT,
-  PING
+  PING,
+  STATUS
 };
 
 struct Command {
