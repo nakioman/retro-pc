@@ -1,0 +1,23 @@
+# Normalize line endings for text files (complements .editorconfig)
+* text=auto
+
+# Shell scripts must keep LF; CI runs shellcheck.
+*.sh text eol=lf
+
+# Generated/dependent files that should not be normalized or diffed loosely.
+*.cs text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Firmware library files (vendored) — keep LF.
+*.ino text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+
+# Binary artifacts.
+*.vhd binary
+*.dll binary
+*.pdb binary
+*.png binary
+*.glsl text
