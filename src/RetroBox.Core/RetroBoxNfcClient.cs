@@ -63,11 +63,6 @@ public sealed class RetroBoxNfcSerialClient : IRetroBoxNfcClient
             {
                 port.Open();
 
-                // Many Arduino/ESP8266 boards auto-reset when the serial line is
-                // opened and emit a boot banner (e.g. "READY retrofloppy-esp8266
-                // 0.1") shortly after. Give the device a brief settle window and
-                // drop any pending input so the next line the host reads is the
-                // response to its own command, not the banner.
                 try
                 {
                     await Task.Delay(OpenSettleDelay, ct);
@@ -82,8 +77,6 @@ public sealed class RetroBoxNfcSerialClient : IRetroBoxNfcClient
                 }
                 catch
                 {
-                    // DiscardInBuffer may fail on some backends; non-fatal - the
-                    // protocol read loop additionally skips non-response lines.
                 }
 
                 return new SerialPortStream(port);
@@ -127,9 +120,6 @@ public sealed class RetroBoxNfcSerialClient : IRetroBoxNfcClient
 
             using var reader = new StreamReader(stream, leaveOpen: true);
 
-            // Read until a known protocol response (PONG/OK/ERROR) arrives,
-            // skipping boot banners, debug lines, or partial junk that the
-            // device may emit before replying to our command.
             while (true)
             {
                 string? line;

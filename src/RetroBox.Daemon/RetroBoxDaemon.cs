@@ -73,14 +73,7 @@ public sealed class RetroBoxDaemon(
         return exitCode;
     }
 
-    /// <summary>
-    /// Polls the 86Box floppy-control socket and asks the firmware for its
-    /// current physical floppy state (STATUS) whenever the socket becomes
-    /// available, so a VM that just started (or the daemon itself) re-syncs the
-    /// drive instead of losing floppy swaps made while 86Box was down. The
-    /// firmware's INSERT/EJECT reply is a normal protocol event and is handled
-    /// by the daemon's regular input loop.
-    /// </summary>
+    /// <summary>Re-syncs the physical floppy with the VM whenever the 86Box socket becomes available.</summary>
     internal static async Task WatchSocketAsync(
         IRetroBoxVmSocketProbe probe,
         TextWriter? serialOutput,

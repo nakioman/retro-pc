@@ -213,11 +213,7 @@ public sealed class RetroBoxSerialDeviceRunner
     }
 }
 
-/// <summary>
-/// A single opened serial device, exposing one reader and one writer over the
-/// same port so the daemon can receive events and send commands without
-/// re-opening the device.
-/// </summary>
+/// <summary>A single opened serial device exposing one reader and one writer over the same port.</summary>
 public sealed class RetroBoxSerialDevice : IDisposable
 {
     private readonly Stream stream;

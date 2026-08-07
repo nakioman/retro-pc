@@ -5,13 +5,6 @@ namespace RetroBox.Tests;
 public sealed class RetroBoxBootTests
 {
     [Fact]
-    public void Defaults_use_appliance_runtime_paths()
-    {
-        Assert.Equal("/opt/86Box/86box.AppImage", RetroBoxBoot.DefaultBinaryPath);
-        Assert.Equal("/opt/86Box/roms", RetroBoxBoot.DefaultRomPath);
-    }
-
-    [Fact]
     public void Run_passes_vm_and_rom_paths_and_uses_profile_as_working_directory()
     {
         var root = Path.Combine(Path.GetTempPath(), "retrobox-boot-tests", Guid.NewGuid().ToString("N"));

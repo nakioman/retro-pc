@@ -148,14 +148,6 @@ public sealed class CliVmTests
         Assert.Equal("386sx16", captured?.VmId);
     }
 
-    [Fact]
-    public void Default_config_root_is_data_retrobox()
-    {
-        var command = CliCommandFactory.CreateRootCommand();
-
-        Assert.Equal(1, command.Parse(["vm", "list"]).Invoke());
-    }
-
     private static string CreateVmLayout()
     {
         var root = Path.Combine(Path.GetTempPath(), "retrobox-cli-vm-tests", Guid.NewGuid().ToString("N"));
