@@ -16,8 +16,12 @@ WiFi is handled by **systemd-networkd v256's native `[WiFi]` section** for
 WPA2-PSK; there is no `wpa_supplicant`. The PSK is written as
 `PreSharedKey=<plain>` into the materialized `.network` file.
 
-- `linux-firmware` (the mega-bundle) is installed so Realtek, Atheros, and other
-  chipsets work without per-vendor package selection.
+- `firmware-realtek` (from the `non-free-firmware` component) is installed so
+  Realtek dongles — including the TP-Link 2.4GHz USB with the in-tree rtw88
+  driver — work out of the box. The narrower `firmware-realtek` keeps the
+  squashfs slim compared to Ubuntu's `linux-firmware` mega-bundle, which has
+  no direct Debian equivalent (Debian's source package `firmware-nonfree`
+  builds per-vendor binaries separately).
 - A first-boot `dialog` prompt (SSID + password with confirmation) collects the
   credentials, gated on a `wl*` interface existing and a marker file being
   absent. Later boots skip the prompt.
@@ -34,8 +38,10 @@ WPA2-PSK; there is no `wpa_supplicant`. The PSK is written as
   consistent with the current posture of `/data`).
 - `PRESERVE_DATA` already retains `/data` across reinstalls, so credentials
   survive a reinstall.
-- `linux-firmware` inflates the squashfs by roughly 600MB; splitting the bundle
-  per chipset is future work.
+- `firmware-realtek` is small (the Realtek blobs only) so the squashfs stays
+  modest; adding `firmware-iwlwifi` / `firmware-atheros` later is a one-line
+  change in `packages.txt` plus the `non-free-firmware` component already
+  enabled in `build-usb-installer.sh`.
 - There is no bash test suite in the repo (no bats-core); the script's packaging
   is verifiable through the installer smoke test.
 

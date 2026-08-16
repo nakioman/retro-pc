@@ -17,8 +17,8 @@ generated from this history; see
 - GitHub issue and pull request templates.
 - First-boot WiFi configuration: detects a `wl*` interface, prompts for SSID
   and password with `dialog`, and persists credentials under `/data/system/`.
-  Bundles `linux-firmware` for Realtek and Atheros USB dongles; uses
-  systemd-networkd's native `[WiFi]` (no `wpa_supplicant`).
+  Bundles `firmware-realtek` (from `non-free-firmware`) for Realtek USB
+  dongles, and uses systemd-networkd's native `[WiFi]` (no `wpa_supplicant`).
 
 ### Removed
 

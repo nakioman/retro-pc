@@ -44,9 +44,12 @@ iproute2
 util-linux
 pciutils
 
-# WiFi (first-boot configured via systemd-networkd [WiFi] + dialog)
+# WiFi (first-boot configured via systemd-networkd [WiFi] + dialog).
+# firmware-realtek ships the rtw88/rtw88xx blobs for the TPLink 2.4GHz dongle
+# under the non-free-firmware component, which the installer enables via
+# mmdebstrap --components=main,non-free-firmware.
 dialog
-linux-firmware
+firmware-realtek
 
 ca-certificates
 

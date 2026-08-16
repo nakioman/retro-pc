@@ -80,8 +80,10 @@ the read-only root is untouched. The prompt runs once; later boots reconnect
 from the saved credentials.
 
 Reconfiguring WiFi is manual: edit `/data/system/wifi.conf` and remove
-`/data/system/wifi-configured`, then reboot. `linux-firmware` is bundled, so
-Realtek and Atheros USB dongles work out of the box without extra packages.
+`/data/system/wifi-configured`, then reboot. `firmware-realtek` is bundled
+(from the `non-free-firmware` component), so Realtek USB dongles — including
+the TP-Link 2.4GHz and similar rtw88/rtl8188/rtl8192 devices — work out of
+the box without extra packages.
 
 ## Persistent and immutable state
 

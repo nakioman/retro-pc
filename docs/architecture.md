@@ -31,7 +31,9 @@ power on
 On the first boot with a USB WiFi NIC attached, `retrobox-wifi-firstboot`
 prompts for the network credentials on tty1 before `retrobox boot` takes over;
 every boot it materializes the networkd `[WiFi]` config into `/run` from
-`/data/system/wifi.conf` (see `0005`).
+`/data/system/wifi.conf`. `firmware-realtek` (from the `non-free-firmware`
+component) is bundled so Realtek USB dongles work without extra packages
+(see `0005`).
 
 A long-lived daemon (`retrobox daemon`) supervises floppy hardware during the
 session:
