@@ -69,6 +69,20 @@ The Samba share must not expose the complete `/data` tree. Imported images are
 moved by `retrobox` into `/data/floppies/cataloged/`; cataloged images,
 configuration, VM disks, and snapshots are not general-purpose network shares.
 
+## WiFi
+
+The appliance detects a `wl*` interface at boot (`retrobox-wifi-firstboot`).
+With no WiFi NIC, wired DHCP is the only network path. When a WiFi NIC is present
+the first boot prompts for the SSID and password on tty1 with `dialog`, persists
+them to `/data/system/wifi.conf` (root:root, 0600), and materializes a
+systemd-networkd `[WiFi]` config in `/run/systemd/network/30-wifi.network` so
+the read-only root is untouched. The prompt runs once; later boots reconnect
+from the saved credentials.
+
+Reconfiguring WiFi is manual: edit `/data/system/wifi.conf` and remove
+`/data/system/wifi-configured`, then reboot. `linux-firmware` is bundled, so
+Realtek and Atheros USB dongles work out of the box without extra packages.
+
 ## Persistent and immutable state
 
 The intended appliance model is a read-only root filesystem with persistent

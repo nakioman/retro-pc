@@ -43,6 +43,11 @@ procps
 iproute2
 util-linux
 pciutils
+
+# WiFi (first-boot configured via systemd-networkd [WiFi] + dialog)
+dialog
+linux-firmware
+
 ca-certificates
 
 # Deliberately excluded from this base manifest:

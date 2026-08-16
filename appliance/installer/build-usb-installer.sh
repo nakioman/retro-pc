@@ -205,7 +205,10 @@ unsquashfs -s "$ISO/install/target-rootfs.squashfs" >/dev/null \
     || die "target-rootfs.squashfs is not a valid squashfs."
 # List once to a file and grep the file (no pipe -> no pipefail/SIGPIPE surprise).
 unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
-for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; do
+# The rtw88 firmware file confirms linux-firmware was bundled (the TP-Link dongle
+# uses the in-tree rtw88 driver); rtw8822c_fw.bin is stable across suites.
+for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
+           usr/bin/dialog usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
 done
