@@ -30,10 +30,11 @@ power on
 
 On the first boot with a USB WiFi NIC attached, `retrobox-wifi-firstboot`
 prompts for the network credentials on tty1 before `retrobox boot` takes over;
-every boot it materializes the networkd `[WiFi]` config into `/run` from
-`/data/system/wifi.conf`. `firmware-realtek` (from the `non-free-firmware`
-component) is bundled so Realtek USB dongles work without extra packages
-(see `0005`).
+every boot it materializes the wpa_supplicant config and a slim networkd
+`/run/systemd/network/30-wifi.network` from `/data/system/wifi.conf`. The
+supplicant does the WPA2-PSK association (systemd-networkd has no native
+support); `firmware-realtek` (from the `non-free-firmware` component) is
+bundled so Realtek USB dongles work without extra packages (see `0005`).
 
 A long-lived daemon (`retrobox daemon`) supervises floppy hardware during the
 session:
@@ -170,4 +171,4 @@ Recorded in [`docs/decisions/`](decisions/README.md). Notable entries:
 - `0002` — appliance uses a read-only root with persistent `/data`.
 - `0003` — the 86Box `.cfg` is the hardware source of truth; YAML is metadata.
 - `0004` — NFC tags carry raw bytes, not NDEF.
-- `0005` — appliance supports WiFi via systemd-networkd `[WiFi]` and a first-boot dialog.
+- `0005` — appliance supports WiFi via `wpa_supplicant` + systemd-networkd (DHCP) and a first-boot dialog.

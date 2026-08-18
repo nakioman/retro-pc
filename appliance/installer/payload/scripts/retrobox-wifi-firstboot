@@ -2,10 +2,10 @@
 # First-boot WiFi configuration for the RetroBox appliance.
 #
 # Detects a wl* interface, prompts for SSID + password on first boot with
-# dialog, persists them to /data/system/wifi.conf, and materializes a
-# systemd-networkd [WiFi] config into /run/systemd/network so the read-only
-# root is never written at runtime. The prompt runs once; every boot the
-# networkd file is regenerated from the persisted credentials.
+# dialog, persists them to /data/system/wifi.conf, and materializes the
+# wpa_supplicant config + a slim systemd-networkd config into /run so the
+# read-only root is never written at runtime. The prompt runs once; every
+# boot the /run files are regenerated from the persisted credentials.
 set -Eeuo pipefail
 
 # --- Logging (mirrors appliance/installer/lib/common.sh) --------------------
@@ -41,9 +41,9 @@ mkdir -p "$WIFI_CONF_DIR"
 # --- First-boot prompt -------------------------------------------------------
 
 if [ ! -f "$CREDS" ] || [ ! -f "$MARKER" ]; then
-    # Plymouth owns the splash until retrobox-boot.service; quit it before we
-    # prompt so the dialog is visible.
-    plymouth quit --retain-splash 2>/dev/null || true
+    # Plymouth owns the framebuffer; full quit (no --retain-splash) so the
+    # dialog can draw on tty1.
+    plymouth quit 2>/dev/null || true
 
     SSID=""
     while [ -z "$SSID" ]; do
@@ -82,31 +82,68 @@ if [ ! -f "$CREDS" ] || [ ! -f "$MARKER" ]; then
     unset PSK PSK2
 fi
 
-# --- Materialize the systemd-networkd [WiFi] config -------------------------
+# --- Materialize the wpa_supplicant + systemd-networkd config ---------------
 
-_materialize_network_file() {
-    # Read key=value lines instead of sourcing: an SSID like "Home WiFi" is
-    # valid and common, and sourcing would word-split it.
-    SSID=""
-    PSK=""
-    while IFS= read -r line; do
-        case "$line" in
-            SSID=*) SSID=${line#SSID=} ;;
-            PSK=*)  PSK=${line#PSK=} ;;
-        esac
-    done < "$CREDS"
-    [ -n "$SSID" ] || die "wifi.conf is missing SSID"
-    [ -n "$PSK" ] || die "wifi.conf is missing PSK"
-    mkdir -p "$NETWORKD_DIR"
-    {
-        printf '[Match]\nName=wl*\n\n[Network]\nDHCP=yes\n\n[WiFi]\n'
-        printf 'SSID=%s\n' "$SSID"
-        printf 'PreSharedKey=%s\n' "$PSK"
-    } > "$NETWORKD_FILE"
-    chmod 0644 "$NETWORKD_FILE"
+# Resolve the real interface name. systemd-networkd's [Match] uses globs but
+# wpa_supplicant needs the exact name. Glob matches wlan0 / wlpXsYuZ / wlx<mac>.
+# shellcheck disable=SC2012 # intentional glob resolution of the wl* interface
+IFACE=$(ls -d /sys/class/net/wl* 2>/dev/null | head -n1) || true
+IFACE=${IFACE##*/}
+[ -n "$IFACE" ] || die "no wl* interface found despite detection probe"
+
+# Read SSID/PSK from wifi.conf (unchanged parser).
+SSID=""; PSK=""
+while IFS= read -r line; do
+    case "$line" in
+        SSID=*) SSID=${line#SSID=} ;;
+        PSK=*)  PSK=${line#PSK=} ;;
+    esac
+done < "$CREDS"
+[ -n "$SSID" ] || die "wifi.conf is missing SSID"
+[ -n "$PSK" ]  || die "wifi.conf is missing PSK"
+
+# C-style escape for double-quote and backslash so the wpa_supplicant config
+# stays valid when SSID/PSK contain those characters.
+_wpa_escape() {
+    printf '%s' "$1" | sed 's/["\\]/\\&/g'
 }
 
-_materialize_network_file
+# 1) wpa_supplicant config — /run, regenerated every boot.
+mkdir -p /run/wpa_supplicant
+{
+    printf 'ctrl_interface=DIR=/run/wpa_supplicant GROUP=root\n'
+    printf 'update_config=1\n'
+    printf 'network={\n'
+    printf '\tssid="%s"\n' "$(_wpa_escape "$SSID")"
+    printf '\tpsk="%s"\n' "$(_wpa_escape "$PSK")"
+    printf '\tkey_mgmt=WPA-PSK\n'
+    printf '}\n'
+} > /run/wpa_supplicant/wifi.conf
+chmod 0600 /run/wpa_supplicant/wifi.conf
 
+# 2) Supervised supplicant unit, also under /run/systemd (re-materialized
+#    every boot; systemd loads units from /run/systemd/system).
+mkdir -p /run/systemd/system
+{
+    printf '[Unit]\n'
+    printf 'Description=RetroBox WiFi supplicant (%s)\n' "$IFACE"
+    printf 'After=systemd-networkd.service\n\n'
+    printf '[Service]\n'
+    printf 'Type=simple\n'
+    printf 'ExecStart=/sbin/wpa_supplicant -D nl80211 -i %s -c /run/wpa_supplicant/wifi.conf\n' "$IFACE"
+    printf 'Restart=on-failure\n'
+    printf 'RestartSec=5\n'
+} > /run/systemd/system/wpa-wifi.service
+chmod 0644 /run/systemd/system/wpa-wifi.service
+
+# 3) networkd config — note: NO [WiFi] section; systemd.network has no such
+#    section and no PreSharedKey= key (match-only SSID= lives in [Match]).
+{
+    printf '[Match]\nName=wl*\n\n[Network]\nDHCP=yes\n'
+} > "$NETWORKD_FILE"
+chmod 0644 "$NETWORKD_FILE"
+
+systemctl daemon-reload
+systemctl restart wpa-wifi.service
 systemctl restart systemd-networkd.service
-log "WiFi configured for $SSID."
+log "WiFi configured for $SSID on $IFACE."

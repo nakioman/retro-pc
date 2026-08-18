@@ -55,8 +55,8 @@ application data, and network shares never expose it.
 written by `retrobox-wifi-firstboot.service` on the first boot that detects a
 `wl*` interface. `/data/system/wifi-configured` (0644) marks that the prompt has
 run; removing it re-arms the prompt. The same unit materializes the
-systemd-networkd config into `/run/systemd/network/30-wifi.network` every boot,
-so `/etc` is never written at runtime.
+wpa_supplicant config, the transient `wpa-wifi.service`, and the networkd
+config into `/run` every boot, so `/etc` is never written at runtime.
 
 The current `retrobox` code uses these paths directly:
 

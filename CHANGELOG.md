@@ -18,7 +18,8 @@ generated from this history; see
 - First-boot WiFi configuration: detects a `wl*` interface, prompts for SSID
   and password with `dialog`, and persists credentials under `/data/system/`.
   Bundles `firmware-realtek` (from `non-free-firmware`) for Realtek USB
-  dongles, and uses systemd-networkd's native `[WiFi]` (no `wpa_supplicant`).
+  dongles, and uses `wpa_supplicant` + systemd-networkd (DHCP) for the
+  connection.
 
 ### Removed
 
