@@ -33,6 +33,9 @@ RetroBox is built from four parts that live in this repository:
 - **Read-only-root appliance.** The installed system is a minimal Debian 13 with
   immutable root and persistent state under `/data`. See
   [`appliance/filesystem-layout.md`](appliance/filesystem-layout.md).
+- **WiFi first-boot.** Detects a USB WiFi NIC, prompts for SSID + password on
+  first boot, and auto-connects via `wpa_supplicant` + systemd-networkd
+  (DHCP). See [`appliance/README.md`](appliance/README.md).
 
 ## Prerequisites
 

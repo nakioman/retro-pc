@@ -43,6 +43,19 @@ procps
 iproute2
 util-linux
 pciutils
+
+# WiFi (first-boot configured via wpa_supplicant + systemd-networkd + dialog).
+# firmware-realtek ships the rtw88/rtw88xx blobs for the TPLink 2.4GHz dongle
+# under the non-free-firmware component, which the installer enables via
+# mmdebstrap --components=main,non-free-firmware. wpasupplicant is the
+# association backend because systemd-networkd does not support WPA2-PSK
+# natively (its [WiFi] section + PreSharedKey= would be silently ignored);
+# `iw` is the diagnostic tool.
+dialog
+firmware-realtek
+wpasupplicant
+iw
+
 ca-certificates
 
 # Deliberately excluded from this base manifest:

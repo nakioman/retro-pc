@@ -1,0 +1,24 @@
+[Unit]
+Description=RetroBox WiFi first-boot configuration
+Documentation=https://github.com/nakioman/retro-pc
+After=local-fs.target systemd-networkd.service plymouth-start.service
+Before=retrobox-boot.service plymouth-quit.service
+# Recovery: a GRUB entry that appends "retropc.norun=1" skips the fullscreen VM
+# path; the wifi prompt must follow the same gate so a maintenance session can
+# boot straight to a login.
+ConditionKernelCommandLine=!retropc.norun
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/retrobox-wifi-firstboot
+# Own tty1 (the appliance's primary display) so the dialog renders on the
+# screen the user is looking at. Without this, systemd assigns the service to
+# an arbitrary tty and the dialog is invisible.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

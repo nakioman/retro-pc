@@ -77,6 +77,7 @@ TARGET_PKGS="$(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$PKG_LIST" | tr '\n' ',
 mmdebstrap \
     --variant=minbase \
     --arch=amd64 \
+    --components=main,non-free-firmware \
     --include="$TARGET_PKGS,linux-image-amd64,ca-certificates" \
     "$SUITE" "$TGT" "$MIRROR"
 
@@ -205,7 +206,12 @@ unsquashfs -s "$ISO/install/target-rootfs.squashfs" >/dev/null \
     || die "target-rootfs.squashfs is not a valid squashfs."
 # List once to a file and grep the file (no pipe -> no pipefail/SIGPIPE surprise).
 unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
-for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install; do
+# dialog covers the first-boot prompt; wpa_supplicant + iw are the actual WiFi
+# association backend (systemd-networkd has no native WPA2-PSK); the rtw88 blob
+# confirms firmware-realtek was bundled.
+for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
+           usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
+           usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
 done

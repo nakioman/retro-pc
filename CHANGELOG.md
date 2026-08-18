@@ -15,6 +15,11 @@ generated from this history; see
 - Repository documentation: root README, contributing guide, license (MIT),
   architecture overview, and architecture decision records under `docs/decisions/`.
 - GitHub issue and pull request templates.
+- First-boot WiFi configuration: detects a `wl*` interface, prompts for SSID
+  and password with `dialog`, and persists credentials under `/data/system/`.
+  Bundles `firmware-realtek` (from `non-free-firmware`) for Realtek USB
+  dongles, and uses `wpa_supplicant` + systemd-networkd (DHCP) for the
+  connection.
 
 ### Removed
 

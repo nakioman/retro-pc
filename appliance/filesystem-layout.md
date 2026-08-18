@@ -30,8 +30,10 @@ state.
     386sx16/
     pentium100/
   system/
-    var/          # overlay upperdir for /var
-    .var.work/    # overlay workdir for /var
+    wifi.conf        # SSID/PSK from the WiFi first-boot prompt (root:root 0600)
+    wifi-configured  # marker set after the first successful WiFi prompt
+    var/             # overlay upperdir for /var
+    .var.work/       # overlay workdir for /var
   swapfile        # disk swap backstop (see below)
 ```
 
@@ -46,6 +48,15 @@ unchanged when no drive is found.
 usable — see [Read-only root exceptions](#read-only-root-exceptions). It is
 system state produced by the installer and the running OS, not user-facing
 application data, and network shares never expose it.
+
+### WiFi credentials
+
+`/data/system/wifi.conf` — plain-text `SSID=`/`PSK=` lines (root:root, 0600),
+written by `retrobox-wifi-firstboot.service` on the first boot that detects a
+`wl*` interface. `/data/system/wifi-configured` (0644) marks that the prompt has
+run; removing it re-arms the prompt. The same unit materializes the
+wpa_supplicant config, the transient `wpa-wifi.service`, and the networkd
+config into `/run` every boot, so `/etc` is never written at runtime.
 
 The current `retrobox` code uses these paths directly:
 
@@ -71,6 +82,7 @@ application storage:
 
 ```text
 /run/retrobox/86box-floppy.sock
+/run/systemd/network/30-wifi.network
 /run/
 /tmp/
 /var/log/

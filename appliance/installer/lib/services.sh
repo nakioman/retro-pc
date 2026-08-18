@@ -22,19 +22,25 @@ install_services() {
 _install_systemd_units() {
     log "Installing systemd units"
     mkdir -p "$TARGET_MNT/etc/systemd/system" "$TARGET_MNT/etc/tmpfiles.d" \
-        "$TARGET_MNT/etc/sudoers.d"
+        "$TARGET_MNT/etc/sudoers.d" "$TARGET_MNT/usr/local/sbin"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-daemon.service" \
         "$TARGET_MNT/etc/systemd/system/retrobox-daemon.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-boot.service" \
         "$TARGET_MNT/etc/systemd/system/retrobox-boot.service"
+    install -m 0644 "$PAYLOAD_DIR/units/retrobox-wifi-firstboot.service" \
+        "$TARGET_MNT/etc/systemd/system/retrobox-wifi-firstboot.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-tmpfiles.conf" \
         "$TARGET_MNT/etc/tmpfiles.d/retrobox.conf"
 
     install -m 0440 "$PAYLOAD_DIR/sudoers/retrobox" "$TARGET_MNT/etc/sudoers.d/retrobox"
     in_target visudo -cf /etc/sudoers.d/retrobox >/dev/null
 
+    install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-wifi-firstboot" \
+        "$TARGET_MNT/usr/local/sbin/retrobox-wifi-firstboot"
+
     enable_unit retrobox-daemon.service
     enable_unit retrobox-boot.service
+    enable_unit retrobox-wifi-firstboot.service
 }
 
 _configure_ssh() {
