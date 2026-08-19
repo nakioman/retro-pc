@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # RetroBox appliance installer — runs on the booted USB (auto-started on tty1)
-# and installs the read-only-root Debian appliance onto an internal disk.
+# and installs the squashfs+overlay Debian appliance onto an internal disk.
 #
 # SAFETY: this partitions and formats a disk. It lists candidate disks, excludes
 # the USB installer device, and requires an explicit typed confirmation before
@@ -8,7 +8,7 @@
 #
 # Env overrides (mainly for testing):
 #   RETROPC_MEDIUM              live medium mount (default /run/live/medium)
-#   RETROPC_ROOT_GIB           root partition size in GiB (default 10)
+#   RETROPC_BOOT_MIB           boot partition size in MiB (default 512)
 #   RETROPC_HOSTNAME           target hostname (default retrobox)
 #   RETROPC_RETROBOX_PASSWORD  set retrobox password non-interactively
 #   RETROPC_UNATTENDED=1       never prompt / never auto-pick a destructive target
@@ -86,8 +86,8 @@ main() {
     mount_target
 
     # 3. Lay down the OS image + mutable /data, stage runtime and profiles.
-    extract_rootfs
-    create_data_tree
+    stage_image           # copy squashfs + kernel/initrd to /boot
+    create_data_tree      # /data tree only — /data/system/{upper,.overlay.work} created by live-boot
     stage_binaries
 
     # 4. Host-specific config generated into the target.

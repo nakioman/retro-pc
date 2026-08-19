@@ -3,6 +3,9 @@
 # boot splash into the target. The installer is the authoritative source of
 # these artifacts until the standalone child issues (#28/#29) land.
 #
+# SSH host keys and machine-id are generated on first boot by
+# retrobox-firstboot.service (see appliance/read-only-root.md).
+#
 # Consumes globals: PAYLOAD_DIR, RETROPC_HOSTNAME (optional).
 
 : "${RETROPC_HOSTNAME:=retrobox}"
@@ -15,7 +18,7 @@ install_services() {
     _configure_splash
     _configure_locale
     _configure_identity
-    _finalize_target_image
+    _install_firstboot_unit
     ok "Services, SSH, Samba, networking, and splash configured"
 }
 
@@ -54,8 +57,6 @@ PasswordAuthentication yes
 # the minimal image; this keeps apt, Perl, and system tools warning-free.
 SetEnv LANG=C.UTF-8 LC_ALL=C.UTF-8
 EOF
-    # Generate host keys now: /etc is read-only at runtime.
-    in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
     enable_unit ssh.service
 }
 
@@ -92,10 +93,6 @@ _configure_splash() {
     mkdir -p "$TARGET_MNT/etc/plymouth"
     install -m 0644 "$PAYLOAD_DIR/plymouth/plymouthd.conf" "$TARGET_MNT/etc/plymouth/plymouthd.conf"
     in_target plymouth-set-default-theme spinner >/dev/null 2>&1 || true
-    # Bring up the framebuffer/KMS early in the initramfs so Plymouth paints as
-    # soon as possible instead of leaving text visible first.
-    mkdir -p "$TARGET_MNT/etc/initramfs-tools/conf.d"
-    printf 'FRAMEBUFFER=y\n' > "$TARGET_MNT/etc/initramfs-tools/conf.d/retropc-splash"
 }
 
 _configure_locale() {
@@ -107,19 +104,22 @@ _configure_locale() {
 }
 
 _configure_identity() {
-    log "Setting hostname ($RETROPC_HOSTNAME) and machine-id"
+    log "Setting hostname ($RETROPC_HOSTNAME)"
     printf '%s\n' "$RETROPC_HOSTNAME" > "$TARGET_MNT/etc/hostname"
     cat > "$TARGET_MNT/etc/hosts" <<EOF
 127.0.0.1   localhost
 127.0.1.1   $RETROPC_HOSTNAME
 ::1         localhost ip6-localhost ip6-loopback
 EOF
-    # Seed a fixed machine-id into the read-only image.
-    in_target systemd-machine-id-setup >/dev/null 2>&1 || true
 }
 
-_finalize_target_image() {
-    log "Regenerating initramfs (plymouth + overlay) in target"
-    in_target update-initramfs -u >/dev/null 2>&1 || \
-        warn "update-initramfs reported issues; check the boot splash on first boot"
+_install_firstboot_unit() {
+    log "Installing first-boot provisioning unit"
+    install -m 0644 \
+        "$PAYLOAD_DIR/first-boot/retrobox-firstboot.service" \
+        "$TARGET_MNT/etc/systemd/system/retrobox-firstboot.service"
+    install -m 0755 \
+        "$PAYLOAD_DIR/first-boot/retrobox-firstboot.sh" \
+        "$TARGET_MNT/usr/local/sbin/retrobox-firstboot"
+    enable_unit retrobox-firstboot.service
 }

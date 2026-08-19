@@ -1,0 +1,14 @@
+[Unit]
+Description=RetroBox first-boot provisioning (SSH host keys, machine-id)
+Documentation=https://github.com/nakioman/retro-pc/blob/main/appliance/read-only-root.md
+ConditionPathExists=!/data/system/first-boot-done
+After=multi-user.target
+Wants=ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/retrobox-firstboot
+
+[Install]
+WantedBy=multi-user.target

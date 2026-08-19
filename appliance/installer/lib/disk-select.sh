@@ -73,7 +73,7 @@ select_target_disk() {
     local disk="/dev/${candidates[$((choice - 1))]}"
 
     local existing_data
-    existing_data="$(existing_data_partition "$disk" || true)"
+    existing_data="$(existing_partition "$disk" retropc-data || true)"
     if [ -n "$existing_data" ]; then
         printf '\n' >&2
         warn "Existing RetroBox install detected (/data at $existing_data)."

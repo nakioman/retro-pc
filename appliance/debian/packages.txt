@@ -58,6 +58,10 @@ iw
 
 ca-certificates
 
+# live-boot: provides the persistence hook used by the installed root's
+# initramfs (squashfs + overlayfs whole-root). See appliance/read-only-root.md.
+live-boot
+
 # Deliberately excluded from this base manifest:
 # - .NET SDK, compilers, and build tools
 # - Docker or container tooling

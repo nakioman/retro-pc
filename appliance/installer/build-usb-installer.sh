@@ -84,9 +84,19 @@ mmdebstrap \
 log "Compressing target rootfs -> install/target-rootfs.squashfs"
 mksquashfs "$TGT" "$ISO/install/target-rootfs.squashfs" -comp zstd -noappend -no-progress
 
+# Stage target kernel + initrd so the installer can copy them onto /boot
+# (p1) of the target disk. Without these, the installed system cannot boot.
+# shellcheck disable=SC2012 # ls -1v keeps version-sorted pick identical to latest()
+TARGET_KVER="$(ls -1 "$TGT"/boot/vmlinuz-* 2>/dev/null | sort -V | tail -n1 | sed 's|.*/vmlinuz-||')"
+[ -n "$TARGET_KVER" ] || die "No kernel found in target rootfs ($TGT/boot)"
+install -m 0644 "$TGT/boot/vmlinuz-$TARGET_KVER"     "$ISO/install/vmlinuz-$TARGET_KVER"
+install -m 0644 "$TGT/boot/initrd.img-$TARGET_KVER" "$ISO/install/initrd.img-$TARGET_KVER"
+printf '%s\n' "$TARGET_KVER" > "$ISO/install/boot-kver"
+log "Staged target kernel $TARGET_KVER + initrd under install/"
+
 # --- 2. Live installer rootfs (boots from USB, runs the installer) ---------
 log "Building live installer rootfs"
-LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
+LIVE_PKGS="linux-image-amd64,live-boot,live-boot-persistence,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
 # The customize-hook is single-quoted on purpose: $1 must reach mmdebstrap
 # literally (it is mmdebstrap's target dir inside the hook), not expand here.
 # shellcheck disable=SC2016
@@ -215,6 +225,14 @@ for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
 done
+# The staged kernel/initrd pair must be on the medium or the installed system
+# (squashfs + overlay root, see appliance/read-only-root.md) cannot boot.
+TARGET_KVER_FROM_ISO="$(cat "$ISO/install/boot-kver" 2>/dev/null || true)"
+[ -n "$TARGET_KVER_FROM_ISO" ] || die "ISO is missing install/boot-kver"
+[ -f "$ISO/install/vmlinuz-$TARGET_KVER_FROM_ISO" ] \
+    || die "ISO is missing install/vmlinuz-$TARGET_KVER_FROM_ISO"
+[ -f "$ISO/install/initrd.img-$TARGET_KVER_FROM_ISO" ] \
+    || die "ISO is missing install/initrd.img-$TARGET_KVER_FROM_ISO"
 [ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
 [ -f "$ISO/install/libSystem.IO.Ports.Native.so" ] \
     || warn "ISO is missing /install/libSystem.IO.Ports.Native.so (stale runtime artifact)"

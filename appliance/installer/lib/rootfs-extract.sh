@@ -1,16 +1,38 @@
 #!/usr/bin/env bash
-# Extract the prebuilt appliance root filesystem onto the target disk and lay
-# out the mutable /data tree. Offline: the OS comes from the squashfs carried on
-# the USB, not from the network.
+# Stage the prebuilt appliance image onto the target /boot partition and lay out
+# the mutable /data tree. Offline: the OS comes from the squashfs carried on the
+# USB, not from the network.
 #
-# Sets globals RETROBOX_STATUS and BOX86_STATUS ("installed").
+# Sets globals BOOT_KVER, RETROBOX_STATUS and BOX86_STATUS ("installed").
+# RETROBOX_STATUS/BOX86_STATUS are consumed by hardware-detect.sh.
+# shellcheck disable=SC2034
 
-extract_rootfs() {
-    [ -f "$TARGET_SQUASHFS" ] || die "Target rootfs not found on medium: $TARGET_SQUASHFS"
-    log "Extracting appliance root filesystem (this takes a minute)"
-    # -f: extract into the already-mounted target dir (root partition).
-    unsquashfs -f -d "$TARGET_MNT" "$TARGET_SQUASHFS" >/dev/null
-    ok "Root filesystem extracted"
+stage_image() {
+    [ -f "$TARGET_SQUASHFS" ] || die "Target squashfs not found on medium: $TARGET_SQUASHFS"
+
+    # Kernel version: prefer the one recorded by build-usb-installer.sh; fall
+    # back to extracting it from the squashfs listing.
+    if [ -f "$INSTALL_SRC/boot-kver" ]; then
+        BOOT_KVER="$(cat "$INSTALL_SRC/boot-kver")"
+    else
+        BOOT_KVER="$(unsquashfs -l "$TARGET_SQUASHFS" 2>/dev/null \
+            | awk '/\/boot\/vmlinuz-/ { sub(".*/boot/vmlinuz-",""); print; exit }')"
+    fi
+    [ -n "$BOOT_KVER" ] || die "Could not determine kernel version from $TARGET_SQUASHFS"
+
+    [ -f "$INSTALL_SRC/vmlinuz-$BOOT_KVER" ] \
+        || die "Staged kernel not found: $INSTALL_SRC/vmlinuz-$BOOT_KVER"
+    [ -f "$INSTALL_SRC/initrd.img-$BOOT_KVER" ] \
+        || die "Staged initrd not found: $INSTALL_SRC/initrd.img-$BOOT_KVER"
+
+    mkdir -p "$TARGET_MNT/boot"
+    log "Staging kernel $BOOT_KVER to /boot"
+    install -m 0644 "$INSTALL_SRC/vmlinuz-$BOOT_KVER" "$TARGET_MNT/boot/vmlinuz-$BOOT_KVER"
+    install -m 0644 "$INSTALL_SRC/initrd.img-$BOOT_KVER" "$TARGET_MNT/boot/initrd.img-$BOOT_KVER"
+
+    log "Staging target squashfs to /boot/root-$BOOT_KVER.squashfs"
+    install -m 0644 "$TARGET_SQUASHFS" "$TARGET_MNT/boot/root-$BOOT_KVER.squashfs"
+    ok "Image staged: kernel $BOOT_KVER + root-$BOOT_KVER.squashfs"
 }
 
 create_data_tree() {
@@ -23,8 +45,9 @@ create_data_tree() {
         "$base/floppies/cataloged" \
         "$base/snapshots" \
         "$base/home" \
-        "$base/system/var" "$base/system/.var.work"
+        "$base/system"
     # Ownership is applied in users.sh once the retrobox uid/gid exist.
+    # live-boot creates /data/system/{upper,.overlay.work} at runtime.
 }
 
 # Copy the immutable runtime, ROMs, catalog, and VM profiles from the medium.

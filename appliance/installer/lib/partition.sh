@@ -2,41 +2,43 @@
 # Partition and format the target disk, then mount it under TARGET_MNT.
 #
 # Layout (MBR/msdos, BIOS/legacy — matches the Biostar H55HD / i3-540 target):
-#   p1  ext4  /       ~10 GiB   (read-only root at runtime)
-#   p2  ext4  /data   rest      (mutable application + system-overlay state)
+#   p1  ext4  /boot   RETROPC_BOOT_MIB MiB   (kernel, initrd, GRUB, squashfs)
+#   p2  ext4  /data   rest                   (mutable application + overlay state)
 #
-# Sets globals ROOT_PART and DATA_PART.
+# Sets globals BOOT_PART and DATA_PART.
 
-: "${RETROPC_ROOT_GIB:=10}"
+: "${RETROPC_BOOT_MIB:=512}"
 : "${RETROPC_WIPE_DATA:=0}"
 : "${PRESERVE_DATA:=0}"
 
-# Echo the first partition on $disk that carries the retropc-data label — i.e. a
+# Echo the first partition on $disk that carries the given ext4 label — i.e. a
 # previous RetroBox appliance install — or nothing when this is a fresh disk.
-existing_data_partition() {
-    local disk="$1" part label
+existing_partition() {
+    local disk="$1" want_label="$2" part label
     while IFS= read -r part; do
         [ -b "$part" ] || continue
         label="$(blkid -s LABEL -o value "$part" 2>/dev/null || true)"
-        [ "$label" = "retropc-data" ] && { printf '%s\n' "$part"; return 0; }
+        [ "$label" = "$want_label" ] && { printf '%s\n' "$part"; return 0; }
     done < <(lsblk -n -o PATH "$disk" 2>/dev/null || true)
     return 1
 }
 
 # Partition and format the target disk. On a reinstall over an existing
-# appliance, /data (VMs, catalog, floppies, snapshots) is preserved by default:
-# only the root filesystem is rewritten. RETROPC_WIPE_DATA=1 forces a full wipe.
+# appliance, both /boot and /data (VMs, catalog, floppies, snapshots) are
+# preserved by default: only the boot filesystem is rewritten so a fresh
+# squashfs image can be staged. RETROPC_WIPE_DATA=1 forces a full wipe.
 partition_disk() {
-    local disk="$1" existing_data
-    existing_data="$(existing_data_partition "$disk" || true)"
+    local disk="$1" existing_boot existing_data
+    existing_boot="$(existing_partition "$disk" retropc-boot || true)"
+    existing_data="$(existing_partition "$disk" retropc-data || true)"
 
-    if [ -n "$existing_data" ] && [ "$RETROPC_WIPE_DATA" != "1" ]; then
+    if [ -n "$existing_boot" ] && [ -n "$existing_data" ] && [ "$RETROPC_WIPE_DATA" != "1" ]; then
         if _confirm_preserve_data; then
-            _reinstall_preserving_data "$disk" "$existing_data"
+            _reinstall_preserving_data "$disk" "$existing_boot" "$existing_data"
             return 0
         fi
-        warn "Full wipe selected: existing /data ($existing_data) will be destroyed."
-    elif [ -n "$existing_data" ]; then
+        warn "Full wipe selected: existing install ($existing_boot, $existing_data) will be destroyed."
+    elif [ -n "$existing_boot" ] || [ -n "$existing_data" ]; then
         warn "RETROPC_WIPE_DATA=1: wiping existing install; /data will be destroyed."
     fi
 
@@ -45,7 +47,7 @@ partition_disk() {
 
 _confirm_preserve_data() {
     if [ "$RETROPC_UNATTENDED" = "1" ]; then
-        log "Unattended: preserving existing /data"
+        log "Unattended: preserving existing /boot and /data"
         return 0
     fi
     local reply
@@ -61,55 +63,56 @@ _fresh_install() {
     log "Wiping existing signatures on $disk"
     wipefs -a "$disk" >/dev/null
 
-    log "Creating MBR partition table (root ${RETROPC_ROOT_GIB} GiB + /data)"
+    log "Creating MBR partition table (boot ${RETROPC_BOOT_MIB} MiB + /data)"
     parted -s "$disk" mklabel msdos
-    parted -s "$disk" mkpart primary ext4 1MiB "${RETROPC_ROOT_GIB}GiB"
-    parted -s "$disk" mkpart primary ext4 "${RETROPC_ROOT_GIB}GiB" 100%
+    parted -s "$disk" mkpart primary ext4 1MiB "$((RETROPC_BOOT_MIB))MiB"
+    parted -s "$disk" mkpart primary ext4 "$((RETROPC_BOOT_MIB))MiB" 100%
     parted -s "$disk" set 1 boot on
 
     # Make sure the kernel picks up the new partition nodes.
     partprobe "$disk" 2>/dev/null || true
     udevadm settle 2>/dev/null || true
 
-    ROOT_PART="$(part_dev "$disk" 1)"
+    BOOT_PART="$(part_dev "$disk" 1)"
     DATA_PART="$(part_dev "$disk" 2)"
-    [ -b "$ROOT_PART" ] || die "Root partition $ROOT_PART did not appear."
+    [ -b "$BOOT_PART" ] || die "Boot partition $BOOT_PART did not appear."
     [ -b "$DATA_PART" ] || die "Data partition $DATA_PART did not appear."
 
-    log "Formatting $ROOT_PART as ext4 (label retropc-root)"
-    mkfs.ext4 -q -F -L retropc-root "$ROOT_PART"
+    log "Formatting $BOOT_PART as ext4 (label retropc-boot)"
+    mkfs.ext4 -q -F -L retropc-boot "$BOOT_PART"
     log "Formatting $DATA_PART as ext4 (label retropc-data)"
     mkfs.ext4 -q -F -L retropc-data "$DATA_PART"
 
     ok "Partitioned and formatted $disk"
 }
 
-# Reinstall over an existing install: keep the current partition table and the
-# /data partition with its contents; only the root filesystem is reformatted.
-# Assumes the standard layout p1=root, p2=/data.
+# Reinstall over an existing install: keep the current partition table and both
+# the /boot and /data partitions with their contents; only the boot filesystem
+# is reformatted so a fresh squashfs image can be staged. Assumes the standard
+# layout p1=boot, p2=data (matches by label, not by partition number).
 _reinstall_preserving_data() {
-    local disk="$1" data_part="$2" root_part
-    root_part="$(part_dev "$disk" 1)"
-    [ -b "$root_part" ] || die "Reinstall: root partition $root_part not found."
-    [ "$root_part" != "$data_part" ] || die "Reinstall: root and data partition are the same ($data_part)."
+    local disk="$1" boot_part="$2" data_part="$3"
+    [ -b "$boot_part" ] || die "Reinstall: boot partition $boot_part not found."
+    [ "$boot_part" != "$data_part" ] || die "Reinstall: boot and data partition are the same ($data_part)."
 
-    ROOT_PART="$root_part"
+    BOOT_PART="$boot_part"
     DATA_PART="$data_part"
     PRESERVE_DATA=1
 
     partprobe "$disk" 2>/dev/null || true
     udevadm settle 2>/dev/null || true
 
-    log "Reinstall: preserving /data ($DATA_PART) — VMs, catalog, floppies kept"
-    log "Formatting $ROOT_PART as ext4 (label retropc-root)"
-    mkfs.ext4 -q -F -L retropc-root "$ROOT_PART"
-    ok "Root reformatted; /data preserved at $DATA_PART"
+    log "Reinstall: preserving /boot ($BOOT_PART) and /data ($DATA_PART) — VMs, catalog, floppies kept"
+    log "Formatting $BOOT_PART as ext4 (label retropc-boot)"
+    mkfs.ext4 -q -F -L retropc-boot "$BOOT_PART"
+    ok "Boot reformatted; /data preserved at $DATA_PART"
 }
 
 mount_target() {
     log "Mounting target filesystems under $TARGET_MNT"
     mkdir -p "$TARGET_MNT"
-    mount "$ROOT_PART" "$TARGET_MNT"
+    mkdir -p "$TARGET_MNT/boot"
+    mount "$BOOT_PART" "$TARGET_MNT/boot"
     mkdir -p "$TARGET_MNT/data"
     mount "$DATA_PART" "$TARGET_MNT/data"
 }

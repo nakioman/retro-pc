@@ -3,7 +3,7 @@
 # target, and record an install report. Detection never aborts the install: an
 # absent device yields a clearly-marked placeholder. See hardware-detect.md.
 #
-# Consumes globals: TARGET_DISK, ROOT_UUID, DATA_UUID, RETROBOX_STATUS, BOX86_STATUS.
+# Consumes globals: TARGET_DISK, BOOT_UUID, DATA_UUID, RETROBOX_STATUS, BOX86_STATUS.
 
 detect_cdrom() {
     local d
@@ -254,8 +254,9 @@ write_install_report() {
 generated=install-retropc.sh
 target.disk=$TARGET_DISK
 target.disk.by_id=${by_id:-unknown}
-target.root.uuid=$ROOT_UUID
+target.boot.uuid=$BOOT_UUID
 target.data.uuid=$DATA_UUID
+boot.layout=squashfs+overlay
 cdrom.device=$CDROM_DEVICE
 cdrom.status=$CDROM_STATUS
 serial.device=$SERIAL_DEVICE
