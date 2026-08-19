@@ -96,7 +96,11 @@ log "Staged target kernel $TARGET_KVER + initrd under install/"
 
 # --- 2. Live installer rootfs (boots from USB, runs the installer) ---------
 log "Building live installer rootfs"
-LIVE_PKGS="linux-image-amd64,live-boot,live-boot-persistence,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
+# Persistence support lives inside `live-boot` (live-boot.init handles the
+# persistence hook); there is no separate live-boot-persistence package in
+# Debian. live-boot alone is enough for both the live installer and the
+# installed root.
+LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
 # The customize-hook is single-quoted on purpose: $1 must reach mmdebstrap
 # literally (it is mmdebstrap's target dir inside the hook), not expand here.
 # shellcheck disable=SC2016
