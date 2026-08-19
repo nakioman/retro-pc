@@ -88,15 +88,19 @@ because systemd-networkd has no native `[WiFi]` support.
 
 ## Persistent and immutable state
 
-The intended appliance model is a read-only root filesystem with persistent
-application state below `/data`. This document records the target contract; it
-does not implement the mounts or the required tmpfs/overlay configuration.
+The installed appliance boots from an **immutable squashfs root** assembled by
+`live-boot` persistence into an overlayfs whole-root mount. The lower
+directory is the squashfs on `/boot`; the upper and work directories live
+under `/data/system/`. The root is truly immutable — there is no
+`mount -o remount,rw /` path. The mount strategy, A/B image-swap procedure,
+and recovery flow are documented in
+[`read-only-root.md`](read-only-root.md) (see
+[ADR 0006](../docs/decisions/0006-squashfs-overlay-root.md)).
 
 Persistent application data lives in the layout described in
 [`filesystem-layout.md`](filesystem-layout.md). Runtime-generated state such as
-`/run/retrobox/86box-floppy.sock`, logs, PID files, and temporary files must be
-handled by the eventual systemd/read-only-root design rather than written into
-the immutable application tree.
+`/run/retrobox/86box-floppy.sock`, logs, PID files, and temporary files live
+under `/run` and `/tmp` (tmpfs) or are written to `/data` via the overlay.
 
 ## Maintenance checklist
 

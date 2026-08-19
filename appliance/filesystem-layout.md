@@ -2,10 +2,23 @@
 
 ## Mount and mutability model
 
-The appliance is designed around a read-only root filesystem. The operating
-system, installed packages, `/opt/retrobox/retrobox`, 86Box's AppImage, and
-`/opt/86Box/roms` are part of the deployed system image and are not application
-state. 
+The appliance boots from an **immutable squashfs root** assembled by
+`live-boot` persistence into an overlayfs whole-root mount. `/boot` holds the
+kernel, initrd, and the squashfs image itself; `/data` is the persistent
+writable partition that backs the overlay upperdir and holds application
+state. The root is truly immutable: there is no `mount -o remount,rw /` path.
+
+```text
+/                    overlayfs (lower = squashfs, upper + work on /data)
+/boot    /dev/sda1   ext4  rw — kernel, initrd, GRUB, root-<ver>.squashfs
+/data    /dev/sda2   ext4  rw — overlay upperdir + application state
+/tmp                 tmpfs (volatile)
+```
+
+The operating system, installed packages, `/opt/retrobox/retrobox`, 86Box's
+AppImage, and `/opt/86Box/roms` are part of the deployed system image. The
+overlay makes `/etc` and `/var` writable on top of the squashfs without
+exposing the lower to accidental mutation.
 
 `/data` is the persistent writable filesystem for Retro PC state:
 
@@ -29,12 +42,13 @@ state.
   snapshots/
     386sx16/
     pentium100/
-  system/
-    wifi.conf        # SSID/PSK from the WiFi first-boot prompt (root:root 0600)
-    wifi-configured  # marker set after the first successful WiFi prompt
-    var/             # overlay upperdir for /var
-    .var.work/       # overlay workdir for /var
-  swapfile        # disk swap backstop (see below)
+  system/                    # created by live-boot at first boot
+    upper/                   # overlayfs upperdir (live-boot)
+    .overlay.work/           # overlayfs workdir (live-boot)
+    first-boot-done          # marker set by retrobox-firstboot.service
+    swapfile                 # disk swap backstop (see below)
+    wifi.conf                # SSID/PSK from WiFi first-boot (root:root 0600)
+    wifi-configured          # marker set after the first successful WiFi prompt
 ```
 
 `/data/retrobox/install-report.txt` is written by the USB installer and records
@@ -44,9 +58,9 @@ the installer writes its `ioctl://` path only to the first active optical slot
 of each applicable installed `/data/vms/*/86box.cfg`; it leaves profiles
 unchanged when no drive is found.
 
-`/data/system/` holds the writable overlay upperdirs that make a read-only root
-usable — see [Read-only root exceptions](#read-only-root-exceptions). It is
-system state produced by the installer and the running OS, not user-facing
+`/data/system/` is created by `live-boot` on the first boot (the `upper/` and
+`.overlay.work/` overlay directories) and by the running services
+(`wifi.conf`, `first-boot-done`, etc.). It is system state, not user-facing
 application data, and network shares never expose it.
 
 ### WiFi credentials
@@ -56,7 +70,22 @@ written by `retrobox-wifi-firstboot.service` on the first boot that detects a
 `wl*` interface. `/data/system/wifi-configured` (0644) marks that the prompt has
 run; removing it re-arms the prompt. The same unit materializes the
 wpa_supplicant config, the transient `wpa-wifi.service`, and the networkd
-config into `/run` every boot, so `/etc` is never written at runtime.
+config into `/run` every boot, so the overlay is only used to persist the
+plain-text credentials, not to materialize runtime config.
+
+### First-boot provisioning
+
+`retrobox-firstboot.service` runs once on first boot to generate the
+per-machine identity that the installer used to bake into the image:
+
+- SSH host keys (`ssh-keygen -A`).
+- `machine-id` (`systemd-machine-id-setup`).
+
+The service writes `/data/system/first-boot-done` and never runs again.
+
+The `retrobox` account password stays an install-time concern — SSH must be
+usable on the first boot, and there is no interactive first-boot prompt
+without SSH.
 
 The current `retrobox` code uses these paths directly:
 
@@ -85,37 +114,32 @@ application storage:
 /run/systemd/network/30-wifi.network
 /run/
 /tmp/
-/var/log/
-/var/lib/
 ```
 
 The USB installer implements this contract as follows:
 
-- `/` is mounted `ro,errors=remount-ro`.
+- The root `/` is an overlayfs mount assembled by `live-boot` in the initramfs.
+  The lower directory is the squashfs on `/boot`; the upper and work
+  directories live under `/data/system/` and are created by `live-boot` on
+  the first boot.
+- `/boot` is an ext4 partition labeled `retropc-boot` (rw, `errors=remount-ro`).
+  It is rw at runtime only so a new OS image can be dropped in; the squashfs
+  itself is read-only.
+- `/data` is an ext4 partition labeled `retropc-data` (rw, nosuid, nodev,
+  noatime). It is the only persistent writable partition and carries the
+  overlay upper/work dirs plus application state.
 - `/tmp` is `tmpfs` (volatile).
-- `/var` is an `overlay` mount whose writable upperdir lives under
-  `/data/system/var` (see the `/data` tree above), so logs, Samba state, DHCP
-  leases, and ALSA state persist across reboots without a writable root.
-- `/etc` stays **read-only**. The few files that must exist per machine — the
-  SSH host keys and the machine-id — are generated into the image at install
-  time. Maintenance edits use `sudo mount -o remount,rw /`.
+- `/etc` is **writable on the overlay**. There is no longer a ro-`/etc`
+  workaround: SSH host keys and `machine-id` are produced on first boot by
+  `retrobox-firstboot.service` (see [First-boot provisioning](#first-boot-provisioning)).
 - Swap for the low-RAM machine: **zram** (compressed RAM swap, preferred) plus a
   modest **`/data/swapfile`** as a lower-priority OOM backstop. The root stays
   read-only; the swapfile lives on writable `/data`.
 
-`/etc` is deliberately **not** an fstab overlay: `/etc` is read during early
-boot, before an fstab-mounted overlay could apply, which would split-brain the
-config (early boot sees the read-only layer, later reads see the overlay). Doing
-an `/etc` (or whole-root) overlay correctly means assembling it in the initramfs
-before `switch_root` — the immutable squashfs-root approach tracked in #43 (and
-the read-only-root prototype #30). Until then the appliance must always keep
-`/data` writable and the OS image root effectively read-only.
-
-The following system areas remain read-only after deployment unless a future
-maintenance workflow deliberately remounts or replaces the system image:
+The following system areas remain read-only at runtime (carried by the
+squashfs lower):
 
 ```text
-/
 /usr/
 /bin/
 /sbin/
@@ -123,11 +147,10 @@ maintenance workflow deliberately remounts or replaces the system image:
 /opt/
 ```
 
-`/etc` contains installed system configuration and should be treated as image
-configuration for this stage. Any future changes required while the root is
-read-only must be represented by the image build or an explicitly documented
-overlay; they must not be silently written into `/data` without defining the
-corresponding contract.
+Mounting any of these read-write is **not supported**. To change the OS,
+replace the squashfs on `/boot` — see
+[`appliance/read-only-root.md`](read-only-root.md) for the documented manual
+A/B swap.
 
 ## Runtime ownership and access
 
@@ -155,4 +178,6 @@ target validation proves it necessary.
 Back up `/data` as application state. At minimum this includes the YAML files,
 VM disks, cataloged floppy images, and snapshots. The immutable root image,
 package manifest, and AppImage are deployment artifacts and should be
-reproducible or copied separately from the mutable data backup.
+reproducible or copied separately from the mutable data backup. `/boot` only
+needs backing up if you want to preserve a known-good kernel/initrd/squashfs
+pair off-machine; otherwise it can be rebuilt from the build artifact.

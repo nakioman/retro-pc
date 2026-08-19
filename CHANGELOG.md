@@ -10,6 +10,29 @@ generated from this history; see
 
 ## [Unreleased]
 
+### Changed
+
+- Appliance boots from an immutable squashfs root assembled by `live-boot`
+  persistence into an overlayfs whole-root mount. The disk layout is now
+  `p1=/boot` (ext4, kernel + initrd + `root-<ver>.squashfs`, rw at runtime so
+  a new image can be dropped in) and `p2=/data` (ext4, overlay upperdir +
+  application state). The previous ext4-ro + `/var`-overlay mechanism
+  (shipped in `appliance-20260802-37`) is superseded. See
+  [`appliance/read-only-root.md`](appliance/read-only-root.md) and
+  [ADR 0006](docs/decisions/0006-squashfs-overlay-root.md).
+- SSH host keys and `machine-id` are generated on first boot by the new
+  `retrobox-firstboot.service` instead of being baked into the image at
+  install time.
+
+### Removed
+
+- `grub-common.service` mask and `GRUB_RECORDFAIL_TIMEOUT=0` workarounds
+  (no longer needed on the truly immutable squashfs root).
+- The `overlay /var overlay ...` fstab line (replaced by the whole-root
+  overlay assembled in the initramfs).
+- The `FRAMEBUFFER=y` initramfs hint (initramfs ships inside the squashfs;
+  chroot regeneration no longer happens at install time).
+
 ### Added
 
 - Repository documentation: root README, contributing guide, license (MIT),

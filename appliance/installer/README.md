@@ -30,9 +30,9 @@ Write image to a USB stick       (dd)
 Boot the retro PC from USB       (BIOS/legacy)
 Installer auto-starts on tty1    (install-retropc.sh)
 Pick the internal disk           (USB device excluded; typed confirmation)
-Partition + format               (fresh: MBR p1 root ro, p2 /data rw)
-Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root only)
-Extract appliance rootfs         (offline, from the USB)
+Partition + format               (fresh: MBR p1 /boot, p2 /data)
+Preserve existing /data          (reinstall: keep VMs/floppies, rewrite /boot only)
+Stage kernel+initrd+squashfs     (offline, from the USB, onto /boot)
 Write UUID fstab, users, GRUB    (root locked; retrobox password prompted)
 Remove USB and reboot            (target boots the installed appliance)
 ```
@@ -119,10 +119,13 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 
 Re-running the installer over an existing appliance keeps your data by default:
 
-- The `/data` partition is **not** reformatted. Only the read-only root
-  filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
+- The `/data` partition is **not** reformatted. Only the `/boot` partition is
+  rewritten (still gated by the typed `ERASE /dev/sdX` confirm); the staged
+  squashfs image is always overwritten with the one carried on the USB.
 - Everything on `/data` survives: VMs (`.vhd`), the VM catalog (`vms.yaml`),
   floppies, snapshots, and Samba scratch.
+- The first-boot provisioning marker (`/data/system/first-boot-done`) is
+  preserved, so SSH host keys and `machine-id` survive a reinstall.
 - OS-managed profile files (`86box.cfg`, shaders) **are** refreshed; `.vhd` and
   `.yaml` files are never overwritten.
 - Set `RETROPC_WIPE_DATA=1` to force a full wipe of `/data` on reinstall
@@ -133,9 +136,11 @@ Re-running the installer over an existing appliance keeps your data by default:
 - `root` is **locked**. `retrobox` is the sole account — the service runtime user
   and the SSH maintenance login, with `sudo`.
 - Maintenance over SSH: `ssh retrobox@<ip>` (DHCP; `PermitRootLogin no`).
-- The root filesystem is read-only. To edit system files:
-  `sudo mount -o remount,rw /`, make the change, then reboot or
-  `sudo mount -o remount,ro /`. `/data` is always writable.
+- The root filesystem is **immutable** (squashfs lower). There is **no**
+  `mount -o remount,rw /` path. System files live on the overlayfs upperdir
+  under `/data/system/upper/`; treat configuration changes as image changes —
+  rebuild and stage a new `root-<ver>.squashfs` on `/boot` to persist them
+  across reinstalls. `/data` is always writable.
 
 ## Machine selector
 
@@ -163,6 +168,21 @@ loaded on power-on.
 - Choose **"RetroBox — recovery (maintenance, no fullscreen VM)"**. It appends
   `retropc.norun=1`, so `retrobox-boot.service` skips the fullscreen VM path and
   leaves a normal login on tty1 (SSH still works).
+- The root is truly immutable: there is no `mount -o remount,rw /`. Recovery
+  from a broken OS image means booting the USB installer and dropping a
+  known-good `root-<ver>.squashfs` + kernel + initrd onto `/boot`, or
+  rewriting `/boot/grub/grub.cfg` over SSH to point at a previous kernel.
+- SSH host keys and `machine-id` are produced on first boot by
+  `retrobox-firstboot.service`; they are regenerated automatically after a
+  full wipe of `/data` because the marker `/data/system/first-boot-done`
+  disappears with the partition.
+
+## OS update (manual A/B swap)
+
+Drop a new image onto `/boot` over SSH and switch the GRUB default entry.
+A/B automation is out of scope for this release; the manual swap is the
+contract. See [`../read-only-root.md`](../read-only-root.md) for the detailed
+procedure and recovery options.
 
 ## Verification
 
@@ -188,13 +208,16 @@ Manual (on real hardware / a spare disk):
 ## Scope & deferrals
 
 Fully implemented: two-rootfs build + hybrid ISO, safe disk selection,
-partition/format, offline rootfs extract, UUID fstab, read-only root via `ro` +
-tmpfs + `/var` overlay on `/data`, `retrobox` account (root locked) with prompted
-password, SSH, Samba scratch share, DHCP networking, Plymouth boot splash, GRUB
-BIOS install with hidden 1280x960 menu + recovery entry, zram + `/data` swapfile
-backstop for the low-RAM machine, the `retrobox-daemon` / `retrobox-boot`
-systemd units, and reinstall data preservation (existing `/data`, `.vhd`, and
-`.yaml` are kept unless `RETROPC_WIPE_DATA=1`).
+partition/format, offline kernel+initrd+squashfs staging onto `/boot`,
+UUID-based fstab, immutable squashfs root assembled by `live-boot` persistence
+into an overlayfs whole-root mount (lower = squashfs, upper + work on
+`/data/system/`), `retrobox` account (root locked) with prompted password, SSH,
+Samba scratch share, DHCP networking, Plymouth boot splash, GRUB BIOS install
+with hidden 1280x960 menu + recovery entry, zram + `/data` swapfile backstop for
+the low-RAM machine, the `retrobox-daemon` / `retrobox-boot` /
+`retrobox-wifi-firstboot` / `retrobox-firstboot` systemd units, first-boot
+SSH host-key + `machine-id` provisioning, and reinstall data preservation
+(existing `/data`, `.vhd`, and `.yaml` are kept unless `RETROPC_WIPE_DATA=1`).
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 

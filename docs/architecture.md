@@ -100,11 +100,14 @@ in `sketch.yaml`. See the
 
 ### appliance/
 
-Debian 13 base layout: read-only root, persistent `/data` for VMs, floppies,
-catalogs, and snapshots; a single `retrobox` account (root locked, `sudo`
-available); a restricted Samba scratch share. The bootable USB installer builds
-a live installer rootfs plus the target appliance rootfs and installs offline.
-See [`appliance/README.md`](../appliance/README.md) and
+Debian 13 base layout: an immutable squashfs root assembled by `live-boot`
+persistence into an overlayfs whole-root mount, with persistent `/data` for
+VMs, floppies, catalogs, and snapshots; a single `retrobox` account (root
+locked, `sudo` available); a restricted Samba scratch share. The bootable USB
+installer builds a live installer rootfs plus the target appliance rootfs and
+installs offline (the squashfs, kernel, and initrd are staged onto `/boot`).
+See [`appliance/README.md`](../appliance/README.md),
+[`appliance/read-only-root.md`](../appliance/read-only-root.md), and
 [`appliance/installer/README.md`](../appliance/installer/README.md).
 
 ## Key contracts
@@ -154,7 +157,9 @@ floppies:
 - 86Box runs as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`.
 - Systemd units under `appliance/installer/payload/units/` supervise boot and
   the daemon; the daemon unit is gated on the serial device existing.
-- Root filesystem is read-only; `/data` is the persistent, writable partition.
+- Root filesystem is an immutable squashfs assembled by `live-boot` into an
+  overlayfs whole-root mount (lower = squashfs on `/boot`, upper + work on
+  `/data/system/`); `/data` is the persistent, writable partition.
 
 ## Releases
 
@@ -172,3 +177,5 @@ Recorded in [`docs/decisions/`](decisions/README.md). Notable entries:
 - `0003` — the 86Box `.cfg` is the hardware source of truth; YAML is metadata.
 - `0004` — NFC tags carry raw bytes, not NDEF.
 - `0005` — appliance supports WiFi via `wpa_supplicant` + systemd-networkd (DHCP) and a first-boot dialog.
+- `0006` — immutable squashfs root + overlayfs whole-root, assembled by
+  `live-boot` persistence; supersedes the ext4-ro mechanism from `0002`.
