@@ -27,6 +27,16 @@ generated from this history; see
   `AGENTS.md`, `docs/architecture.md`, and `docs/decisions/`.
 - Legacy planning docs under `docs/superpowers/` and `docs/plans/`.
 
+### Fixed
+
+- USB installer release notes: the workflow used `gh release list --limit 2
+  --jq '.[1].tagName'` to detect the previous release tag, which always
+  skipped the most recent prior release (and returned `null` when there was
+  only one), so every release was published with an "Initial release"
+  changelog. Now uses `.[0]` with `--limit 1`, and the git-tag fallback only
+  matches `appliance-*` tags (skipping orphan tags from failed runs) and
+  reads the first line of the sorted list.
+
 ## [2026-08-07] — appliance-20260807-49
 
 ### Added
