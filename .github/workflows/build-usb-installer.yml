@@ -100,21 +100,64 @@ jobs:
           name: retropc-installer-iso
           path: dist
 
-      - name: Publish release
+      - name: Compute release tag and detect previous release tag
+        id: prev
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="appliance-$(date -u +%Y%m%d)-${{ github.run_number }}"
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Previous release tag: the most recent prior GitHub release. Falls
+          # back to the newest prior git tag if the release API is unavailable,
+          # but only matching tags produced by this workflow (so orphan tags
+          # from failed runs are ignored).
+          PREV_TAG="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG="$(git tag --sort=-creatordate --list 'appliance-*' | sed -n '1p' || true)"
+          fi
+          if [ -n "$PREV_TAG" ]; then
+            echo "tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release notes
+        id: notes
+        if: steps.prev.outputs.tag != ''
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                {
+                  "title": "Features",
+                  "label_extractor": [{"pattern": "^feat(?:\\([^)]+\\))?!?:", "on_property": "title"}]
+                },
+                {
+                  "title": "Fixes",
+                  "label_extractor": [{"pattern": "^fix(?:\\([^)]+\\))?!?:", "on_property": "title"}]
+                }
+              ],
+              "uncategorized": {"title": "Other"},
+              "sort": "ASC",
+              "ignore_labels": ["skip-changelog"],
+              "duplicate_filter": true
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+          RELEASE_TAG: ${{ steps.prev.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          TAG="$RELEASE_TAG"
           ISO="dist/retropc-installer-${TAG}.iso"
           mv dist/retropc-installer.iso "$ISO"
-
-          # Previous release tag: the second-most-recent GitHub release; fall back
-          # to the newest prior git tag if only one release exists so far.
-          PREV_TAG="$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || true)"
-          if [ -z "$PREV_TAG" ]; then
-            PREV_TAG="$(git tag --sort=-creatordate | sed -n '2p' || true)"
-          fi
 
           {
             echo "Automated bootable USB appliance installer built from ${{ github.sha }}."
@@ -131,16 +174,7 @@ jobs:
             else
               echo "## Changes since $PREV_TAG"
               echo
-              git log --no-merges --pretty=format:'%s' "$PREV_TAG..HEAD" | sort -u \
-                | awk '
-                    /^feat/ { feat = feat "- " $0 "\n"; next }
-                    /^fix/  { fix  = fix  "- " $0 "\n"; next }
-                    { other = other "- " $0 "\n" }
-                    END {
-                      if (feat)  { print "### Features";  print feat }
-                      if (fix)   { print "### Fixes";     print fix }
-                      if (other) { print "### Other";     print other }
-                    }'
+              echo "${{ steps.notes.outputs.changelog }}"
             fi
           } > notes.md
           gh release create "$TAG" "$ISO" \

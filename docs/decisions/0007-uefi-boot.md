@@ -1,4 +1,4 @@
-# 0006. UEFI boot with hybrid BIOS/UEFI installer image
+# 0007. UEFI boot with hybrid BIOS/UEFI installer image
 
 Date: 2026-08-24
 Status: Accepted

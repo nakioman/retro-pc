@@ -18,5 +18,4 @@ Closes #<issue>
 
 ## Notes for reviewers
 
-<!-- Anything reviewers should know: trade-offs, follow-ups, docs that need
-updating (AGENTS.md, docs/architecture.md, docs/decisions/, CHANGELOG.md). -->
+<!-- Anything reviewers should know: trade-offs, follow-ups. -->
