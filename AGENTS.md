@@ -102,7 +102,6 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
   `docs/floppy-controller-wiring.md`, `docs/86box-*.md` — feature docs.
 - `appliance/README.md`, `appliance/installer/README.md` — appliance and
   installer.
-- `CHANGELOG.md` — notable changes; keep updated with meaningful changes.
 
 ## CI
 
@@ -120,5 +119,5 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
 - Prefer `mise run <task>`; never raw `dotnet` for normal workflows.
 - Keep scope small; document design decisions in `docs/decisions/` when they
   affect future maintainability.
-- Update the changelog and relevant docs with user-visible or architectural
-  changes.
+- Update the relevant docs and any architecture decision records with
+  user-visible or architectural changes.

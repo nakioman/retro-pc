@@ -78,10 +78,15 @@ should be able to reconstruct, add or update an ADR. See the
 
 Releases are published from the `release` job in
 `.github/workflows/build-usb-installer.yml` on pushes to `main`. Tags follow
-`appliance-YYYYMMDD-<run>`. Release notes are generated from
-`git log --no-merges <previous-tag>..HEAD`, grouped by conventional commit type
-(Features / Fixes / Other). Keep commit messages meaningful — they become the
-public changelog.
+`appliance-YYYYMMDD-<run>`. The release job runs
+`mikepenz/release-changelog-builder-action` in COMMIT mode against the previous
+tag, grouping commits by Conventional Commit type (`feat:` → Features, `fix:` →
+Fixes, other → Other). The generated notes are attached to the GitHub Release
+via `--notes-file`.
+
+There is no `CHANGELOG.md` to maintain — the GitHub Release IS the changelog.
+Keep commit messages meaningful (Conventional Commits, scoped by area), because
+they become the public release notes.
 
 ## Branch cleanup
 
