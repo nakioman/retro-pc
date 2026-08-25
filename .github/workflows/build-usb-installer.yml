@@ -127,9 +127,6 @@ jobs:
         if: steps.prev.outputs.tag != ''
         uses: mikepenz/release-changelog-builder-action@v6
         with:
-          mode: COMMIT
-          fromTag: ${{ steps.prev.outputs.tag }}
-          toTag: ${{ steps.prev.outputs.release_tag }}
           configurationJson: |
             {
               "categories": [
@@ -147,6 +144,8 @@ jobs:
               "ignore_labels": ["skip-changelog"],
               "duplicate_filter": true
             }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish release
         env:
