@@ -129,7 +129,11 @@ jobs:
         with:
           mode: COMMIT
           fromTag: ${{ steps.prev.outputs.tag }}
-          toTag: ${{ steps.prev.outputs.release_tag }}
+          # Pass the SHA being released, NOT the future release tag. The compare
+          # API call the action makes against `toTag` 404s when the tag doesn't
+          # exist remotely yet (this workflow is the one creating it).
+          toTag: ${{ github.sha }}
+          failOnError: true
           configurationJson: |
             {
               "categories": [
