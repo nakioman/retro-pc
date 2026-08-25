@@ -127,13 +127,6 @@ jobs:
         if: steps.prev.outputs.tag != ''
         uses: mikepenz/release-changelog-builder-action@v6
         with:
-          mode: COMMIT
-          fromTag: ${{ steps.prev.outputs.tag }}
-          # Pass the SHA being released, NOT the future release tag. The compare
-          # API call the action makes against `toTag` 404s when the tag doesn't
-          # exist remotely yet (this workflow is the one creating it).
-          toTag: ${{ github.sha }}
-          failOnError: true
           configurationJson: |
             {
               "categories": [
@@ -151,6 +144,8 @@ jobs:
               "ignore_labels": ["skip-changelog"],
               "duplicate_filter": true
             }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish release
         env:
