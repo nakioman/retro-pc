@@ -63,6 +63,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             mmdebstrap squashfs-tools xorriso \
             isolinux syslinux-common dosfstools \
+            grub-efi-amd64-bin \
             debian-archive-keyring zstd xz-utils e2fsprogs file curl
 
       - name: Build installer image

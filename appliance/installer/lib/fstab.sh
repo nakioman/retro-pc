@@ -2,20 +2,23 @@
 # Generate /etc/fstab on the target using filesystem UUIDs (never /dev/sdX).
 #
 # Read-only-root prototype:
-#   /      ro   (immutable OS image)
-#   /data  rw   (mutable application + system state)
-#   /tmp   tmpfs
-#   /var   overlay with the writable upperdir on /data, so logs, Samba state,
-#          DHCP leases, and ALSA state persist without a writable root.
+#   /          ro   (immutable OS image)
+#   /boot/efi  vfat (EFI System Partition, GRUB-EFI)
+#   /data      rw   (mutable application + system state)
+#   /tmp       tmpfs
+#   /var       overlay with the writable upperdir on /data, so logs, Samba state,
+#              DHCP leases, and ALSA state persist without a writable root.
 # /etc stays read-only; SSH host keys and machine-id are generated at install
 # time into the image. Maintenance edits use `sudo mount -o remount,rw /`.
 #
-# Sets globals ROOT_UUID and DATA_UUID (also used by grub-install.sh).
+# Sets globals ROOT_UUID, ESP_UUID, and DATA_UUID (also used by grub-install.sh).
 
 write_fstab() {
     ROOT_UUID="$(fs_uuid "$ROOT_PART")"
+    ESP_UUID="$(fs_uuid "$ESP_PART")"
     DATA_UUID="$(fs_uuid "$DATA_PART")"
     [ -n "$ROOT_UUID" ] || die "Could not read UUID of $ROOT_PART"
+    [ -n "$ESP_UUID" ] || die "Could not read UUID of $ESP_PART"
     [ -n "$DATA_UUID" ] || die "Could not read UUID of $DATA_PART"
 
     log "Writing UUID-based /etc/fstab"
@@ -26,6 +29,9 @@ write_fstab() {
 # Read-only OS image root.
 UUID=$ROOT_UUID  /      ext4      ro,errors=remount-ro                          0 1
 
+# EFI System Partition (GRUB-EFI lives here).
+UUID=$ESP_UUID  /boot/efi  vfat  umask=0077  0  2
+
 # Mutable application + system-overlay state.
 UUID=$DATA_UUID  /data  ext4      rw,nosuid,nodev,noatime                       0 2
 
@@ -35,5 +41,5 @@ tmpfs            /tmp   tmpfs     rw,nosuid,nodev,noatime,mode=1777             
 # Writable, persistent /var layered over the read-only image via overlayfs.
 overlay          /var   overlay   lowerdir=/var,upperdir=/data/system/var,workdir=/data/system/.var.work,x-systemd.requires-mounts-for=/data  0 0
 EOF
-    ok "fstab written (root UUID=$ROOT_UUID, data UUID=$DATA_UUID)"
+    ok "fstab written (root UUID=$ROOT_UUID, ESP UUID=$ESP_UUID, data UUID=$DATA_UUID)"
 }

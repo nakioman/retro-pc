@@ -4,9 +4,9 @@ This directory builds a **bootable USB installer** that installs the RetroBox
 Debian appliance onto the target machine's internal HDD/SSD.
 
 The installed system is a **read-only-root** Debian 13 appliance with a mutable
-`/data` partition, GRUB in BIOS/legacy MBR mode, SSH maintenance access, and a
-Samba scratch share — see [`../README.md`](../README.md) and
-[`../filesystem-layout.md`](../filesystem-layout.md).
+`/data` partition, a GPT disk layout with a 512 MiB EFI System Partition, GRUB
+installed as UEFI, SSH maintenance access, and a Samba scratch share — see
+[`../README.md`](../README.md) and [`../filesystem-layout.md`](../filesystem-layout.md).
 
 > **First functional slice.** This implements the end-to-end build → boot →
 > safe install → read-only-root path. A few things are intentionally deferred
@@ -27,13 +27,14 @@ The build produces **two** root filesystems packed into one hybrid ISO:
 ```text
 Build USB installer image        (build-usb-installer.sh)
 Write image to a USB stick       (dd)
-Boot the retro PC from USB       (BIOS/legacy)
+Boot the retro PC from USB       (BIOS legacy OR UEFI; hybrid ISO)
 Installer auto-starts on tty1    (install-retropc.sh)
 Pick the internal disk           (USB device excluded; typed confirmation)
-Partition + format               (fresh: MBR p1 root ro, p2 /data rw)
-Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root only)
+Partition + format               (fresh: GPT p1 ESP, p2 root ro, p3 /data rw)
+Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root+ESP)
+Migrate legacy BIOS install      (MBR->GPT: stage /data, repartition, restore)
 Extract appliance rootfs         (offline, from the USB)
-Write UUID fstab, users, GRUB    (root locked; retrobox password prompted)
+Write UUID fstab, users, GRUB    (UEFI: ESP + GRUB-EFI; root locked; password prompted)
 Remove USB and reboot            (target boots the installed appliance)
 ```
 
@@ -68,7 +69,7 @@ On an amd64 host you can drop `--platform linux/amd64`.
 
 ```bash
 sudo apt-get install -y mmdebstrap squashfs-tools xorriso \
-    isolinux syslinux-common dosfstools zstd e2fsprogs
+    isolinux syslinux-common grub-efi-amd64-bin dosfstools zstd e2fsprogs
 sudo bash appliance/installer/build-usb-installer.sh
 ```
 
@@ -105,15 +106,22 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 
 ## Install onto the retro PC
 
-1. Set the BIOS to boot from USB (legacy/BIOS mode, not UEFI).
+1. Set the firmware to boot from USB (legacy BIOS **or** UEFI — the same image
+   supports both).
 2. Boot; the installer starts on the primary display.
 3. Choose the internal disk. **The USB installer device is excluded by default**,
    and you must type the exact `ERASE /dev/sdX` confirmation before anything is
    written.
-4. Set the `retrobox` password when prompted (used for SSH and `sudo`).
-5. Press Enter to reboot **with the USB still inserted** (the live installer runs
-   from it). Remove the USB while the machine restarts — at the BIOS/logo screen
-   — so it boots from the internal disk.
+4. If the disk already carries a **legacy BIOS** install (MBR partition table),
+   the installer offers a `MIGRATE` confirmation: it stages `/data` to a
+   temporary location, repartitions as GPT with an ESP, and restores `/data` onto
+   the new layout. The migration is destructive of the partition table but
+   preserves your VMs, floppies, and catalogs. Decline the prompt (or re-run
+   with `RETROPC_MIGRATE_BIOS_TO_UEFI=1` to force it) to choose either path.
+5. Set the `retrobox` password when prompted (used for SSH and `sudo`).
+6. Press Enter to reboot **with the USB still inserted** (the live installer runs
+   from it). Remove the USB while the machine restarts — at the firmware/logo
+   screen — so it boots from the internal disk.
 
 ## Reinstall & data preservation
 
@@ -169,9 +177,11 @@ loaded on power-on.
 Automated (CI / local):
 
 - `shellcheck -x` on all installer scripts.
-- The build asserts the ISO is isohybrid (MBR boot sector), has an El Torito
-  boot catalog, that `target-rootfs.squashfs` is valid, and that the expected
-  package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`) are present.
+- The build asserts the ISO is isohybrid (MBR boot sector for legacy BIOS
+  boot), exposes a second EFI El-Torito boot entry (the `EFI/BOOT/BOOTX64.EFI`
+  GRUB image), that `target-rootfs.squashfs` is valid, and that the expected
+  package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`, `grub-mkimage`)
+  are present.
 
 Manual (on real hardware / a spare disk):
 
@@ -187,14 +197,16 @@ Manual (on real hardware / a spare disk):
 
 ## Scope & deferrals
 
-Fully implemented: two-rootfs build + hybrid ISO, safe disk selection,
-partition/format, offline rootfs extract, UUID fstab, read-only root via `ro` +
-tmpfs + `/var` overlay on `/data`, `retrobox` account (root locked) with prompted
-password, SSH, Samba scratch share, DHCP networking, Plymouth boot splash, GRUB
-BIOS install with hidden 1280x960 menu + recovery entry, zram + `/data` swapfile
-backstop for the low-RAM machine, the `retrobox-daemon` / `retrobox-boot`
-systemd units, and reinstall data preservation (existing `/data`, `.vhd`, and
-`.yaml` are kept unless `RETROPC_WIPE_DATA=1`).
+Fully implemented: two-rootfs build + hybrid BIOS/UEFI ISO, safe disk
+selection, GPT partitioning (ESP + root + /data) with safe MBR→GPT migration
+for legacy installs, offline rootfs extract, UUID fstab (root, ESP, /data),
+read-only root via `ro` + tmpfs + `/var` overlay on `/data`, `retrobox` account
+(root locked) with prompted password, SSH, Samba scratch share, DHCP networking,
+Plymouth boot splash, GRUB-EFI install with hidden 1280x960 menu + recovery
+entry, zram + `/data` swapfile backstop for the low-RAM machine, the
+`retrobox-daemon` / `retrobox-boot` systemd units, and reinstall data
+preservation (existing `/data`, `.vhd`, and `.yaml` are kept unless
+`RETROPC_WIPE_DATA=1`).
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 
@@ -207,6 +219,7 @@ Deferred and recorded in `install-report.txt` rather than failing the install:
 - **Fullscreen 86Box boot path** — `retrobox boot` is wired via
   `retrobox-boot.service` but the graphics stack lands with #26; until then tty1
   shows the placeholder boot service (use SSH or the recovery entry for a shell).
-- **UEFI boot** — BIOS/legacy only for now; the build script leaves a seam for a
-  GRUB EFI El-Torito image.
 - **Network beyond DHCP** — static addressing / DNS tuning is out of scope.
+- **Secure Boot** — the installer targets non-Secure-Boot UEFI; a signed shim
+  is not staged. Machines with Secure Boot enforced will need it disabled in
+  firmware or a shim added later.

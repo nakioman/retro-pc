@@ -24,6 +24,18 @@ RETROBOX_OPT="/opt/retrobox"
 BOX86_OPT="/opt/86Box"
 DATA_DIR="/data"
 
+# EFI System Partition (GPT p1): mounted at /boot/efi inside the target, which
+# lives at $TARGET_MNT/boot/efi while the target is being assembled. ESP_PART is
+# set by partition.sh; ESP_UUID by fstab.sh.
+: "${ESP_MNT:=/boot/efi}"
+ESP_PART=""
+ESP_UUID=""
+
+# esp_mount_point -> chroot path of the ESP mount point on the target.
+esp_mount_point() {
+    printf '%s%s\n' "$TARGET_MNT" "$ESP_MNT"
+}
+
 # Runtime user/group for the appliance.
 RETROBOX_USER="retrobox"
 RETROBOX_GROUP="retrobox"
@@ -122,6 +134,13 @@ part_dev() {
 # fs_uuid DEVICE -> filesystem UUID (via blkid).
 fs_uuid() {
     blkid -s UUID -o value "$1"
+}
+
+# target_parted_disk_label DISK -> partition table type (gpt or msdos), or empty
+# when parted cannot read the disk. Used by partition.sh to decide between the
+# GPT reinstall path and the BIOS->UEFI migration path.
+target_parted_disk_label() {
+    parted -s "$1" print 2>/dev/null | awk -F': ' '/Partition Table/{print $2}'
 }
 
 # --- Target chroot bind mounts ---------------------------------------------

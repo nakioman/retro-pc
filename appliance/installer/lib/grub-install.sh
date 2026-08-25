@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Install GRUB in BIOS/legacy MBR mode onto the INTERNAL target disk (never the
-# USB), with a hidden appliance menu at 1280x960 and a recovery entry that skips
-# the fullscreen VM path.
+# Install GRUB in UEFI mode onto the INTERNAL target disk (never the USB): the
+# GRUB-EFI binary goes into the ESP mounted at /boot/efi (no MBR write), with a
+# hidden appliance menu at 1280x960 and a recovery entry that skips the
+# fullscreen VM path.
 #
-# Consumes globals: TARGET_DISK, ROOT_UUID.
+# Consumes globals: TARGET_DISK, ROOT_UUID, ESP_UUID.
 
 install_bootloader() {
     _write_grub_defaults
     _write_recovery_entry
-    log "Installing GRUB (i386-pc) to $TARGET_DISK MBR"
+    log "Installing GRUB (x86_64-efi) to ESP on $TARGET_DISK"
     # Do not silence output: grub's own error is the useful diagnostic, and on
     # failure die() drops to a recovery shell instead of looping.
-    in_target grub-install --target=i386-pc --recheck --no-floppy "$TARGET_DISK" \
+    in_target grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --bootloader-id=RetroBox --recheck \
         || die "grub-install failed for $TARGET_DISK (see output above)"
     log "Generating grub.cfg (UUID root)"
     in_target update-grub || die "update-grub failed (see output above)"
@@ -27,7 +29,7 @@ install_bootloader() {
     # that entirely.)
     sed -i '/^[[:space:]]*echo[[:space:]].*[Ll]oading/d' "$TARGET_MNT/boot/grub/grub.cfg" 2>/dev/null || true
 
-    ok "GRUB installed to $TARGET_DISK (root UUID=$ROOT_UUID)"
+    ok "GRUB installed to ESP on $TARGET_DISK (root UUID=$ROOT_UUID, ESP UUID=$ESP_UUID)"
 }
 
 # Kernel version string (e.g. 6.12.0-amd64) of the newest kernel in the target.
@@ -74,7 +76,7 @@ exec tail -n +3 "\$0"
 # which retrobox-boot.service honors to stay out of the fullscreen VM path and
 # leave a maintenance login on tty1.
 menuentry 'RetroBox — recovery (maintenance, no fullscreen VM)' --class recovery {
-    insmod part_msdos
+    insmod part_gpt
     insmod ext2
     search --no-floppy --fs-uuid --set=root $ROOT_UUID
     echo 'Loading RetroBox recovery...'

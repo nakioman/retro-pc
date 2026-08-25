@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build the bootable RetroBox USB appliance installer image.
 #
-# Produces a BIOS/legacy (isohybrid) ISO that can be written to a USB stick with
-# `dd` and boots on the target hardware, auto-starting the installer on tty1.
+# Produces a BIOS/UEFI hybrid (isohybrid with MBR + GPT + EFI El Torito) ISO that
+# can be written to a USB stick with `dd` and boots on the target hardware,
+# auto-starting the installer on tty1.
 #
 # Runs on a Debian/Ubuntu Linux host with root (CI: native runner; macOS: inside
 # the privileged builder container from Dockerfile). Requires: mmdebstrap,
-# mksquashfs, xorriso, isolinux + syslinux modules.
+# mksquashfs, xorriso, isolinux + syslinux modules, grub-efi-amd64-bin.
 #
 # Env:
 #   SUITE            Debian suite (default: trixie)
@@ -40,6 +41,7 @@ latest() { printf '%s\n' "$@" | sort -V | tail -n1; }
 command -v mmdebstrap >/dev/null || die "mmdebstrap not installed."
 command -v mksquashfs >/dev/null || die "squashfs-tools not installed."
 command -v xorriso    >/dev/null || die "xorriso not installed."
+command -v grub-mkimage >/dev/null || die "grub-mkimage not installed (grub-efi-amd64-bin)."
 command -v curl       >/dev/null || die "curl not installed."
 command -v sha256sum  >/dev/null || die "sha256sum not installed."
 command -v tar         >/dev/null || die "tar not installed."
@@ -86,7 +88,7 @@ mksquashfs "$TGT" "$ISO/install/target-rootfs.squashfs" -comp zstd -noappend -no
 
 # --- 2. Live installer rootfs (boots from USB, runs the installer) ---------
 log "Building live installer rootfs"
-LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
+LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-efi-amd64-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
 # The customize-hook is single-quoted on purpose: $1 must reach mmdebstrap
 # literally (it is mmdebstrap's target dir inside the hook), not expand here.
 # shellcheck disable=SC2016
@@ -123,6 +125,20 @@ log "Compressing live rootfs -> live/filesystem.squashfs"
 mksquashfs "$LIVE" "$ISO/live/filesystem.squashfs" -comp zstd -noappend -no-progress -e boot
 cp "$(latest "$LIVE"/boot/vmlinuz-*)" "$ISO/live/vmlinuz"
 cp "$(latest "$LIVE"/boot/initrd.img-*)" "$ISO/live/initrd.img"
+
+# --- 5a. GRUB-EFI image + EFI System Partition directory --------------------
+log "Staging GRUB-EFI boot image"
+mkdir -p "$ISO/EFI/BOOT" "$ISO/boot/grub"
+grub-mkimage -O x86_64-efi -o "$ISO/EFI/BOOT/BOOTX64.EFI" -p /boot/grub part_gpt part_msdos fat ext2 normal search search_fs_uuid search_label configfile linux echo all_video gfxterm font
+cat > "$ISO/boot/grub/grub.cfg" <<'EOF'
+set timeout=5
+set default=0
+menuentry "RetroBox Appliance Installer" {
+    linux /live/vmlinuz boot=live components quiet video=1280x960@60
+    initrd /live/initrd.img
+}
+EOF
+log "Staged GRUB-EFI image at EFI/BOOT/BOOTX64.EFI"
 
 # --- 5. Stage runtime, ROMs, catalog, and VM profiles -----------------------
 if [ -z "${RETROBOX_BIN:-}" ] || [ ! -f "${RETROBOX_BIN:-}" ]; then
@@ -185,7 +201,7 @@ LABEL retropc
   APPEND initrd=/live/initrd.img boot=live components quiet video=1280x960@60
 EOF
 
-# --- 7. Hybrid ISO (BIOS El Torito + isohybrid MBR, dd-able to USB) ---------
+# --- 7. Hybrid ISO (BIOS + EFI El Torito, isohybrid MBR + GPT, dd-able to USB) ---
 OUT_ISO="$OUT_DIR/retropc-installer.iso"
 log "Building hybrid ISO -> $OUT_ISO"
 xorriso -as mkisofs \
@@ -194,14 +210,25 @@ xorriso -as mkisofs \
     -isohybrid-mbr "$ISOLINUX_LIB/isohdpfx.bin" \
     -b isolinux/isolinux.bin -c isolinux/boot.cat \
     -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -eltorito-alt-boot \
+    -e EFI/BOOT/BOOTX64.EFI \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
     -o "$OUT_ISO" "$ISO"
 
 # --- 8. Post-build assertions ----------------------------------------------
 log "Verifying image"
 file "$OUT_ISO" | grep -qi 'DOS/MBR boot sector' \
     || die "ISO is not isohybrid (no MBR boot sector) — it will not boot from USB."
-xorriso -indev "$OUT_ISO" -report_el_torito plain 2>/dev/null | grep -qi 'El Torito' \
-    || die "ISO has no El Torito boot catalog."
+# El Torito catalog must list both boot entries (BIOS isolinux + EFI BOOTX64).
+# report_el_torito plain prints one "El Torito boot img" line per entry; assert
+# >= 2 and that the EFI image is present (its path appears in the report).
+xorriso -indev "$OUT_ISO" -report_el_torito plain 2>/dev/null > "$WORK/el_torito.txt" \
+    || die "xorriso could not read the ISO's El Torito catalog."
+[ "$(grep -c 'El Torito boot img' "$WORK/el_torito.txt")" -ge 2 ] \
+    || die "ISO El Torito catalog has fewer than 2 boot entries (need BIOS + EFI)."
+grep -q 'EFI/BOOT/BOOTX64.EFI' "$WORK/el_torito.txt" \
+    || die "ISO El Torito catalog is missing the EFI boot image."
 unsquashfs -s "$ISO/install/target-rootfs.squashfs" >/dev/null \
     || die "target-rootfs.squashfs is not a valid squashfs."
 # List once to a file and grep the file (no pipe -> no pipefail/SIGPIPE surprise).
@@ -210,7 +237,7 @@ unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
 # association backend (systemd-networkd has no native WPA2-PSK); the rtw88 blob
 # confirms firmware-realtek was bundled.
 for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
-           usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
+           usr/bin/grub-mkimage usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
            usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
