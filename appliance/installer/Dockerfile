@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         isolinux \
         syslinux-common \
         grub-efi-amd64-bin \
+        mtools \
         dosfstools \
         ca-certificates \
         debian-archive-keyring \

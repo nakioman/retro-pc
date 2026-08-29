@@ -29,8 +29,10 @@ write_fstab() {
 # Read-only OS image root.
 UUID=$ROOT_UUID  /      ext4      ro,errors=remount-ro                          0 1
 
-# EFI System Partition (GRUB-EFI lives here).
-UUID=$ESP_UUID  /boot/efi  vfat  umask=0077  0  2
+# EFI System Partition (GRUB-EFI lives here). fsck pass 0: an ESP is written
+# only by grub-install at install time, and fsck.vfat would have to exist in the
+# image for a nonzero pass to succeed at boot.
+UUID=$ESP_UUID  /boot/efi  vfat  umask=0077,nosuid,nodev,noexec                 0 0
 
 # Mutable application + system-overlay state.
 UUID=$DATA_UUID  /data  ext4      rw,nosuid,nodev,noatime                       0 2

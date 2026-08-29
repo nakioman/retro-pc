@@ -69,7 +69,7 @@ On an amd64 host you can drop `--platform linux/amd64`.
 
 ```bash
 sudo apt-get install -y mmdebstrap squashfs-tools xorriso \
-    isolinux syslinux-common grub-efi-amd64-bin dosfstools zstd e2fsprogs
+    isolinux syslinux-common grub-efi-amd64-bin mtools dosfstools zstd e2fsprogs
 sudo bash appliance/installer/build-usb-installer.sh
 ```
 
@@ -113,11 +113,25 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
    and you must type the exact `ERASE /dev/sdX` confirmation before anything is
    written.
 4. If the disk already carries a **legacy BIOS** install (MBR partition table),
-   the installer offers a `MIGRATE` confirmation: it stages `/data` to a
-   temporary location, repartitions as GPT with an ESP, and restores `/data` onto
-   the new layout. The migration is destructive of the partition table but
-   preserves your VMs, floppies, and catalogs. Decline the prompt (or re-run
-   with `RETROPC_MIGRATE_BIOS_TO_UEFI=1` to force it) to choose either path.
+   the installer offers a `MIGRATE` confirmation: it stages `/data` off the
+   disk, repartitions as GPT with an ESP, and restores `/data` onto the new
+   layout. The migration is destructive of the partition table but preserves
+   your VMs, floppies, and catalogs. Decline the prompt (or re-run with
+   `RETROPC_MIGRATE_BIOS_TO_UEFI=1` to force it) to choose either path.
+
+   **Attach external storage first.** The staging copy defaults to `/var/tmp`,
+   which on the live installer is RAM; the installer refuses to stage there and
+   aborts before touching the disk. Point it at real storage:
+
+   ```bash
+   RETROPC_MIGRATE_STAGING_DIR=/mnt/backup bash install-retropc.sh
+   ```
+
+   Set `RETROPC_MIGRATE_ALLOW_RAM_STAGING=1` only if `/data` is small enough to
+   fit in RAM. Free space is checked against actual `/data` usage while the
+   legacy partition is still mounted, so an undersized target aborts with the
+   BIOS install intact. If a failure happens after repartitioning, the staged
+   copy is kept and its path is printed.
 5. Set the `retrobox` password when prompted (used for SSH and `sudo`).
 6. Press Enter to reboot **with the USB still inserted** (the live installer runs
    from it). Remove the USB while the machine restarts — at the firmware/logo
@@ -178,10 +192,13 @@ Automated (CI / local):
 
 - `shellcheck -x` on all installer scripts.
 - The build asserts the ISO is isohybrid (MBR boot sector for legacy BIOS
-  boot), exposes a second EFI El-Torito boot entry (the `EFI/BOOT/BOOTX64.EFI`
-  GRUB image), that `target-rootfs.squashfs` is valid, and that the expected
-  package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`, `grub-mkimage`)
-  are present.
+  boot); that the El-Torito catalog holds two entries and names the EFI image;
+  that the EFI image (`boot/grub/efi.img`) is a real FAT filesystem containing
+  `EFI/BOOT/BOOTX64.EFI` rather than a bare PE binary; that the ISO carries a
+  GPT in its system area, which is what UEFI firmware reads once the image is
+  `dd`'d to a USB stick; that `target-rootfs.squashfs` is valid; and that the
+  expected package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`,
+  `grub-mkimage`) are present.
 
 Manual (on real hardware / a spare disk):
 
