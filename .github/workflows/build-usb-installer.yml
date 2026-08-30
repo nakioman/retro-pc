@@ -83,7 +83,7 @@ jobs:
     # Publish a GitHub Release with the ISO only for pushes to main (or a manual
     # run on main). PR builds still just upload the artifact above.
     needs: build
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
