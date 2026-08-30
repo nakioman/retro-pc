@@ -15,7 +15,9 @@ systemd-sysv
 udev
 dbus
 e2fsprogs
-grub-pc
+# grub-efi-amd64 installs grub-install with EFI support for the GPT/UEFI target disk.
+grub-efi-amd64
+efibootmgr
 systemd-zram-generator
 plymouth
 plymouth-themes

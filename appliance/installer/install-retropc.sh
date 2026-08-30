@@ -43,8 +43,13 @@ PAYLOAD_DIR="$SELF_DIR/payload"
 
 cleanup() {
     umount_target_binds
-    umount -l "$TARGET_MNT/data" 2>/dev/null || true
-    umount -l "$TARGET_MNT"      2>/dev/null || true
+    # umount_target unmounts in reverse-mount order (ESP -> /data -> /), so the
+    # bind mounts are torn down before the underlying filesystems go away.
+    umount_target 2>/dev/null || {
+        umount -l "$TARGET_MNT/boot/efi" 2>/dev/null || true
+        umount -l "$TARGET_MNT/data"      2>/dev/null || true
+        umount -l "$TARGET_MNT"           2>/dev/null || true
+    }
 }
 trap cleanup EXIT
 # On any unhandled failure, freeze in a recovery shell instead of exiting (which

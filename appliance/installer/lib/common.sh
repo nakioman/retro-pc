@@ -24,6 +24,18 @@ RETROBOX_OPT="/opt/retrobox"
 BOX86_OPT="/opt/86Box"
 DATA_DIR="/data"
 
+# EFI System Partition (GPT p1): mounted at /boot/efi inside the target, which
+# lives at $TARGET_MNT/boot/efi while the target is being assembled. ESP_PART is
+# set by partition.sh; ESP_UUID by fstab.sh.
+: "${ESP_MNT:=/boot/efi}"
+ESP_PART=""
+ESP_UUID=""
+
+# esp_mount_point -> chroot path of the ESP mount point on the target.
+esp_mount_point() {
+    printf '%s%s\n' "$TARGET_MNT" "$ESP_MNT"
+}
+
 # Runtime user/group for the appliance.
 RETROBOX_USER="retrobox"
 RETROBOX_GROUP="retrobox"
@@ -124,6 +136,13 @@ fs_uuid() {
     blkid -s UUID -o value "$1"
 }
 
+# target_parted_disk_label DISK -> partition table type (gpt or msdos), or empty
+# when parted cannot read the disk. Used by partition.sh to decide between the
+# GPT reinstall path and the BIOS->UEFI migration path.
+target_parted_disk_label() {
+    parted -s "$1" print 2>/dev/null | awk -F': ' '/Partition Table/{print $2}'
+}
+
 # --- Target chroot bind mounts ---------------------------------------------
 
 mount_target_binds() {
@@ -135,9 +154,21 @@ mount_target_binds() {
     mount -t proc  proc    "$TARGET_MNT/proc"
     mount -t sysfs sysfs   "$TARGET_MNT/sys"
     mount -t tmpfs tmpfs   "$TARGET_MNT/run"
+    # A fresh sysfs mount does not carry the host's efivarfs submount, so the
+    # chroot would see an empty /sys/firmware/efi/efivars and grub-install would
+    # decide EFI variables are unsupported. Remount it when the live system
+    # actually booted via UEFI. Best-effort: the bootloader install uses
+    # --removable and does not depend on NVRAM (see grub-install.sh), so a
+    # legacy-booted installer still produces a bootable UEFI disk.
+    if [ -d /sys/firmware/efi/efivars ]; then
+        mkdir -p "$TARGET_MNT/sys/firmware/efi/efivars"
+        mount -t efivarfs efivarfs "$TARGET_MNT/sys/firmware/efi/efivars" 2>/dev/null \
+            || true
+    fi
 }
 
 umount_target_binds() {
+    umount -l "$TARGET_MNT/sys/firmware/efi/efivars" 2>/dev/null || true
     for d in run sys proc dev/pts dev; do
         umount -l "$TARGET_MNT/$d" 2>/dev/null || true
     done

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Build the bootable RetroBox USB appliance installer image.
 #
-# Produces a BIOS/legacy (isohybrid) ISO that can be written to a USB stick with
-# `dd` and boots on the target hardware, auto-starting the installer on tty1.
+# Produces a BIOS/UEFI hybrid (isohybrid with MBR + GPT + EFI El Torito) ISO that
+# can be written to a USB stick with `dd` and boots on the target hardware,
+# auto-starting the installer on tty1.
 #
 # Runs on a Debian/Ubuntu Linux host with root (CI: native runner; macOS: inside
 # the privileged builder container from Dockerfile). Requires: mmdebstrap,
-# mksquashfs, xorriso, isolinux + syslinux modules.
+# mksquashfs, xorriso, isolinux + syslinux modules, grub-efi-amd64-bin, mtools,
+# dosfstools.
 #
 # Env:
 #   SUITE            Debian suite (default: trixie)
@@ -40,6 +42,9 @@ latest() { printf '%s\n' "$@" | sort -V | tail -n1; }
 command -v mmdebstrap >/dev/null || die "mmdebstrap not installed."
 command -v mksquashfs >/dev/null || die "squashfs-tools not installed."
 command -v xorriso    >/dev/null || die "xorriso not installed."
+command -v grub-mkimage >/dev/null || die "grub-mkimage not installed (grub-efi-amd64-bin)."
+command -v mkfs.vfat   >/dev/null || die "mkfs.vfat not installed (dosfstools)."
+command -v mcopy       >/dev/null || die "mcopy not installed (mtools)."
 command -v curl       >/dev/null || die "curl not installed."
 command -v sha256sum  >/dev/null || die "sha256sum not installed."
 command -v tar         >/dev/null || die "tar not installed."
@@ -86,7 +91,7 @@ mksquashfs "$TGT" "$ISO/install/target-rootfs.squashfs" -comp zstd -noappend -no
 
 # --- 2. Live installer rootfs (boots from USB, runs the installer) ---------
 log "Building live installer rootfs"
-LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-pc-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
+LIVE_PKGS="linux-image-amd64,live-boot,systemd-sysv,parted,gdisk,e2fsprogs,dosfstools,rsync,squashfs-tools,grub-efi-amd64-bin,grub-common,util-linux,pciutils,usbutils,kmod,dialog,bash,ncurses-term,less"
 # The customize-hook is single-quoted on purpose: $1 must reach mmdebstrap
 # literally (it is mmdebstrap's target dir inside the hook), not expand here.
 # shellcheck disable=SC2016
@@ -123,6 +128,60 @@ log "Compressing live rootfs -> live/filesystem.squashfs"
 mksquashfs "$LIVE" "$ISO/live/filesystem.squashfs" -comp zstd -noappend -no-progress -e boot
 cp "$(latest "$LIVE"/boot/vmlinuz-*)" "$ISO/live/vmlinuz"
 cp "$(latest "$LIVE"/boot/initrd.img-*)" "$ISO/live/initrd.img"
+
+# --- 5a. GRUB-EFI image + EFI System Partition image ------------------------
+# Two artifacts, both required:
+#   boot/grub/efi.img     a FAT image holding EFI/BOOT/BOOTX64.EFI. This is what
+#                         the El Torito EFI entry (-e) points at: firmware
+#                         treats that entry as a *filesystem* image, so a raw PE
+#                         binary there is unbootable. -isohybrid-gpt-basdat maps
+#                         this image's extent to a GPT partition, which is what
+#                         UEFI mounts when the ISO is dd'd to a USB stick.
+#   EFI/BOOT/BOOTX64.EFI  a plain copy in the ISO9660 tree, for firmware that
+#                         browses the filesystem instead of the GPT.
+log "Staging GRUB-EFI boot image"
+mkdir -p "$ISO/EFI/BOOT" "$ISO/boot/grub"
+
+# Embedded config. When firmware loads BOOTX64.EFI, GRUB's $root is the ESP (the
+# FAT image), not the ISO9660 volume carrying the kernel — so the built-in
+# prefix alone can never find /boot/grub/grub.cfg. Locate the ISO by a file only
+# it has, repoint $root/$prefix at it, then hand over to its grub.cfg.
+cat > "$WORK/grub-early.cfg" <<'EOF'
+search --no-floppy --set=root --file /live/vmlinuz
+set prefix=($root)/boot/grub
+configfile ($root)/boot/grub/grub.cfg
+EOF
+
+# iso9660 reads the kernel/initrd off the ISO; search_fs_file backs
+# `search --file`; fat/part_gpt/part_msdos cover the ESP and both hybrid tables.
+grub-mkimage -O x86_64-efi -o "$WORK/BOOTX64.EFI" -p /boot/grub \
+    -c "$WORK/grub-early.cfg" \
+    part_gpt part_msdos fat ext2 iso9660 udf normal search search_fs_uuid \
+    search_fs_file search_label configfile linux loopback echo test true \
+    minicmd chain halt reboot all_video gfxterm font terminal efi_gop efi_uga
+
+EFI_IMG="$ISO/boot/grub/efi.img"
+# Headroom beyond the payload for the boot sector, FATs, and root directory.
+EFI_IMG_KIB=$(( $(stat -c %s "$WORK/BOOTX64.EFI") / 1024 + 512 ))
+rm -f "$EFI_IMG"
+mkfs.vfat -C "$EFI_IMG" "$EFI_IMG_KIB" >/dev/null \
+    || die "mkfs.vfat failed building the EFI System Partition image."
+mmd   -i "$EFI_IMG" ::/EFI ::/EFI/BOOT
+mcopy -i "$EFI_IMG" "$WORK/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+mdir  -i "$EFI_IMG" ::/EFI/BOOT/BOOTX64.EFI >/dev/null \
+    || die "EFI image does not contain EFI/BOOT/BOOTX64.EFI."
+
+install -m 0644 "$WORK/BOOTX64.EFI" "$ISO/EFI/BOOT/BOOTX64.EFI"
+
+cat > "$ISO/boot/grub/grub.cfg" <<'EOF'
+set timeout=5
+set default=0
+menuentry "RetroBox Appliance Installer" {
+    linux /live/vmlinuz boot=live components quiet video=1280x960@60
+    initrd /live/initrd.img
+}
+EOF
+log "Staged GRUB-EFI image (${EFI_IMG_KIB} KiB FAT) at boot/grub/efi.img"
 
 # --- 5. Stage runtime, ROMs, catalog, and VM profiles -----------------------
 if [ -z "${RETROBOX_BIN:-}" ] || [ ! -f "${RETROBOX_BIN:-}" ]; then
@@ -185,7 +244,7 @@ LABEL retropc
   APPEND initrd=/live/initrd.img boot=live components quiet video=1280x960@60
 EOF
 
-# --- 7. Hybrid ISO (BIOS El Torito + isohybrid MBR, dd-able to USB) ---------
+# --- 7. Hybrid ISO (BIOS + EFI El Torito, isohybrid MBR + GPT, dd-able to USB) ---
 OUT_ISO="$OUT_DIR/retropc-installer.iso"
 log "Building hybrid ISO -> $OUT_ISO"
 xorriso -as mkisofs \
@@ -194,14 +253,38 @@ xorriso -as mkisofs \
     -isohybrid-mbr "$ISOLINUX_LIB/isohdpfx.bin" \
     -b isolinux/isolinux.bin -c isolinux/boot.cat \
     -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
     -o "$OUT_ISO" "$ISO"
 
 # --- 8. Post-build assertions ----------------------------------------------
 log "Verifying image"
 file "$OUT_ISO" | grep -qi 'DOS/MBR boot sector' \
     || die "ISO is not isohybrid (no MBR boot sector) — it will not boot from USB."
-xorriso -indev "$OUT_ISO" -report_el_torito plain 2>/dev/null | grep -qi 'El Torito' \
-    || die "ISO has no El Torito boot catalog."
+# El Torito catalog must list both boot entries (BIOS isolinux + EFI BOOTX64).
+# report_el_torito plain prints one "El Torito boot img" line per entry; assert
+# >= 2 and that the EFI image is present (its path appears in the report).
+xorriso -indev "$OUT_ISO" -report_el_torito plain 2>/dev/null > "$WORK/el_torito.txt" \
+    || die "xorriso could not read the ISO's El Torito catalog."
+[ "$(grep -c 'El Torito boot img' "$WORK/el_torito.txt")" -ge 2 ] \
+    || die "ISO El Torito catalog has fewer than 2 boot entries (need BIOS + EFI)."
+grep -q 'boot/grub/efi.img' "$WORK/el_torito.txt" \
+    || die "ISO El Torito catalog is missing the EFI boot image (boot/grub/efi.img)."
+# The catalog only proves a path was registered — assert the referenced image is
+# really a FAT filesystem carrying the loader. A raw PE here is the classic way a
+# "hybrid" ISO passes every check and still shows no boot device on UEFI.
+file "$EFI_IMG" | grep -qi 'FAT' \
+    || die "boot/grub/efi.img is not a FAT filesystem image — UEFI will not boot it."
+mdir -i "$EFI_IMG" ::/EFI/BOOT/BOOTX64.EFI >/dev/null 2>&1 \
+    || die "boot/grub/efi.img does not contain EFI/BOOT/BOOTX64.EFI."
+# GPT is what firmware reads once the ISO is dd'd to a USB stick; without it the
+# EFI El Torito entry is only reachable when booting the ISO as optical media.
+xorriso -indev "$OUT_ISO" -report_system_area plain 2>/dev/null > "$WORK/sysarea.txt" \
+    || die "xorriso could not read the ISO's system area."
+grep -qi 'GPT' "$WORK/sysarea.txt" \
+    || die "ISO has no GPT in its system area — UEFI firmware will not see an ESP on the USB."
 unsquashfs -s "$ISO/install/target-rootfs.squashfs" >/dev/null \
     || die "target-rootfs.squashfs is not a valid squashfs."
 # List once to a file and grep the file (no pipe -> no pipefail/SIGPIPE surprise).
@@ -210,7 +293,7 @@ unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
 # association backend (systemd-networkd has no native WPA2-PSK); the rtw88 blob
 # confirms firmware-realtek was bundled.
 for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
-           usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
+           usr/bin/grub-mkimage usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
            usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
