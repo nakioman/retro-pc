@@ -177,7 +177,7 @@ cat > "$ISO/boot/grub/grub.cfg" <<'EOF'
 set timeout=5
 set default=0
 menuentry "RetroBox Appliance Installer" {
-    linux /live/vmlinuz boot=live components quiet video=1280x960@60
+    linux /live/vmlinuz boot=live components quiet video=2048x1536@30
     initrd /live/initrd.img
 }
 EOF
