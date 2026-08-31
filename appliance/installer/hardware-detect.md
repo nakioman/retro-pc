@@ -58,9 +58,11 @@ no serial device is present the daemon config keeps a placeholder
 ## HDMI audio
 
 The installer checks ALSA's ELD data under `/proc/asound` for a connected HDMI
-monitor and selects the corresponding HDMI PCM. It writes a per-user
+monitor and selects the first HDMI playback PCM exposed for that card. ELD
+filenames identify HDA codec pins, not PCM numbers, so the PCM is read from its
+`pcm*p/id` entry. It writes a per-user
 `~/.asoundrc` for `retrobox` using the stable ALSA card id and detected PCM,
-for example `plughw:CARD=MID,DEV=3`; it does not assume that the card is always
+for example `hw:CARD=MID,DEV=3`; it does not assume that the card is always
 numbered `0` or that HDMI is always device `3`.
 
 If no connected HDMI endpoint is visible during installation, the installer
