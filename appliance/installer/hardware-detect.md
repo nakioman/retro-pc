@@ -57,17 +57,9 @@ no serial device is present the daemon config keeps a placeholder
 
 ## HDMI audio
 
-The installer checks ALSA's ELD data under `/proc/asound` for a connected HDMI
-monitor and selects the first HDMI playback PCM exposed for that card. ELD
-filenames identify HDA codec pins, not PCM numbers, so the PCM is read from its
-`pcm*p/id` entry. It writes a per-user
-`~/.asoundrc` for `retrobox` using the stable ALSA card id and detected PCM,
-for example `hw:CARD=MID,DEV=3`; it does not assume that the card is always
-numbered `0` or that HDMI is always device `3`.
-
-If no connected HDMI endpoint is visible during installation, the installer
-leaves ALSA's normal default unchanged and records `audio.status=NOT_DETECTED`.
-The target can then be reconfigured after connecting the display.
+Audio is configured at boot by `retrobox-audio-setup.service`, after the
+runtime ALSA devices and connected HDMI endpoints are available. The installer
+does not detect or configure audio.
 
 ## Install report format
 
@@ -85,8 +77,6 @@ cdrom.status=DETECTED
 serial.device=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
 serial.baud=115200
 serial.status=DETECTED
-audio.device=plughw:CARD=MID,DEV=3
-audio.status=DETECTED
 retrobox.binary=installed
 box86.appimage=installed
 ```

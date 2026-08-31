@@ -280,8 +280,6 @@ cdrom.status=$CDROM_STATUS
 serial.device=$SERIAL_DEVICE
 serial.baud=$SERIAL_BAUD
 serial.status=$SERIAL_STATUS
-audio.device=$HDMI_AUDIO_DEVICE
-audio.status=$HDMI_AUDIO_STATUS
 retrobox.binary=$RETROBOX_STATUS
 box86.appimage=$BOX86_STATUS
 EOF
@@ -291,7 +289,6 @@ detect_and_record_hardware() {
     log "Detecting CD-ROM and ESP8266 serial devices"
     detect_cdrom
     detect_serial
-    configure_audio_output
     configure_cdrom_passthrough
     log "CD-ROM: $CDROM_DEVICE ($CDROM_STATUS)"
     log "Serial: $SERIAL_DEVICE @ ${SERIAL_BAUD} ($SERIAL_STATUS)"
