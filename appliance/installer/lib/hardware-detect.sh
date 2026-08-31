@@ -130,9 +130,9 @@ detect_serial() {
     SERIAL_DEVICE="/dev/ttyUSB0"; SERIAL_STATUS="NOT_DETECTED"
 }
 
-# Select a connected HDMI PCM without relying on the card's numeric index. The
-# ELD files expose the monitor/TV connection state and use the same PCM number
-# that ALSA exposes as the HDMI playback device (for example, eld#3.0 -> pcm3p).
+# Select a connected HDMI PCM without relying on the card's numeric index. ELD
+# filenames identify an HDA codec pin, not an ALSA PCM device, so the PCM number
+# must be read from the matching /proc/asound pcm id file.
 detect_hdmi_pcm() {
     local eld card_dir device present card_id pcm_id
 
@@ -142,12 +142,17 @@ detect_hdmi_pcm() {
         [ "$present" = "1" ] || continue
 
         card_dir="${eld%/eld#*}"
-        device="${eld##*eld#}"
-        device="${device%%.*}"
         card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
         [ -n "$card_id" ] || continue
-        printf '%s|%s\n' "$card_id" "$device"
-        return 0
+
+        for pcm_id in "$card_dir"/pcm*p/id; do
+            [ -f "$pcm_id" ] || continue
+            grep -qi 'HDMI' "$pcm_id" || continue
+            device="${pcm_id##*/pcm}"
+            device="${device%%p/id}"
+            printf '%s|%s\n' "$card_id" "$device"
+            return 0
+        done
     done
 
     # Some kernels expose HDMI PCM metadata but no ELD file. Use the first
@@ -204,7 +209,7 @@ configure_audio_output() {
 # depending on the kernel's numeric card ordering.
 pcm.!default {
     type plug
-    slave.pcm "plughw:CARD=$card_id,DEV=$device"
+    slave.pcm "hw:CARD=$card_id,DEV=$device"
 }
 ctl.!default {
     type hw
