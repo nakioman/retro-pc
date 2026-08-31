@@ -145,11 +145,11 @@ detect_hdmi_pcm() {
         card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
         [ -n "$card_id" ] || continue
 
-        for pcm_id in "$card_dir"/pcm*p/id; do
+        for pcm_id in "$card_dir"/pcm*p/info; do
             [ -f "$pcm_id" ] || continue
-            grep -qi 'HDMI' "$pcm_id" || continue
+            grep -qi '^id:.*HDMI' "$pcm_id" || continue
             device="${pcm_id##*/pcm}"
-            device="${device%%p/id}"
+            device="${device%%p/info}"
             printf '%s|%s\n' "$card_id" "$device"
             return 0
         done
@@ -157,12 +157,12 @@ detect_hdmi_pcm() {
 
     # Some kernels expose HDMI PCM metadata but no ELD file. Use the first
     # playback PCM explicitly named HDMI as a fallback.
-    for pcm_id in /proc/asound/card*/pcm*p/id; do
+    for pcm_id in /proc/asound/card*/pcm*p/info; do
         [ -f "$pcm_id" ] || continue
-        grep -qi 'HDMI' "$pcm_id" || continue
+        grep -qi '^id:.*HDMI' "$pcm_id" || continue
         card_dir="${pcm_id%/pcm*}"
         device="${pcm_id##*/pcm}"
-        device="${device%%p/id}"
+        device="${device%%p/info}"
         card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
         [ -n "$card_id" ] || continue
         printf '%s|%s\n' "$card_id" "$device"
@@ -172,11 +172,11 @@ detect_hdmi_pcm() {
     # During installation an HDMI sink may not expose ELD data until the
     # display is fully initialized. Keep audio usable by selecting the first
     # playback PCM; this also covers analog-only machines.
-    for pcm_id in /proc/asound/card*/pcm*p/id; do
+    for pcm_id in /proc/asound/card*/pcm*p/info; do
         [ -f "$pcm_id" ] || continue
         card_dir="${pcm_id%/pcm*}"
         device="${pcm_id##*/pcm}"
-        device="${device%%p/id}"
+        device="${device%%p/info}"
         card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
         [ -n "$card_id" ] || continue
         printf '%s|%s\n' "$card_id" "$device"

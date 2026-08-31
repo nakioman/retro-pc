@@ -13,23 +13,23 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
     awk '$1 == "monitor_present" && $2 == "1" { found=1 } END { exit !found }' "$eld" || continue
     card_dir="${eld%/eld#*}"
     card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
-    for pcm in "$card_dir"/pcm*p/id; do
+    for pcm in "$card_dir"/pcm*p/info; do
         [ -f "$pcm" ] || continue
-        grep -qi HDMI "$pcm" || continue
+        grep -qi '^id:.*HDMI' "$pcm" || continue
         device="${pcm##*/pcm}"
-        detected="$card_id|${device%%p/id}"
+        detected="$card_id|${device%%p/info}"
         break 3
     done
   done
 
   if [ -z "$detected" ]; then
-    for pcm in /proc/asound/card*/pcm*p/id; do
+    for pcm in /proc/asound/card*/pcm*p/info; do
         [ -f "$pcm" ] || continue
         card_dir="${pcm%/pcm*}"
         card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
         [ -n "$card_id" ] || continue
         device="${pcm##*/pcm}"
-        detected="$card_id|${device%%p/id}"
+        detected="$card_id|${device%%p/info}"
         break 2
     done
   fi
