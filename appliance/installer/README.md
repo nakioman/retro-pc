@@ -3,7 +3,7 @@
 This directory builds a **bootable USB installer** that installs the RetroBox
 Debian appliance onto the target machine's internal HDD/SSD.
 
-The installed system is a **read-only-root** Debian 13 appliance with a mutable
+The installed system is a **writable-root** Debian 13 appliance with a mutable
 `/data` partition, a GPT disk layout with a 512 MiB EFI System Partition, GRUB
 installed as UEFI, SSH maintenance access, and a Samba scratch share — see
 [`../README.md`](../README.md) and [`../filesystem-layout.md`](../filesystem-layout.md).
@@ -155,9 +155,8 @@ Re-running the installer over an existing appliance keeps your data by default:
 - `root` is **locked**. `retrobox` is the sole account — the service runtime user
   and the SSH maintenance login, with `sudo`.
 - Maintenance over SSH: `ssh retrobox@<ip>` (DHCP; `PermitRootLogin no`).
-- The root filesystem is read-only. To edit system files:
-  `sudo mount -o remount,rw /`, make the change, then reboot or
-  `sudo mount -o remount,ro /`. `/data` is always writable.
+- The root filesystem is writable, so system files can be edited normally.
+  `/data` is also writable.
 
 ## Machine selector
 
