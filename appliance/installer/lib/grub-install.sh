@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install GRUB in UEFI mode onto the INTERNAL target disk (never the USB): the
 # GRUB-EFI binary goes into the ESP mounted at /boot/efi (no MBR write), with a
-# hidden appliance menu at 1280x960 and a recovery entry that skips the
+# hidden appliance menu and a recovery entry that skips the
 # fullscreen VM path.
 #
 # Consumes globals: TARGET_DISK, ROOT_UUID, ESP_UUID.
@@ -60,12 +60,10 @@ GRUB_TIMEOUT=1
 # Root is read-only, so grub-common.service cannot clear the "recordfail" flag
 # in grubenv. Keep the timeout at 0 so a stuck flag never shows a menu or delay.
 GRUB_RECORDFAIL_TIMEOUT=0
-# Quiet boot with the Plymouth splash. Force the console/framebuffer to
-# 1280x960@60 via the kernel `video=` param: GRUB_GFXMODE alone only sets the
-# GRUB menu mode; once the KMS driver (i915) loads it would otherwise switch to
-# the monitor's native resolution.
+# Quiet boot with the Plymouth splash. Leave the kernel display mode unset so
+# the KMS driver can use the monitor's native resolution.
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.udev.log_level=3"
-GRUB_CMDLINE_LINUX="video=1280x960@60"
+GRUB_CMDLINE_LINUX=""
 GRUB_GFXMODE=1280x960x32
 GRUB_GFXPAYLOAD_LINUX=keep
 # Single-purpose appliance: no other OSes to probe, no stock recovery submenu
@@ -93,7 +91,7 @@ menuentry 'RetroBox — recovery (maintenance, no fullscreen VM)' --class recove
     insmod ext2
     search --no-floppy --fs-uuid --set=root $ROOT_UUID
     echo 'Loading RetroBox recovery...'
-    linux /boot/vmlinuz-$kver root=UUID=$ROOT_UUID ro retropc.norun=1 video=1280x960@60
+    linux /boot/vmlinuz-$kver root=UUID=$ROOT_UUID ro retropc.norun=1
     initrd /boot/initrd.img-$kver
 }
 EOF
