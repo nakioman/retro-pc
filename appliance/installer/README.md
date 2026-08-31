@@ -32,7 +32,6 @@ Installer auto-starts on tty1    (install-retropc.sh)
 Pick the internal disk           (USB device excluded; typed confirmation)
 Partition + format               (fresh: GPT p1 ESP, p2 root ro, p3 /data rw)
 Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root+ESP)
-Migrate legacy BIOS install      (MBR->GPT: stage /data, repartition, restore)
 Extract appliance rootfs         (offline, from the USB)
 Write UUID fstab, users, GRUB    (UEFI: ESP + GRUB-EFI; root locked; password prompted)
 Remove USB and reboot            (target boots the installed appliance)
@@ -112,28 +111,8 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 3. Choose the internal disk. **The USB installer device is excluded by default**,
    and you must type the exact `ERASE /dev/sdX` confirmation before anything is
    written.
-4. If the disk already carries a **legacy BIOS** install (MBR partition table),
-   the installer offers a `MIGRATE` confirmation: it stages `/data` off the
-   disk, repartitions as GPT with an ESP, and restores `/data` onto the new
-   layout. The migration is destructive of the partition table but preserves
-   your VMs, floppies, and catalogs. Decline the prompt (or re-run with
-   `RETROPC_MIGRATE_BIOS_TO_UEFI=1` to force it) to choose either path.
-
-   **Attach external storage first.** The staging copy defaults to `/var/tmp`,
-   which on the live installer is RAM; the installer refuses to stage there and
-   aborts before touching the disk. Point it at real storage:
-
-   ```bash
-   RETROPC_MIGRATE_STAGING_DIR=/mnt/backup bash install-retropc.sh
-   ```
-
-   Set `RETROPC_MIGRATE_ALLOW_RAM_STAGING=1` only if `/data` is small enough to
-   fit in RAM. Free space is checked against actual `/data` usage while the
-   legacy partition is still mounted, so an undersized target aborts with the
-   BIOS install intact. If a failure happens after repartitioning, the staged
-   copy is kept and its path is printed.
-5. Set the `retrobox` password when prompted (used for SSH and `sudo`).
-6. Press Enter to reboot **with the USB still inserted** (the live installer runs
+4. Set the `retrobox` password when prompted (used for SSH and `sudo`).
+5. Press Enter to reboot **with the USB still inserted** (the live installer runs
    from it). Remove the USB while the machine restarts — at the firmware/logo
    screen — so it boots from the internal disk.
 
