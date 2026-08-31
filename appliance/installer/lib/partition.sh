@@ -98,10 +98,11 @@ _confirm_preserve_data() {
         return 0
     fi
     local reply
-    read -r -p "Existing RetroBox install found. Preserve /data (VMs, floppies)? [Y/n] " reply < /dev/tty
+    read -r -p "Existing RetroBox install found. Preserve /data (VMs, floppies)? [y/N] " reply < /dev/tty
     case "$reply" in
         n | N | no | NO) return 1 ;;
-        *) return 0 ;;
+        y | Y | yes | YES) return 0 ;;
+        *) return 1 ;;
     esac
 }
 

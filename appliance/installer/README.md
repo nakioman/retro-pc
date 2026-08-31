@@ -139,7 +139,7 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 
 ## Reinstall & data preservation
 
-Re-running the installer over an existing appliance keeps your data by default:
+Re-running the installer over an existing appliance asks whether to keep your data:
 
 - The `/data` partition is **not** reformatted. Only the read-only root
   filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
@@ -147,8 +147,8 @@ Re-running the installer over an existing appliance keeps your data by default:
   floppies, snapshots, and Samba scratch.
 - OS-managed profile files (`86box.cfg`, shaders) **are** refreshed; `.vhd` and
   `.yaml` files are never overwritten.
-- Set `RETROPC_WIPE_DATA=1` to force a full wipe of `/data` on reinstall
-  (or answer `n` to the "Preserve /data?" prompt during the install).
+- Answer `n` (or press Enter) to the "Preserve /data?" prompt to fully wipe and
+  refresh the installation. Set `RETROPC_WIPE_DATA=1` for unattended installs.
 
 ## Accounts & maintenance
 
