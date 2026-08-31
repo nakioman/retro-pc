@@ -3,6 +3,10 @@ set -Eeuo pipefail
 
 target=/data/home/retrobox/.asoundrc
 detected=""
+log_file=/var/log/retrobox-audio-setup.log
+exec >>"$log_file" 2>&1
+echo "[$(date -Is)] starting audio detection"
+echo "[$(date -Is)] /proc/asound: $(if [ -d /proc/asound ]; then echo present; else echo missing; fi)"
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   for eld in /proc/asound/card*/eld#*; do
     [ -f "$eld" ] || continue
@@ -30,11 +34,16 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
     done
   fi
   [ -n "$detected" ] && break
+  echo "[$(date -Is)] no playback PCM found (attempt $attempt)"
   sleep 1
 done
 
-[ -n "$detected" ] || exit 0
+if [ -z "$detected" ]; then
+    echo "[$(date -Is)] no ALSA playback PCM detected; leaving existing configuration unchanged"
+    exit 0
+fi
 IFS='|' read -r card_id device <<< "$detected"
+echo "[$(date -Is)] selected CARD=$card_id DEV=$device"
 case "$card_id" in ''|*[!A-Za-z0-9_-]*) exit 0 ;; esac
 
 install -d -o retrobox -g retrobox -m 0755 "$(dirname "$target")"
@@ -51,3 +60,4 @@ ctl.!default {
 EOF
 chown retrobox:retrobox "$target"
 chmod 0644 "$target"
+echo "[$(date -Is)] wrote $target"

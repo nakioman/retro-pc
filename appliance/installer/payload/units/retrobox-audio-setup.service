@@ -8,6 +8,8 @@ RequiresMountsFor=/data
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/retrobox-audio-setup
+StandardOutput=journal
+StandardError=journal
 TimeoutStartSec=30
 
 [Install]
