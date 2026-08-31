@@ -1,0 +1,9 @@
+[Unit]
+Description=Force 8bpc on HDMI-A-2
+After=plymouth-quit-wait.service
+Wants=plymouth-quit-wait.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/proptest -M i915 207 connector 209 8
+[Install]
+WantedBy=multi-user.target

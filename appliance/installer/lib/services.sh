@@ -29,6 +29,8 @@ _install_systemd_units() {
         "$TARGET_MNT/etc/systemd/system/retrobox-boot.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-wifi-firstboot.service" \
         "$TARGET_MNT/etc/systemd/system/retrobox-wifi-firstboot.service"
+    install -m 0644 "$PAYLOAD_DIR/units/hdmi-fix.service" \
+        "$TARGET_MNT/etc/systemd/system/hdmi-fix.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-tmpfiles.conf" \
         "$TARGET_MNT/etc/tmpfiles.d/retrobox.conf"
 
@@ -41,6 +43,7 @@ _install_systemd_units() {
     enable_unit retrobox-daemon.service
     enable_unit retrobox-boot.service
     enable_unit retrobox-wifi-firstboot.service
+    enable_unit hdmi-fix.service
 }
 
 _configure_ssh() {
