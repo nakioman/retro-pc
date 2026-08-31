@@ -3,9 +3,10 @@ set -Eeuo pipefail
 
 target=/data/home/retrobox/.asoundrc
 detected=""
-for eld in /proc/asound/card*/eld#*; do
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  for eld in /proc/asound/card*/eld#*; do
     [ -f "$eld" ] || continue
-    grep -q '^monitor_present[[:space:]]*:[[:space:]]*1' "$eld" || continue
+    awk '$1 == "monitor_present" && $2 == "1" { found=1 } END { exit !found }' "$eld" || continue
     card_dir="${eld%/eld#*}"
     card_id="$(cat "$card_dir/id" 2>/dev/null || true)"
     for pcm in "$card_dir"/pcm*p/id; do
@@ -13,11 +14,11 @@ for eld in /proc/asound/card*/eld#*; do
         grep -qi HDMI "$pcm" || continue
         device="${pcm##*/pcm}"
         detected="$card_id|${device%%p/id}"
-        break 2
+        break 3
     done
-done
+  done
 
-if [ -z "$detected" ]; then
+  if [ -z "$detected" ]; then
     for pcm in /proc/asound/card*/pcm*p/id; do
         [ -f "$pcm" ] || continue
         card_dir="${pcm%/pcm*}"
@@ -25,9 +26,12 @@ if [ -z "$detected" ]; then
         [ -n "$card_id" ] || continue
         device="${pcm##*/pcm}"
         detected="$card_id|${device%%p/id}"
-        break
+        break 2
     done
-fi
+  fi
+  [ -n "$detected" ] && break
+  sleep 1
+done
 
 [ -n "$detected" ] || exit 0
 IFS='|' read -r card_id device <<< "$detected"
