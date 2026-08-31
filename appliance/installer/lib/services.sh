@@ -57,8 +57,20 @@ PasswordAuthentication yes
 # the minimal image; this keeps apt, Perl, and system tools warning-free.
 SetEnv LANG=C.UTF-8 LC_ALL=C.UTF-8
 EOF
-    # Generate host keys now: /etc is read-only at runtime.
-    in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
+    # Keep host identity in /data so reinstalling the system does not make SSH
+    # clients see a changed host key.
+    local persistent_keys="$TARGET_MNT/data/system/ssh"
+    mkdir -p "$persistent_keys"
+    if find "$persistent_keys" -maxdepth 1 -type f -name 'ssh_host_*' -print -quit | grep -q .; then
+        cp -a "$persistent_keys"/ssh_host_* "$TARGET_MNT/etc/ssh/"
+        log "Restored persistent SSH host keys"
+    else
+        in_target ssh-keygen -A >/dev/null || warn "ssh-keygen -A failed; host keys may be missing"
+        cp -a "$TARGET_MNT/etc/ssh"/ssh_host_* "$persistent_keys/" \
+            || warn "Could not persist SSH host keys"
+        chmod 600 "$persistent_keys"/*_key 2>/dev/null || true
+        log "Persisted SSH host keys under /data/system/ssh"
+    fi
     enable_unit ssh.service
 }
 
