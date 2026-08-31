@@ -73,7 +73,7 @@ stage_binaries() {
         found_profile=1
         profile="${profile%/}"
         vm="${profile##*/}"
-        for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+        for required in 86box.cfg shaders/syncmaster3.glsl; do
             [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
         done
         mkdir -p "$TARGET_MNT/data/vms/$vm"
@@ -84,11 +84,14 @@ stage_binaries() {
         else
             cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
         fi
-        for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+        for required in 86box.cfg shaders/syncmaster3.glsl; do
             [ -f "$TARGET_MNT/data/vms/$vm/$required" ] \
                 || die "Installed VM profile $vm is missing $required"
         done
     done
     [ "$found_profile" = "1" ] || die "VM profiles payload contains no profiles"
+    install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-hdd-creation" \
+        "$TARGET_MNT/usr/local/sbin/retrobox-hdd-creation"
+    in_target /usr/local/sbin/retrobox-hdd-creation /data/vms
     ok "Staged VM catalog and profiles -> /data"
 }

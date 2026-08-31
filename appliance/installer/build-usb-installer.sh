@@ -216,7 +216,7 @@ for profile in "$ISO/install"/profiles/*/; do
     found_profile=1
     vm="${profile%/}"
     vm="${vm##*/}"
-    for required in 86box.cfg HDD.vhd shaders/syncmaster3.glsl; do
+    for required in 86box.cfg shaders/syncmaster3.glsl; do
         [ -f "$profile/$required" ] \
             || die "ISO payload profile $vm is missing $required"
     done
