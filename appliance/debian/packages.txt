@@ -35,6 +35,7 @@ fuse3
 libgles2
 libgbm1
 libdrm2
+libdrm-tests
 libegl-mesa0
 mesa-libgallium
 libgl1-mesa-dri

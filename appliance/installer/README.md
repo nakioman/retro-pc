@@ -219,7 +219,7 @@ selection, GPT partitioning (ESP + root + /data) with safe MBR→GPT migration
 for legacy installs, offline rootfs extract, UUID fstab (root, ESP, /data),
 read-only root via `ro` + tmpfs + `/var` overlay on `/data`, `retrobox` account
 (root locked) with prompted password, SSH, Samba scratch share, DHCP networking,
-Plymouth boot splash, GRUB-EFI install with hidden 1280x960 menu + recovery
+Plymouth boot splash, GRUB-EFI install with hidden menu + recovery
 entry, zram + `/data` swapfile backstop for the low-RAM machine, the
 `retrobox-daemon` / `retrobox-boot` systemd units, and reinstall data
 preservation (existing `/data`, `.vhd`, and `.yaml` are kept unless

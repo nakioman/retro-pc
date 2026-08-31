@@ -177,7 +177,7 @@ cat > "$ISO/boot/grub/grub.cfg" <<'EOF'
 set timeout=5
 set default=0
 menuentry "RetroBox Appliance Installer" {
-    linux /live/vmlinuz boot=live components quiet video=1280x960@60
+    linux /live/vmlinuz boot=live components quiet
     initrd /live/initrd.img
 }
 EOF
@@ -241,7 +241,7 @@ MENU TITLE RetroBox Appliance Installer
 LABEL retropc
   MENU LABEL Install RetroBox Appliance
   KERNEL /live/vmlinuz
-  APPEND initrd=/live/initrd.img boot=live components quiet video=1280x960@60
+  APPEND initrd=/live/initrd.img boot=live components quiet
 EOF
 
 # --- 7. Hybrid ISO (BIOS + EFI El Torito, isohybrid MBR + GPT, dd-able to USB) ---
