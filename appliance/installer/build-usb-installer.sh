@@ -241,7 +241,7 @@ MENU TITLE RetroBox Appliance Installer
 LABEL retropc
   MENU LABEL Install RetroBox Appliance
   KERNEL /live/vmlinuz
-  APPEND initrd=/live/initrd.img boot=live components quiet video=1280x960@60
+  APPEND initrd=/live/initrd.img boot=live components quiet
 EOF
 
 # --- 7. Hybrid ISO (BIOS + EFI El Torito, isohybrid MBR + GPT, dd-able to USB) ---
