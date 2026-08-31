@@ -1,0 +1,13 @@
+[Unit]
+Description=Configure RetroBox ALSA output
+After=sound.target
+Wants=sound.target
+Before=retrobox-boot.service
+RequiresMountsFor=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/retrobox-audio-setup
+
+[Install]
+WantedBy=multi-user.target

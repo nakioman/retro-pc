@@ -39,11 +39,16 @@ _install_systemd_units() {
 
     install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-wifi-firstboot" \
         "$TARGET_MNT/usr/local/sbin/retrobox-wifi-firstboot"
+    install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-audio-setup" \
+        "$TARGET_MNT/usr/local/sbin/retrobox-audio-setup"
+    install -m 0644 "$PAYLOAD_DIR/units/retrobox-audio-setup.service" \
+        "$TARGET_MNT/etc/systemd/system/retrobox-audio-setup.service"
 
     enable_unit retrobox-daemon.service
     enable_unit retrobox-boot.service
     enable_unit retrobox-wifi-firstboot.service
     enable_unit hdmi-fix.service
+    enable_unit retrobox-audio-setup.service
 }
 
 _configure_ssh() {
