@@ -65,7 +65,7 @@ banner() {
   ██   ██ ██         ██    ██   ██ ██    ██ ██   ██ ██    ██  ██ ██
   ██   ██ ███████    ██    ██   ██  ██████  ██████   ██████  ██   ██
 
-                          Appliance installer
+                         Appliance installer
 
 EOF
 }
