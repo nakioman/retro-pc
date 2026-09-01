@@ -3,7 +3,7 @@
 This directory builds a **bootable USB installer** that installs the RetroBox
 Debian appliance onto the target machine's internal HDD/SSD.
 
-The installed system is a **read-only-root** Debian 13 appliance with a mutable
+The installed system is a **writable-root** Debian 13 appliance with a mutable
 `/data` partition, a GPT disk layout with a 512 MiB EFI System Partition, GRUB
 installed as UEFI, SSH maintenance access, and a Samba scratch share — see
 [`../README.md`](../README.md) and [`../filesystem-layout.md`](../filesystem-layout.md).
@@ -32,7 +32,6 @@ Installer auto-starts on tty1    (install-retropc.sh)
 Pick the internal disk           (USB device excluded; typed confirmation)
 Partition + format               (fresh: GPT p1 ESP, p2 root ro, p3 /data rw)
 Preserve existing /data          (reinstall: keep VMs/floppies, rewrite root+ESP)
-Migrate legacy BIOS install      (MBR->GPT: stage /data, repartition, restore)
 Extract appliance rootfs         (offline, from the USB)
 Write UUID fstab, users, GRUB    (UEFI: ESP + GRUB-EFI; root locked; password prompted)
 Remove USB and reboot            (target boots the installed appliance)
@@ -112,34 +111,14 @@ sudo dd if=appliance/installer/out/retropc-installer.iso of=/dev/sdX bs=4M statu
 3. Choose the internal disk. **The USB installer device is excluded by default**,
    and you must type the exact `ERASE /dev/sdX` confirmation before anything is
    written.
-4. If the disk already carries a **legacy BIOS** install (MBR partition table),
-   the installer offers a `MIGRATE` confirmation: it stages `/data` off the
-   disk, repartitions as GPT with an ESP, and restores `/data` onto the new
-   layout. The migration is destructive of the partition table but preserves
-   your VMs, floppies, and catalogs. Decline the prompt (or re-run with
-   `RETROPC_MIGRATE_BIOS_TO_UEFI=1` to force it) to choose either path.
-
-   **Attach external storage first.** The staging copy defaults to `/var/tmp`,
-   which on the live installer is RAM; the installer refuses to stage there and
-   aborts before touching the disk. Point it at real storage:
-
-   ```bash
-   RETROPC_MIGRATE_STAGING_DIR=/mnt/backup bash install-retropc.sh
-   ```
-
-   Set `RETROPC_MIGRATE_ALLOW_RAM_STAGING=1` only if `/data` is small enough to
-   fit in RAM. Free space is checked against actual `/data` usage while the
-   legacy partition is still mounted, so an undersized target aborts with the
-   BIOS install intact. If a failure happens after repartitioning, the staged
-   copy is kept and its path is printed.
-5. Set the `retrobox` password when prompted (used for SSH and `sudo`).
-6. Press Enter to reboot **with the USB still inserted** (the live installer runs
+4. Set the `retrobox` password when prompted (used for SSH and `sudo`).
+5. Press Enter to reboot **with the USB still inserted** (the live installer runs
    from it). Remove the USB while the machine restarts — at the firmware/logo
    screen — so it boots from the internal disk.
 
 ## Reinstall & data preservation
 
-Re-running the installer over an existing appliance keeps your data by default:
+Re-running the installer over an existing appliance asks whether to keep your data:
 
 - The `/data` partition is **not** reformatted. Only the read-only root
   filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
@@ -147,17 +126,16 @@ Re-running the installer over an existing appliance keeps your data by default:
   floppies, snapshots, and Samba scratch.
 - OS-managed profile files (`86box.cfg`, shaders) **are** refreshed; `.vhd` and
   `.yaml` files are never overwritten.
-- Set `RETROPC_WIPE_DATA=1` to force a full wipe of `/data` on reinstall
-  (or answer `n` to the "Preserve /data?" prompt during the install).
+- Answer `n` (or press Enter) to the "Preserve /data?" prompt to fully wipe and
+  refresh the installation. Set `RETROPC_WIPE_DATA=1` for unattended installs.
 
 ## Accounts & maintenance
 
 - `root` is **locked**. `retrobox` is the sole account — the service runtime user
   and the SSH maintenance login, with `sudo`.
 - Maintenance over SSH: `ssh retrobox@<ip>` (DHCP; `PermitRootLogin no`).
-- The root filesystem is read-only. To edit system files:
-  `sudo mount -o remount,rw /`, make the change, then reboot or
-  `sudo mount -o remount,ro /`. `/data` is always writable.
+- The root filesystem is writable, so system files can be edited normally.
+  `/data` is also writable.
 
 ## Machine selector
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # RetroBox appliance installer — runs on the booted USB (auto-started on tty1)
-# and installs the read-only-root Debian appliance onto an internal disk.
+# and installs the Debian appliance onto an internal disk.
 #
 # SAFETY: this partitions and formats a disk. It lists candidate disks, excludes
 # the USB installer device, and requires an explicit typed confirmation before
@@ -65,7 +65,7 @@ banner() {
   ██   ██ ██         ██    ██   ██ ██    ██ ██   ██ ██    ██  ██ ██
   ██   ██ ███████    ██    ██   ██  ██████  ██████   ██████  ██   ██
 
-                          Appliance installer
+                         Appliance installer
 
 EOF
 }

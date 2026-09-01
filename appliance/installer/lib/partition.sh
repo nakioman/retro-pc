@@ -67,8 +67,6 @@ _mkfs_fat() {
 # Partition and format the target disk. On a reinstall over an existing
 # appliance, /data (VMs, catalog, floppies, snapshots) is preserved by default:
 # only the root filesystem is rewritten. RETROPC_WIPE_DATA=1 forces a full wipe.
-# A legacy BIOS (MBR) install with /data is migrated to GPT/UEFI only after an
-# explicit RETROPC_MIGRATE_BIOS_TO_UEFI=1 or a typed MIGRATE confirmation.
 partition_disk() {
     local disk="$1" existing_data table_type
     existing_data="$(existing_data_partition "$disk" || true)"
@@ -81,9 +79,6 @@ partition_disk() {
                 return 0
             fi
             warn "Full wipe selected: existing /data ($existing_data) will be destroyed."
-        else
-            _migrate_bios_to_uefi "$disk"
-            return 0
         fi
     elif [ -n "$existing_data" ]; then
         warn "RETROPC_WIPE_DATA=1: wiping existing install; /data will be destroyed."
@@ -98,10 +93,11 @@ _confirm_preserve_data() {
         return 0
     fi
     local reply
-    read -r -p "Existing RetroBox install found. Preserve /data (VMs, floppies)? [Y/n] " reply < /dev/tty
+    read -r -p "Existing RetroBox install found. Preserve /data (VMs, floppies)? [y/N] " reply < /dev/tty
     case "$reply" in
         n | N | no | NO) return 1 ;;
-        *) return 0 ;;
+        y | Y | yes | YES) return 0 ;;
+        *) return 1 ;;
     esac
 }
 

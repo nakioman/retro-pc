@@ -77,7 +77,7 @@ select_target_disk() {
     if [ -n "$existing_data" ]; then
         printf '\n' >&2
         warn "Existing RetroBox install detected (/data at $existing_data)."
-        warn "Reinstall will offer to preserve /data — set RETROPC_WIPE_DATA=1 for a full wipe."
+        warn "Reinstall can preserve /data, or erase it to fully refresh the installation."
         printf '\n' >&2
     fi
 
