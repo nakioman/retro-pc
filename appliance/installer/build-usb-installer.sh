@@ -17,6 +17,7 @@
 #   RETROBOX_BIN     path to the published retrobox linux-x64 binary
 #   BOX86_APPIMAGE   optional local override for the pinned 86Box AppImage
 #   BOX86_ROMS_ARCHIVE optional local override for the pinned ROM tarball
+#   GLSL_SHADERS_ARCHIVE optional local override for the pinned GLSL shader tarball
 
 set -euo pipefail
 
@@ -55,6 +56,7 @@ command -v tar         >/dev/null || die "tar not installed."
 
 [[ "$BOX86_APPIMAGE_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid AppImage SHA256 in $ARTIFACT_ENV"
 [[ "$BOX86_ROMS_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid ROMs SHA256 in $ARTIFACT_ENV"
+[[ "$GLSL_SHADERS_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid GLSL shaders SHA256 in $ARTIFACT_ENV"
 
 download_and_verify() {
     local source="$1" url="$2" expected="$3" label="$4"
@@ -202,12 +204,18 @@ fi
 
 APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
 ROMS_CACHE="${BOX86_ROMS_ARCHIVE:-$WORK/86box-roms-${BOX86_ROMS_VERSION}.tar.gz}"
+SHADERS_CACHE="${GLSL_SHADERS_ARCHIVE:-$WORK/glsl-shaders-${GLSL_SHADERS_COMMIT}.tar.gz}"
 download_and_verify "$APPIMAGE_CACHE" "$BOX86_APPIMAGE_URL" "$BOX86_APPIMAGE_SHA256" "86Box AppImage"
 download_and_verify "$ROMS_CACHE" "$BOX86_ROMS_URL" "$BOX86_ROMS_SHA256" "86Box ROM tarball"
+download_and_verify "$SHADERS_CACHE" "$GLSL_SHADERS_URL" "$GLSL_SHADERS_SHA256" "GLSL shaders"
 install -m 0755 "$APPIMAGE_CACHE" "$ISO/install/86box.AppImage"
 tar -xzf "$ROMS_CACHE" --strip-components=1 -C "$ISO/install/roms"
 [ -n "$(find "$ISO/install/roms" -type f -print -quit)" ] \
     || die "86Box ROM tarball extracted no files"
+mkdir -p "$ISO/install/shaders"
+tar -xzf "$SHADERS_CACHE" --strip-components=1 -C "$ISO/install/shaders"
+[ -f "$ISO/install/shaders/stock.glsl" ] \
+    || die "GLSL shaders archive extracted no stock.glsl"
 cp -a "$SELF_DIR/payload/retrobox/vms.yaml" "$ISO/install/vms.yaml"
 cp -a "$SELF_DIR/payload/profiles" "$ISO/install/"
 found_profile=0
@@ -302,6 +310,7 @@ done
 [ -f "$ISO/install/libSystem.IO.Ports.Native.so" ] \
     || warn "ISO is missing /install/libSystem.IO.Ports.Native.so (stale runtime artifact)"
 [ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
+[ -f "$ISO/install/shaders/stock.glsl" ] || die "ISO is missing /install/shaders/stock.glsl"
 [ -f "$ISO/install/vms.yaml" ] || die "ISO is missing vms.yaml"
 [ -d "$ISO/install/profiles" ] || die "ISO is missing VM profiles"
 

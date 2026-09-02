@@ -58,6 +58,11 @@ stage_binaries() {
     cp -a "$BOX86_ROMS_SRC/." "$TARGET_MNT$BOX86_OPT/roms/"
     ok "Staged 86Box ROMs -> $BOX86_OPT/roms"
 
+    [ -d "$BOX86_SHADERS_SRC" ] || die "GLSL shaders not on medium: $BOX86_SHADERS_SRC"
+    mkdir -p "$TARGET_MNT$BOX86_OPT/shaders"
+    cp -a "$BOX86_SHADERS_SRC/." "$TARGET_MNT$BOX86_OPT/shaders/"
+    ok "Staged GLSL shaders -> $BOX86_OPT/shaders"
+
     [ -f "$PAYLOAD_DIR/retrobox/vms.yaml" ] || die "VM catalog payload is missing"
     # On a reinstall that preserves /data, keep the existing catalog so user
     # edits (and any VMs they added) survive; otherwise (re)write the payload.

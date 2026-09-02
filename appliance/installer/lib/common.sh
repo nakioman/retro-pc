@@ -15,6 +15,7 @@ TARGET_SQUASHFS="$INSTALL_SRC/target-rootfs.squashfs"
 RETROBOX_SRC="$INSTALL_SRC/retrobox"
 BOX86_SRC="$INSTALL_SRC/86box.AppImage"
 BOX86_ROMS_SRC="$INSTALL_SRC/roms"
+BOX86_SHADERS_SRC="$INSTALL_SRC/shaders"
 
 # Where the target root filesystem is assembled during install.
 TARGET_MNT="/mnt/target"

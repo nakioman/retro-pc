@@ -4,8 +4,8 @@
 
 The appliance is designed around a read-only root filesystem. The operating
 system, installed packages, `/opt/retrobox/retrobox`, 86Box's AppImage, and
-`/opt/86Box/roms` are part of the deployed system image and are not application
-state. 
+`/opt/86Box/roms` and `/opt/86Box/shaders` are part of the deployed system image
+and are not application state.
 
 `/data` is the persistent writable filesystem for Retro PC state:
 
@@ -65,7 +65,7 @@ The current `retrobox` code uses these paths directly:
 - `/data/floppies/cataloged` stores imported floppy images.
 - VM paths are under `/data/vms`.
 - The immutable runtime is `/opt/retrobox/retrobox`, `/opt/86Box/86box.AppImage`,
-  and `/opt/86Box/roms`.
+  `/opt/86Box/roms`, and `/opt/86Box/shaders`.
 - `config.yaml` is optional runtime state. The installer seeds only `vms.yaml`
   and does not choose a default VM.
 
