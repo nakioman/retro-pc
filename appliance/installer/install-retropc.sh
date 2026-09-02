@@ -8,7 +8,7 @@
 #
 # Env overrides (mainly for testing):
 #   RETROPC_MEDIUM              live medium mount (default /run/live/medium)
-#   RETROPC_ROOT_GIB           root partition size in GiB (default 10)
+#   RETROPC_ROOT_GIB           root partition size in GiB (default 2)
 #   RETROPC_HOSTNAME           target hostname (default retrobox)
 #   RETROPC_RETROBOX_PASSWORD  set retrobox password non-interactively
 #   RETROPC_UNATTENDED=1       never prompt / never auto-pick a destructive target
