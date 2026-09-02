@@ -22,7 +22,7 @@ The appliance target install is **GPT with a dedicated EFI System Partition**:
 
 ```text
 p1  FAT32  /boot/efi  512 MiB  (label retropc-esp)
-p2  ext4   /          ~10 GiB  (label retropc-root, read-only at runtime)
+p2  ext4   /          ~2 GiB   (label retropc-root, read-only at runtime)
 p3  ext4   /data      rest     (label retropc-data)
 ```
 

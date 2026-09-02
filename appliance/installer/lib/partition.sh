@@ -3,12 +3,12 @@
 #
 # Layout (GPT, UEFI):
 #   p1  FAT32  /boot/efi  512 MiB  (EFI System Partition)
-#   p2  ext4   /          ~10 GiB  (read-only root at runtime)
+#   p2  ext4   /          ~2 GiB   (read-only root at runtime)
 #   p3  ext4   /data      rest     (mutable application + system-overlay state)
 #
 # Sets globals ROOT_PART, DATA_PART, and ESP_PART.
 
-: "${RETROPC_ROOT_GIB:=10}"
+: "${RETROPC_ROOT_GIB:=2}"
 : "${ESP_SIZE_MIB:=512}"
 : "${RETROPC_WIPE_DATA:=0}"
 : "${PRESERVE_DATA:=0}"
