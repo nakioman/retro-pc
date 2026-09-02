@@ -75,7 +75,8 @@ sudo bash appliance/installer/build-usb-installer.sh
 ### Embedding the runtime
 
 The build always embeds the published RetroBox binary and downloads the pinned
-86Box AppImage and ROM tarball from `appliance/86box.env`, validating both
+86Box AppImage, ROM tarball, and the pinned libretro GLSL shader archive from
+`appliance/86box.env`, validating all three
 SHA256 values. To build locally:
 
 ```bash
@@ -90,7 +91,8 @@ installs it to `/opt/retrobox/` when the publish output provides it. The publish
 workflow asserts it exists; an installer built from a stale runtime artifact
 warns instead of failing.
 
-The installer copies the runtime to `/opt`, `vms.yaml` to
+The installer copies the runtime to `/opt`, the 86Box shaders to
+`/opt/86Box/shaders`, and `vms.yaml` to
 `/data/retrobox/vms.yaml`, and both complete profiles to `/data/vms`. It does
 not create `config.yaml`; that file remains optional runtime state.
 
