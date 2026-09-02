@@ -22,7 +22,8 @@ install_services() {
 _install_systemd_units() {
     log "Installing systemd units"
     mkdir -p "$TARGET_MNT/etc/systemd/system" "$TARGET_MNT/etc/tmpfiles.d" \
-        "$TARGET_MNT/etc/sudoers.d" "$TARGET_MNT/usr/local/sbin"
+        "$TARGET_MNT/etc/sudoers.d" "$TARGET_MNT/etc/udev/rules.d" \
+        "$TARGET_MNT/usr/local/sbin"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-daemon.service" \
         "$TARGET_MNT/etc/systemd/system/retrobox-daemon.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-boot.service" \
@@ -36,6 +37,8 @@ _install_systemd_units() {
 
     install -m 0440 "$PAYLOAD_DIR/sudoers/retrobox" "$TARGET_MNT/etc/sudoers.d/retrobox"
     in_target visudo -cf /etc/sudoers.d/retrobox >/dev/null
+    install -m 0644 "$PAYLOAD_DIR/udev/60-gpiochip.rules" \
+        "$TARGET_MNT/etc/udev/rules.d/60-gpiochip.rules"
 
     install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-wifi-firstboot" \
         "$TARGET_MNT/usr/local/sbin/retrobox-wifi-firstboot"

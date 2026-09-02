@@ -52,7 +52,8 @@ The appliance uses a single account, `retrobox`.
 `root` is locked (`passwd -l root`): there is no interactive root login on the
 console or over SSH. `retrobox` is both the service runtime user (it owns the
 application state under `/data/retrobox`) and the maintenance login. It is a
-member of the `sudo` group and elevates with `sudo` for privileged commands.
+member of the `sudo` and `gpio` groups. The installer creates the `gpio` group
+and installs a udev rule granting `retrobox` access to GPIO chip devices.
 There is no separate administrator account.
 
 The `retrobox` password is set during installation (the installer prompts for
