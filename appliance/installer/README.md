@@ -124,9 +124,9 @@ Re-running the installer over an existing appliance asks whether to keep your da
 
 - The `/data` partition is **not** reformatted. Only the read-only root
   filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
-- Everything on `/data` survives: VMs (`.vhd`), the VM catalog (`vms.yaml`),
+- Everything on `/data` survives: VMs (`hdd.raw`), the VM catalog (`vms.yaml`),
   floppies, snapshots, and Samba scratch.
-- OS-managed profile files (`86box.cfg`, shaders) **are** refreshed; `.vhd` and
+- OS-managed profile files (`86box.cfg`, EDID) **are** refreshed; `hdd.raw` and
   `.yaml` files are never overwritten.
 - Answer `n` (or press Enter) to the "Preserve /data?" prompt to fully wipe and
   refresh the installation. Set `RETROPC_WIPE_DATA=1` for unattended installs.
@@ -202,7 +202,7 @@ read-only root via `ro` + tmpfs + `/var` overlay on `/data`, `retrobox` account
 Plymouth boot splash, GRUB-EFI install with hidden menu + recovery
 entry, zram + `/data` swapfile backstop for the low-RAM machine, the
 `retrobox-daemon` / `retrobox-boot` systemd units, and reinstall data
-preservation (existing `/data`, `.vhd`, and `.yaml` are kept unless
+preservation (existing `/data`, `hdd.raw`, and `.yaml` are kept unless
 `RETROPC_WIPE_DATA=1`).
 
 Deferred and recorded in `install-report.txt` rather than failing the install:

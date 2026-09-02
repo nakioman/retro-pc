@@ -78,18 +78,18 @@ stage_binaries() {
         found_profile=1
         profile="${profile%/}"
         vm="${profile##*/}"
-        for required in 86box.cfg shaders/syncmaster3.glsl; do
+        for required in 86box.cfg; do
             [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
         done
         mkdir -p "$TARGET_MNT/data/vms/$vm"
         if [ "$PRESERVE_DATA" = "1" ] && [ -d "$TARGET_MNT/data/vms/$vm" ]; then
             # Reinstall: refresh the OS-managed files but never clobber the
-            # user's VM disks (.vhd) or catalog (.yaml).
-            rsync -a --exclude='*.vhd' --exclude='*.yaml' "$profile/." "$TARGET_MNT/data/vms/$vm/"
+            # user's VM disks (.raw/.vhd) or catalog (.yaml).
+            rsync -a --exclude='*.raw' --exclude='*.vhd' --exclude='*.yaml' "$profile/." "$TARGET_MNT/data/vms/$vm/"
         else
             cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
         fi
-        for required in 86box.cfg shaders/syncmaster3.glsl; do
+        for required in 86box.cfg; do
             [ -f "$TARGET_MNT/data/vms/$vm/$required" ] \
                 || die "Installed VM profile $vm is missing $required"
         done
