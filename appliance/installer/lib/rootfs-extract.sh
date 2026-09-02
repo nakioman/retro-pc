@@ -29,7 +29,7 @@ create_data_tree() {
 
 # Copy the immutable runtime, ROMs, catalog, and VM profiles from the medium.
 stage_binaries() {
-    local profile_root profile vm required found_profile=0
+    local profile_root profile vm found_profile=0
 
     mkdir -p "$TARGET_MNT$RETROBOX_OPT" "$TARGET_MNT$BOX86_OPT" \
         "$TARGET_MNT/data/retrobox" "$TARGET_MNT/data/vms"
@@ -78,9 +78,7 @@ stage_binaries() {
         found_profile=1
         profile="${profile%/}"
         vm="${profile##*/}"
-        for required in 86box.cfg; do
-            [ -f "$profile/$required" ] || die "VM profile $vm is missing $required"
-        done
+        [ -f "$profile/86box.cfg" ] || die "VM profile $vm is missing 86box.cfg"
         mkdir -p "$TARGET_MNT/data/vms/$vm"
         if [ "$PRESERVE_DATA" = "1" ] && [ -d "$TARGET_MNT/data/vms/$vm" ]; then
             # Reinstall: refresh the OS-managed files but never clobber the
@@ -89,10 +87,8 @@ stage_binaries() {
         else
             cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
         fi
-        for required in 86box.cfg; do
-            [ -f "$TARGET_MNT/data/vms/$vm/$required" ] \
-                || die "Installed VM profile $vm is missing $required"
-        done
+        [ -f "$TARGET_MNT/data/vms/$vm/86box.cfg" ] \
+            || die "Installed VM profile $vm is missing 86box.cfg"
     done
     [ "$found_profile" = "1" ] || die "VM profiles payload contains no profiles"
     install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-hdd-creation" \
