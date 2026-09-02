@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROFILE_ROOT="${1:?Usage: $0 <profiles-directory>}"
+
+if [[ ! -d "$PROFILE_ROOT" ]]; then
+    echo "ERROR: Profiles directory not found: $PROFILE_ROOT" >&2
+    exit 1
+fi
+
+create_hdds_for_profile() {
+    local profile="$1" cfg line hdd_id output params sectors heads cylinders size
+    cfg="$profile/86box.cfg"
+    [[ -f "$cfg" ]] || { echo "ERROR: Config file not found: $cfg" >&2; return 1; }
+    local hdd_lines
+    hdd_lines="$(awk '/^[[:space:]]*hdd_[0-9]+_fn[[:space:]]*=/ {print}' "$cfg")"
+    [[ -n "$hdd_lines" ]] || return 0
+    while IFS= read -r line; do
+        hdd_id="${line#hdd_}"; hdd_id="${hdd_id%%_fn*}"
+        output="${line#*=}"
+        output="${output#"${output%%[![:space:]]*}"}"; output="${output%"${output##*[![:space:]]}"}"
+        output="${output#\"}"; output="${output%\"}"
+        [[ -n "$output" ]] || { echo "ERROR: Empty filename for hdd_${hdd_id} in $cfg" >&2; return 1; }
+        [[ "$output" != /* ]] && output="$profile/$output"
+        params=$(awk -F= -v id="$hdd_id" '$1 ~ "^[[:space:]]*hdd_" id "_parameters[[:space:]]*$" {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$cfg")
+        [[ -n "$params" ]] || { echo "ERROR: No parameters found for hdd_${hdd_id} in $cfg" >&2; return 1; }
+        IFS=',' read -r sectors heads cylinders _ _ <<< "$params"
+        [[ "$sectors" =~ ^[0-9]+$ && "$heads" =~ ^[0-9]+$ && "$cylinders" =~ ^[0-9]+$ ]] || { echo "ERROR: Invalid HDD parameters in $cfg: $params" >&2; return 1; }
+        size=$((sectors * heads * cylinders * 512))
+        if [[ -e "$output" ]]; then echo "Keeping existing HDD: $output"; else mkdir -p "$(dirname "$output")"; truncate -s "$size" "$output"; echo "Created HDD: $output ($size bytes)"; fi
+    done <<< "$hdd_lines"
+}
+
+found=0
+for profile in "$PROFILE_ROOT"/*/; do
+    [[ -d "$profile" ]] || continue
+    found=1; create_hdds_for_profile "${profile%/}"
+done
+[[ "$found" = 1 ]] || { echo "ERROR: No VM profiles found in $PROFILE_ROOT" >&2; exit 1; }
+exit 0
