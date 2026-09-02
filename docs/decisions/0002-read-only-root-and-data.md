@@ -18,7 +18,7 @@ lives under a persistent `/data` partition:
 
 ```text
 /data/retrobox/    YAML catalogs (config.yaml, vms.yaml, floppies.yaml)
-/data/vms/<id>/    86Box profiles (86box.cfg, HDD.vhd, shaders)
+/data/vms/<id>/    86Box profiles (86box.cfg, hdd.raw, syncmaster3.edid when used)
 /data/floppies/    scratch/ + cataloged/ images
 /data/snapshots/   VM snapshots
 ```

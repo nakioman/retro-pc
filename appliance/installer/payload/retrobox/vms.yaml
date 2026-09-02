@@ -5,3 +5,6 @@ vms:
   pentium100:
     label: "Pentium 100"
     path: "/data/vms/pentium100"
+  pentium2-350:
+    label: "Pentium II 350"
+    path: "/data/vms/pentium2-350"

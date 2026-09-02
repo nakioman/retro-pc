@@ -9,7 +9,8 @@ The appliance installs the catalog at `/data/retrobox/vms.yaml` and profiles at
 `/data/vms/<id>`. The catalog intentionally has no `defaultVm`; `retrobox boot`
 selects a VM when needed. 86Box is launched with the selected profile as its
 working directory, so relative disk paths remain valid; shader paths use the
-absolute `/data/vms/<id>/shaders/syncmaster3.glsl` form required by 86Box.
+absolute `/opt/86Box/shaders/crt/crt-easymode.glslp` form and monitor EDID (when
+used) uses `/data/vms/<id>/syncmaster3.edid`.
 
 ## 386SX-16
 
@@ -21,7 +22,7 @@ This is the RTM modest DOS VM profile: a 386SX-16 class machine with a blank
 Profile files:
 
 - `86box.cfg`: native 86Box configuration.
-- `HDD.vhd`: blank 54 MB dynamic VHD used by the profile.
+- `hdd.raw`: blank disk (created dynamically from `hdd_01_parameters`).
 - `README.md`: setup notes and hardware summary.
 
 ## Pentium 100
@@ -39,5 +40,21 @@ only the first active optical slot in the installed copy with
 Profile files:
 
 - `86box.cfg`: native 86Box configuration and hardware source of truth.
-- `HDD.vhd`: blank dynamic VHD referenced by the config.
+- `hdd.raw`: blank disk (created dynamically from `hdd_01_parameters`).
+- `README.md`: setup notes, hardware summary, and media policy.
+
+## Pentium II 350
+
+Path: `profiles/pentium2-350`
+
+This is the Windows 98 SE VM profile: a Pentium II Deschutes 350 MHz (3.5x,
+dynarec `new`) with 128 MB RAM, Voodoo3 3000 AGP with SyncMaster EDID, Sound
+Blaster AWE64 Gold, and a blank ~20 GB disk (63, 255, 2434). Uses the same
+`crt-easymode.glslp` shader as the other profiles.
+
+Profile files:
+
+- `86box.cfg`: native 86Box configuration and hardware source of truth.
+- `hdd.raw`: blank disk (created dynamically from `hdd_01_parameters`).
+- `syncmaster3.edid`: 128-byte binary EDID for the CRT shader setup.
 - `README.md`: setup notes, hardware summary, and media policy.

@@ -224,10 +224,8 @@ for profile in "$ISO/install"/profiles/*/; do
     found_profile=1
     vm="${profile%/}"
     vm="${vm##*/}"
-    for required in 86box.cfg shaders/syncmaster3.glsl; do
-        [ -f "$profile/$required" ] \
-            || die "ISO payload profile $vm is missing $required"
-    done
+    [ -f "$profile/86box.cfg" ] \
+        || die "ISO payload profile $vm is missing 86box.cfg"
 done
 [ "$found_profile" = "1" ] || die "ISO payload contains no VM profiles"
 log "Staged runtime, ROMs, VM catalog, and profiles"

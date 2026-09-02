@@ -17,18 +17,21 @@ and are not application state.
   vms/
     386sx16/
       86box.cfg
-      HDD.vhd
-      shaders/syncmaster3.glsl
+      hdd.raw
     pentium100/
       86box.cfg
-      HDD.vhd
-      shaders/syncmaster3.glsl
+      hdd.raw
+    pentium2-350/
+      86box.cfg
+      hdd.raw
+      syncmaster3.edid
   floppies/
     scratch/
     cataloged/
   snapshots/
     386sx16/
     pentium100/
+    pentium2-350/
   system/
     wifi.conf        # SSID/PSK from the WiFi first-boot prompt (root:root 0600)
     wifi-configured  # marker set after the first successful WiFi prompt
