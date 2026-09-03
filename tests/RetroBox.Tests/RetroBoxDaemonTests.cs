@@ -1,6 +1,7 @@
 using System.Text;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using static RetroBox.Tests.RetroBoxSerialLineRouterTestHelpers;
 
 namespace RetroBox.Tests;
 
@@ -319,7 +320,7 @@ public sealed class RetroBoxDaemonTests
 
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
         await read;
-        await Task.Delay(50);
+        await WaitForStatusWrite(serialOutput);
         cancellation.Cancel();
         await watch;
 
@@ -392,14 +393,12 @@ public sealed class RetroBoxDaemonTests
         Assert.Equal("disk1", loaded.FloppyId);
     }
 
-    private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
+    private static async Task WaitForStatusWrite(StringWriter serialOutput)
     {
-        for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
+        for (var attempt = 0; attempt < 100 && !serialOutput.ToString().Contains("STATUS", StringComparison.Ordinal); attempt++)
         {
             await Task.Delay(10);
         }
-
-        Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
     }
 
     private sealed class BlockingTextReader : TextReader

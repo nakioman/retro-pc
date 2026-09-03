@@ -1,6 +1,7 @@
 using System.Text;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using static RetroBox.Tests.RetroBoxSerialLineRouterTestHelpers;
 
 namespace RetroBox.Tests;
 
@@ -174,8 +175,9 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
 
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
-        await read;
-        await status;
+
+        await AwaitWithinBound(read);
+        await AwaitWithinBound(status);
 
         Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
     }
@@ -192,14 +194,16 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.False(router.HasPendingCommand);
     }
 
-    private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
+    // A gate release is a chain of async continuations (SemaphoreSlim -> the write -> the
+    // finally block), so it does not necessarily land in the same synchronous step as the
+    // event that triggers it. Bound the wait instead of awaiting the task directly, so a lost
+    // release fails fast with a readable message instead of hanging for the full CI timeout.
+    private static async Task AwaitWithinBound(Task task)
     {
-        for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
-        {
-            await Task.Delay(10);
-        }
+        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
 
-        Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
+        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        await task;
     }
 
     private sealed class ThrowingTextWriter : TextWriter

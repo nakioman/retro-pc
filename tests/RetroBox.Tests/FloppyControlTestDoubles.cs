@@ -1,6 +1,20 @@
 using RetroBox.Core;
+using RetroBox.Daemon;
 
 namespace RetroBox.Tests;
+
+internal static class RetroBoxSerialLineRouterTestHelpers
+{
+    public static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
+    {
+        for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
+    }
+}
 
 internal static class FloppyControlTestCatalogs
 {
