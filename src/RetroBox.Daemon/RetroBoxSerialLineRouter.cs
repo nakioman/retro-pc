@@ -12,6 +12,12 @@ public sealed class RetroBoxSerialLineRouter
     private readonly Lock gate = new();
     private TaskCompletionSource<NfcResponse>? pending;
 
+    // The wire protocol carries no request ids, so a reply that arrives after its command was
+    // cancelled (e.g. by a timeout) cannot be told apart from a reply to whatever command is
+    // pending next. Counting orphans lets a late reply be absorbed instead of being handed to
+    // the wrong caller as that caller's own result.
+    private int orphanedReplies;
+
     public bool HasPendingCommand
     {
         get
@@ -39,20 +45,25 @@ public sealed class RetroBoxSerialLineRouter
 
     public bool TryRoute(string line)
     {
-        TaskCompletionSource<NfcResponse> completion;
-        NfcResponse response;
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse(line);
+        if (response is NfcResponse.Unknown)
+        {
+            return false;
+        }
+
+        TaskCompletionSource<NfcResponse>? completion;
 
         lock (gate)
         {
-            if (pending is null)
+            if (orphanedReplies > 0)
             {
-                return false;
+                orphanedReplies--;
+                return true;
             }
 
-            response = RetroBoxArduinoSerialProtocol.ParseResponse(line);
-            if (response is NfcResponse.Unknown)
+            if (pending is null)
             {
-                return false;
+                return true;
             }
 
             completion = pending;
@@ -71,6 +82,11 @@ public sealed class RetroBoxSerialLineRouter
         {
             completion = pending;
             pending = null;
+
+            if (completion is not null)
+            {
+                orphanedReplies++;
+            }
         }
 
         completion?.TrySetException(error);
