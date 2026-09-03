@@ -191,3 +191,30 @@ field — that is the polling hysteresis, not a fault.
 
 Use `Ctrl+C` to exit the monitor. Close it before running
 `mise run firmware-upload`, since both need exclusive access to the port.
+
+## Scripted bench test
+
+`scripts/retrofloppy-nfc-test.sh` drives the same protocol from a plain shell,
+which is the quickest way to tell a firmware/NFC problem apart from a daemon
+problem: it warns when `retrobox-daemon` already owns the port, and it tallies
+results instead of leaving them to be eyeballed in a monitor.
+
+```bash
+mise run nfc-test -- ping            # link and firmware alive
+mise run nfc-test -- status          # on-demand read of the seated disk
+mise run nfc-test -- tagid           # PN532 sees the tag at all
+mise run nfc-test -- soak 30 0.5     # 30 on-demand reads, tallied
+mise run nfc-test -- cycles 10       # 10 physical inserts, tallied
+mise run nfc-test -- write monkey1-disk1,ro
+```
+
+The port is autodetected (`/dev/serial/by-id/*`, then `ttyUSB*`/`ttyACM*`, then
+the macOS `cu.*` names); override it with `--port`.
+
+`soak` and `cycles` measure two different paths: `soak` asks `STATUS`
+repeatedly with the disk already seated (answered from the firmware's cached
+state), while `cycles` exercises the unsolicited insert/eject events the
+daemon consumes, driven by the NFC presence polling. A lossy `cycles` run now
+points at antenna coupling — the tag not becoming readable in the seated
+position — rather than at a timing race, since `INSERT` only fires once the
+payload actually reads.

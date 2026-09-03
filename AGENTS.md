@@ -39,6 +39,7 @@ directly for normal project workflows.
 - Publish Linux x64: `mise run publish-linux-x64`
 - Compile firmware: `mise run firmware-compile`
 - Upload firmware: `mise run firmware-upload -- <port>`
+- Bench-test the NFC path over serial: `mise run nfc-test -- <command>`
 
 `mise.toml` is the source of truth for the .NET tool version and project
 commands. If a command needs to change, update `mise.toml` first and keep this

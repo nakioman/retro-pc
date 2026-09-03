@@ -37,3 +37,9 @@ description = "Compile and upload the ESP8266 firmware"
 depends = ["firmware-compile"]
 raw_args = true
 run = "arduino-cli upload --fqbn esp8266:esp8266:nodemcuv2 firmware/retrofloppy-esp8266 -p"
+
+[tasks.nfc-test]
+description = "Exercise the floppy controller NFC path over the serial line"
+raw_args = true
+run = "scripts/retrofloppy-nfc-test.sh"
+
