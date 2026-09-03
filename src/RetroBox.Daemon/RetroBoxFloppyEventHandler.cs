@@ -60,6 +60,14 @@ public sealed class RetroBoxFloppyEventHandler(
                 null);
         }
 
+        if (!floppy.Nfc)
+        {
+            return new RetroBoxFloppyEventHandlerResult(
+                RetroBoxFloppyEventHandlerAction.Failed,
+                $"Floppy '{insert.Id}' has no assigned tag; rewrite it from the panel.",
+                null);
+        }
+
         if (insert.Mode == RetroBoxFloppyCatalogRules.ReadWriteMode
             && floppy.Mode != RetroBoxFloppyCatalogRules.ReadWriteMode)
         {
