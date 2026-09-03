@@ -5,11 +5,14 @@ A printable 3.5" floppy for the RetroBox floppy controller: two shell halves
 NFC tag seated in the middle of the head-window zone so the PN532 reads the
 `<id>,<mode>` payload on insert.
 
-Source: [`floppy-nfc.scad`](floppy-nfc.scad). The shells are third-party files
-of unknown licence, so they are **not committed** (`.gitignore`); drop your
-copies next to the `.scad` before rendering. They arrive already positioned as
-an assembly — the base's walls rise to z = 2.4 and the top sits exactly on that
-plane — so the union produces the closed disk with no repositioning.
+Source: [`floppy-nfc.scad`](floppy-nfc.scad). The shells (`top.stl` +
+`base.stl`) are ["3.5" Floppy Disk" by polymatt](https://www.printables.com/model/1380130-35-floppy-disk)
+(CC BY 4.0), made for [this video](https://www.youtube.com/watch?v=TBiFGhnXsh8),
+and are committed here under that licence. They arrive already positioned as an
+assembly — the base's walls rise to z = 2.4 and the top sits exactly on that
+plane — so the union produces the closed disk with no repositioning. The
+rendered `floppy-nfc.stl` is generated (`mise run floppy-stl`) and stays out of
+git.
 
 ## What the model does
 
