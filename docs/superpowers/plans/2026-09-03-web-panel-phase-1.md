@@ -1304,6 +1304,9 @@ Stacked on the NFC command channel PR. Spec: docs/superpowers/specs/2026-09-03-w
 - `mise run test` and `mise run format-check` pass.
 - `mise run publish-linux-x64` still produces the Native AOT binary.
 - With hardware attached, `mise run nfc-test` still exercises the NFC path.
-- Nothing about the appliance's behaviour has changed for a user: no web
-  server exists yet, and the only user-visible difference is that a floppy
-  whose catalog entry has `nfc: false` no longer mounts.
+- No web server exists yet. Two user-visible behaviours change:
+  - A floppy whose catalog entry has `nfc: false` no longer mounts.
+  - A stray `OK` / `PONG` / `Tag ID:` line arriving with no command in flight
+    is now consumed silently, instead of printing "Malformed Arduino serial
+    event" and setting the daemon's exit code to 1. An improvement, and
+    intended — but a change.

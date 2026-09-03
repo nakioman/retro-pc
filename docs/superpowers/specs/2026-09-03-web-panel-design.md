@@ -440,6 +440,86 @@ leaving the appliance in a working state:
 Phase 1 is a prerequisite for phase 3. Phases 2 and 4 are otherwise
 independent.
 
+## Phase 2 prerequisites
+
+These came out of building phase 1 and reviewing it as a whole. Each one is
+unreachable today — nothing calls the command channel yet — and each one becomes
+live the moment the web layer does. They are prerequisites, not nice-to-haves.
+
+### The daemon's catalog is a snapshot, and the write flow depends on it not being one
+
+`RetroBoxConfigStore.Load()` is called once in the CLI; the resulting
+`RetroBoxCatalogData` is handed to `RetroBoxDaemon`, which builds one
+`RetroBoxFloppyEventHandler` and never reloads. Trace the flow this spec
+describes under "Writing a tag":
+
+1. `POST /api/nfc/write { floppyId: "disk1" }` — `disk1` has `nfc: false`,
+   because it has never been tagged. **This is the primary use case: a new
+   floppy and a blank tag.**
+2. `WriteTagAsync` → `OK` → the channel writes `STATUS`.
+3. The web layer sets `nfc: true` and `nfcUid` in `floppies.yaml` (step 4 of
+   that flow).
+4. The firmware's poll loop reads the now-valid tag and emits
+   `INSERT disk1,ro`.
+5. The read loop reaches the handler — whose **snapshot still says
+   `Nfc == false`** — and the mount guard refuses it.
+
+The disk never mounts, until the daemon restarts. That is the exact outcome the
+post-write `STATUS` exists to produce, defeated by the composition of two
+individually-correct pieces.
+
+**Required:** the event handler must read the catalog through a live accessor
+(`Func<RetroBoxCatalogData>` or an `IRetroBoxCatalogSource` the web layer
+invalidates on save), not a captured snapshot. The same staleness affects every
+endpoint that mutates the catalog — upload, delete, `PATCH` — but the mount
+guard is what makes it acute, because `Nfc` is on the hot path *and* is the one
+field the panel changes at runtime.
+
+### The orphan window needs a quarantine, and it belongs in the router
+
+The router absorbs one late reply after a timeout, within a window. That window
+defaults to the command timeout and opens at the cancel — the same instant a
+retry may begin. So: dead controller → timeout → window opens → the caller
+retries immediately → the controller recovers → the retry's *own* timely reply
+is absorbed as the orphan → the retry times out → a fresh window opens. It heals
+only on an idle gap longer than the window.
+
+**Required:** absorption must happen while nothing else is in flight. Put the
+quarantine in `RetroBoxSerialLineRouter`, which already owns the orphan slot —
+the channel awaits a clear slot before `BeginCommand`. Do **not** hold the
+channel's semaphore through the window instead: that would double a failing
+command's latency before the caller sees its error, which cuts against the whole
+reason this design has a timeout, and it would block the socket poll loop's
+`SendStatusAsync` for the same period, delaying a VM's floppy re-sync.
+
+### Write ordering is gated; reply attribution is not
+
+Every writer to the serial line shares one semaphore, so bytes never interleave.
+But the gate is released once the follow-up `STATUS` is written, while that
+`STATUS`'s answer is still in flight. If the answer is `ERROR no-tag-detected`
+and the panel has already issued another command, the router hands that `ERROR`
+to the new command. Only `ERROR` is at risk — unambiguous replies are absorbed
+or consumed — and the protocol has no request ids, so this cannot be closed by
+correlation.
+
+**Required:** either a short grace hold after writing a follow-up, or a rule
+that the write endpoint does not chain a second command. Decide explicitly.
+
+### Channel lifetime
+
+The channel closes over the `TextWriter` from a `using var device` in the CLI's
+daemon command. Anything holding the channel after `RunAsync` returns writes to
+a disposed stream. If the web host outlives the read loop, that needs an
+explicit contract.
+
+### Reporting an ambiguous write result
+
+A late `ERROR not written` answering a timed-out `WRITE` is indistinguishable
+from an unprompted `ERROR`. The write endpoint should therefore not report a
+definitive failure when a timeout was involved: a follow-up `TAGID` to read back
+what is actually on the tag is cheap and turns an ambiguous failure into a known
+state.
+
 ## Assumptions
 
 - **The panel is unauthenticated and trusts the LAN** (D7). Anyone on the
