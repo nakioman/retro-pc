@@ -44,4 +44,15 @@ public sealed class RetroBoxDriveStateTrackerTests
 
         Assert.IsType<RetroBoxDriveState.Loaded>(tracker.Current);
     }
+
+    [Fact]
+    public void Observe_resets_to_unknown_on_controller_init()
+    {
+        var tracker = new RetroBoxDriveStateTracker();
+        tracker.Observe(new RetroBoxArduinoInsertEvent("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        tracker.Observe(new RetroBoxArduinoInitEvent("1.0.0"));
+
+        Assert.IsType<RetroBoxDriveState.Unknown>(tracker.Current);
+    }
 }

@@ -14,6 +14,7 @@ public sealed class RetroBoxDriveStateTracker : IRetroBoxDriveState
         {
             RetroBoxArduinoInsertEvent insert => new RetroBoxDriveState.Loaded(insert.Id, insert.Mode),
             RetroBoxArduinoEjectEvent => new RetroBoxDriveState.Empty(),
+            RetroBoxArduinoInitEvent => new RetroBoxDriveState.Unknown(),
             _ => current,
         };
     }
