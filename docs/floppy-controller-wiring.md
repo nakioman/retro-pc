@@ -155,6 +155,15 @@ final placement:
   unit; any future enclosure (e.g. 3D-printed plastic) should be non-metallic
   on the antenna side.
 
+## Printable floppy disk
+
+Real floppies work, but the disks that carry a tag day to day are printed:
+[`hardware/floppy-nfc-blank/`](../hardware/floppy-nfc-blank/README.md) joins a
+pair of 3.5" shell halves into one part with an always-open head window and a
+blind seat for a 25 mm round tag, placed where the trials above landed. It has
+no shutter and no metal hub, so nothing can slide shut over the antenna and
+nothing shields it.
+
 ## Acceptance checklist
 
 - [x] Documents exact NodeMCU pins used.

@@ -43,3 +43,6 @@ description = "Exercise the floppy controller NFC path over the serial line"
 raw_args = true
 run = "scripts/retrofloppy-nfc-test.sh"
 
+[tasks.floppy-stl]
+description = "Render the printable NFC floppy to STL"
+run = "openscad -o hardware/floppy-nfc-blank/floppy-nfc.stl hardware/floppy-nfc-blank/floppy-nfc.scad"

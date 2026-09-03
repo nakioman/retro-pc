@@ -23,6 +23,8 @@ Tech stack: .NET 10 (C# 13), solution `RetroBox.slnx`. Components:
 - `tests/RetroBox.Tests` — xUnit suite for Core, Daemon, and CLI.
 - `firmware/retrofloppy-esp8266` — ESP8266 (NodeMCU) Arduino firmware + vendored
   PN532 libraries, pinned via `sketch.yaml`.
+- `hardware/` — printable parts (parametric OpenSCAD), currently the NFC floppy
+  disk that carries a tag into the drive.
 - `appliance/` — Debian 13 read-only-root appliance layout and the bootable USB
   installer (`appliance/installer/`).
 
@@ -39,6 +41,7 @@ directly for normal project workflows.
 - Publish Linux x64: `mise run publish-linux-x64`
 - Compile firmware: `mise run firmware-compile`
 - Upload firmware: `mise run firmware-upload -- <port>`
+- Render the printable NFC floppy: `mise run floppy-stl`
 - Bench-test the NFC path over serial: `mise run nfc-test -- <command>`
 
 `mise.toml` is the source of truth for the .NET tool version and project
@@ -103,6 +106,8 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
   `docs/floppy-controller-wiring.md`, `docs/86box-*.md` — feature docs.
 - `appliance/README.md`, `appliance/installer/README.md` — appliance and
   installer.
+- `hardware/floppy-nfc-blank/README.md` — printable NFC floppy: BOM, print
+  settings, fit checklist.
 
 ## CI
 

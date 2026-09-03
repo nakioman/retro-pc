@@ -1,0 +1,3 @@
+# top.stl / base.stl are third-party source shells of unknown licence (drop
+# your copies here); floppy-nfc.stl is regenerated with: mise run floppy-stl
+*.stl
