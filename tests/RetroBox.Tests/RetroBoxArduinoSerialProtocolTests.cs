@@ -187,7 +187,7 @@ public sealed class RetroBoxArduinoSerialProtocolTests
     }
 
     [Fact]
-    public void ParseResponse_rejects_a_tag_id_with_no_uid()
+    public void ParseResponse_ignores_a_tag_id_line_with_no_uid()
     {
         Assert.IsType<NfcResponse.Unknown>(RetroBoxArduinoSerialProtocol.ParseResponse("Tag ID: "));
     }

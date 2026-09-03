@@ -101,11 +101,7 @@ public static class RetroBoxArduinoSerialProtocol
         const string TagIdPrefix = "Tag ID: ";
         if (trimmedLine.StartsWith(TagIdPrefix, StringComparison.Ordinal))
         {
-            var uid = trimmedLine[TagIdPrefix.Length..].Trim();
-            if (uid.Length > 0)
-            {
-                return new NfcResponse.TagId(uid);
-            }
+            return new NfcResponse.TagId(trimmedLine[TagIdPrefix.Length..]);
         }
 
         const string ErrorPrefix = "ERROR ";
