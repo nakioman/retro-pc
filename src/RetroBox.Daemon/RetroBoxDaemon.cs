@@ -11,7 +11,8 @@ public sealed class RetroBoxDaemon(
     TextWriter? serialOutput = null,
     IRetroBoxVmSocketProbe? socketProbe = null,
     RetroBoxSerialLineRouter? lineRouter = null,
-    RetroBoxDriveStateTracker? driveState = null)
+    RetroBoxDriveStateTracker? driveState = null,
+    RetroBoxSerialNfcCommandChannel? nfcChannel = null)
 {
     public const string DefaultFloppyControlSocketPath = "/run/retrobox/86box-floppy.sock";
 
@@ -30,7 +31,7 @@ public sealed class RetroBoxDaemon(
         // the socket watcher's STATUS polls, so both share one gate on the one serial line.
         IRetroBoxStatusRequester? statusRequester = serialOutput is null
             ? null
-            : new RetroBoxSerialNfcCommandChannel(router, serialOutput);
+            : nfcChannel ?? new RetroBoxSerialNfcCommandChannel(router, serialOutput);
         var socketWatcher = WatchSocketAsync(probe, statusRequester, DefaultSocketPollInterval, linked.Token);
 
         try
