@@ -17,10 +17,23 @@ RetroFloppyNFC::RetroFloppyNFC()
 void RetroFloppyNFC::setup() {
   nfc.begin();
   nfc.SAMConfig();
+  nfc.setPassiveActivationRetries(PASSIVE_ACTIVATION_RETRIES);
 }
 
 bool RetroFloppyNFC::detectCard(uint8_t* uid, uint8_t& uidLength) {
-  return nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000);
+  return nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, DETECT_TIMEOUT_MS);
+}
+
+bool RetroFloppyNFC::tagPresent() {
+  uint8_t uid[7];
+  uint8_t uidLength;
+
+  if (!detectCard(uid, uidLength)) {
+    return false;
+  }
+
+  nfc.inRelease();
+  return true;
 }
 
 bool RetroFloppyNFC::readCardId(char* out, size_t size) {
@@ -80,14 +93,14 @@ bool RetroFloppyNFC::write(const char* text) {
   return true;
 }
 
-bool RetroFloppyNFC::readTag(char* out, size_t size) {
+TagReadResult RetroFloppyNFC::readTag(char* out, size_t size) {
   uint8_t uid[7];
   uint8_t uidLength;
 
-  if (size == 0) return false;
+  if (size == 0) return TagReadResult::READ_FAILED;
 
   if (!detectCard(uid, uidLength)) {
-    return false;
+    return TagReadResult::NO_TAG;
   }
 
   size_t pos = 0;
@@ -100,7 +113,7 @@ bool RetroFloppyNFC::readTag(char* out, size_t size) {
 
     if (!nfc.mifareultralight_ReadPage(page, data)) {
       nfc.inRelease();
-      return false;
+      return TagReadResult::READ_FAILED;
     }
 
     for (uint8_t i = 0; i < BYTES_PER_PAGE; ++i) {
@@ -116,5 +129,5 @@ bool RetroFloppyNFC::readTag(char* out, size_t size) {
   nfc.inRelease();
 
   trimTrailing(out);
-  return strlen(out) > 0;
+  return strlen(out) > 0 ? TagReadResult::OK : TagReadResult::READ_FAILED;
 }

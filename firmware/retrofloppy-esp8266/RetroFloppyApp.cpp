@@ -1,4 +1,3 @@
-#include <cstdio>
 #include "RetroFloppyApp.h"
 
 RetroFloppyApp::RetroFloppyApp()
@@ -8,50 +7,115 @@ void RetroFloppyApp::setup() {
   serial.setup();
   nfcModule.setup();
 
-  detectFloppyBtn.attach(FLOPPY_LOADED_PIN, INPUT_PULLUP);
-  detectFloppyBtn.interval(FLOPPY_DETECT_BTN_INTERVAL);
-
   serial.sendInit(PROTOCOL_VERSION);
 }
 
 void RetroFloppyApp::update() {
-  Command cmd;
   char cmdStr[MAX_COMMAND_LENGTH + 1];
 
-  detectFloppyBtn.update();
+  pollFloppy();
 
-  if (detectFloppyBtn.changed()) {
-    bool inserted = (detectFloppyBtn.read() == HIGH);
-    if (inserted) {
-      if (nfcModule.readTag(cmdStr, sizeof(cmdStr))) {
-        commandParser.makeInsert(cmdStr, cmd);
-      } else {
-        snprintf(cmdStr, sizeof(cmdStr), "TAG not read");
-        commandParser.makeError(cmdStr, cmd);
-      }
-    } else {
-      commandParser.makeEject(cmd);
-    }
-    commandHandler.execute(cmd);
-  } else if (serial.read(cmdStr, sizeof(cmdStr))) {
+  if (serial.read(cmdStr, sizeof(cmdStr))) {
+    Command cmd;
     commandParser.readCommand(cmdStr, cmd);
     if (cmd.type == CommandType::STATUS) {
       handleStatus();
     } else {
       commandHandler.execute(cmd);
+      if (cmd.type == CommandType::WRITE) {
+        refreshInsertedPayload();
+      }
     }
   }
 }
 
-void RetroFloppyApp::handleStatus() {
-  if (detectFloppyBtn.read() == HIGH) {
-    char tag[MAX_COMMAND_LENGTH + 1];
-    if (nfcModule.readTag(tag, sizeof(tag))) {
-      serial.write(F("INSERT %s"), tag);
-    } else {
-      serial.write(F("ERROR no-tag-detected"));
+// The tag glued inside the floppy shell doubles as the disk-present sensor:
+// tag in the PN532 field means inserted, tag gone means ejected.
+void RetroFloppyApp::pollFloppy() {
+  unsigned long interval = (floppyState == FloppyState::INSERTED)
+                             ? POLL_INTERVAL_INSERTED_MS
+                             : POLL_INTERVAL_EMPTY_MS;
+  unsigned long now = millis();
+  if (now - lastPollAt < interval) return;
+  lastPollAt = now;
+
+  if (floppyState == FloppyState::INSERTED) {
+    if (nfcModule.tagPresent()) {
+      missedPolls = 0;
+    } else if (++missedPolls >= EJECT_MISS_THRESHOLD) {
+      announceEject();
     }
-  } else {
-    serial.write(F("EJECT"));
+    return;
+  }
+
+  char payload[MAX_COMMAND_LENGTH + 1];
+  switch (nfcModule.readTag(payload, sizeof(payload))) {
+    case TagReadResult::OK:
+      announceInsert(payload);
+      break;
+    case TagReadResult::READ_FAILED:
+      missedPolls = 0;
+      if (floppyState == FloppyState::EMPTY &&
+          ++unreadablePolls >= UNREADABLE_POLL_THRESHOLD) {
+        floppyState = FloppyState::UNREADABLE;
+        Command cmd;
+        commandParser.makeError("TAG not read", cmd);
+        commandHandler.execute(cmd);
+      }
+      break;
+    case TagReadResult::NO_TAG:
+      unreadablePolls = 0;
+      if (floppyState == FloppyState::UNREADABLE &&
+          ++missedPolls >= EJECT_MISS_THRESHOLD) {
+        announceEject();
+      }
+      break;
+  }
+}
+
+void RetroFloppyApp::announceInsert(const char* payload) {
+  strlcpy(insertedPayload, payload, sizeof(insertedPayload));
+  floppyState = FloppyState::INSERTED;
+  missedPolls = 0;
+  unreadablePolls = 0;
+
+  Command cmd;
+  commandParser.makeInsert(insertedPayload, cmd);
+  commandHandler.execute(cmd);
+}
+
+void RetroFloppyApp::announceEject() {
+  floppyState = FloppyState::EMPTY;
+  missedPolls = 0;
+  unreadablePolls = 0;
+  insertedPayload[0] = '\0';
+
+  Command cmd;
+  commandParser.makeEject(cmd);
+  commandHandler.execute(cmd);
+}
+
+// WRITE rewrites the seated tag, so the payload cached for STATUS has to
+// follow it.
+void RetroFloppyApp::refreshInsertedPayload() {
+  if (floppyState != FloppyState::INSERTED) return;
+
+  char payload[MAX_COMMAND_LENGTH + 1];
+  if (nfcModule.readTag(payload, sizeof(payload)) == TagReadResult::OK) {
+    strlcpy(insertedPayload, payload, sizeof(insertedPayload));
+  }
+}
+
+void RetroFloppyApp::handleStatus() {
+  switch (floppyState) {
+    case FloppyState::INSERTED:
+      serial.write(F("INSERT %s"), insertedPayload);
+      break;
+    case FloppyState::UNREADABLE:
+      serial.write(F("ERROR no-tag-detected"));
+      break;
+    case FloppyState::EMPTY:
+      serial.write(F("EJECT"));
+      break;
   }
 }

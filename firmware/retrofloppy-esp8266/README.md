@@ -4,6 +4,11 @@ ESP8266 firmware for the modified floppy drive: reads and writes the NFC tag
 glued inside a floppy shell with a PN532 over I2C, and reports insert/eject
 events to the Retro PC over USB serial.
 
+The tag doubles as the disk-present sensor: the firmware polls the PN532
+continuously, so a tag entering the field means a floppy was inserted and a
+tag leaving the field means it was ejected. There is no mechanical
+disk-present switch.
+
 Target board: NodeMCU v2 (`esp8266:esp8266:nodemcuv2`).
 
 ## Hardware
@@ -29,8 +34,6 @@ NodeMCU 3V3       -> PN532 VCC
 NodeMCU GND       -> PN532 GND
 NodeMCU D1 (GPIO5) -> PN532 SCL
 NodeMCU D2 (GPIO4) -> PN532 SDA
-
-NodeMCU D6 (GPIO12) -> disk-present switch -> NodeMCU GND
 ```
 
 D1/D2 are the ESP8266 default `Wire` pins; the firmware calls `Wire.begin()`
@@ -44,19 +47,28 @@ and update this section.
 
 `IRQ` is also unconnected — the firmware polls the PN532 instead.
 
-### Disk-present switch
+### Disk-present detection
 
-`D6` is configured as `INPUT_PULLUP` and debounced with Bounce2 (5 ms interval):
+There is no disk-present switch. The firmware polls the PN532 with fast-fail
+activation (`setPassiveActivationRetries(0x01)`), and presence of the tag in
+the field is what defines the drive state. The poll rate is asymmetric: every
+100 ms while a disk is seated (`POLL_INTERVAL_INSERTED_MS`, a cheap presence
+check) and every 250 ms while the drive is empty (`POLL_INTERVAL_EMPTY_MS`, a
+full detect+read):
 
-- `HIGH` (switch open) = floppy inserted.
-- `LOW` (switch closed to GND) = drive empty.
+- A tag becoming readable emits `INSERT <payload>` — so the event fires only
+  once the disk is seated well enough to actually read, never mid-insertion.
+- A tag that is coupled but whose payload cannot be read for 4 consecutive
+  polls (~1 s) emits `ERROR TAG not read` once.
+- A seated tag missing **3 consecutive polls** (~300–400 ms) emits `EJECT`.
+  The hysteresis absorbs the occasional single missed read of a seated tag.
 
-So the switch must be arranged to close to ground while the drive is **empty**
-and open when a floppy is seated.
+The consequence to be aware of: a floppy without a tag (or with a dead tag
+that does not couple at all) is indistinguishable from an empty drive.
 
 ### Pins to avoid
 
-Do not move the PN532 or the switch onto these without checking boot behaviour:
+Do not move the PN532 onto these without checking boot behaviour:
 
 | Pin | GPIO | Why |
 | --- | --- | --- |
@@ -119,23 +131,24 @@ INIT 1
 bytes; it does not validate the `<id>,<mode>` shape, so the host is responsible
 for sending a well-formed payload.
 
-`STATUS` reports the drive's current physical state on demand, reusing the same
-event lines as the unsolicited insert/eject notifications so the daemon can
-re-sync a VM that just started without extra parsing. It reads the debounced
-disk-present switch and, when a floppy is seated, reads the NFC tag at that
-instant.
+`STATUS` reports the drive's current state on demand, reusing the same event
+lines as the unsolicited insert/eject notifications so the daemon can re-sync
+a VM that just started without extra parsing. It answers from the state the
+NFC polling loop already tracks — `INSERT <payload>` with the cached payload,
+`EJECT` when empty, and `ERROR no-tag-detected` when a tag is coupled but
+unreadable — so it costs no extra tag read.
 
 Any other non-empty line is echoed back as `ERROR <line>`.
 
 ### Events emitted by the firmware
 
-These are unsolicited, driven by the disk-present switch:
+These are unsolicited, driven by the NFC presence-polling loop:
 
 | Event | Meaning |
 | --- | --- |
-| `INSERT <payload>` | A floppy was seated and its tag read successfully. |
-| `ERROR TAG not read` | A floppy was seated but no readable tag was found. |
-| `EJECT` | The floppy was removed. |
+| `INSERT <payload>` | A tag entered the field and its payload read successfully. |
+| `ERROR TAG not read` | A tag is coupled but stayed unreadable for ~1 s. |
+| `EJECT` | The tag left the field for ~1 s (floppy removed). |
 
 `INSERT`, `EJECT`, and `ERROR <message>` are the three lines the `retrobox`
 daemon parses (`RetroBoxArduinoSerialProtocol`).
@@ -165,12 +178,16 @@ HELLO
 ERROR HELLO
 ```
 
-And with the disk-present switch:
+And inserting/removing a tagged floppy (or just moving the tag in and out of
+the antenna's range by hand):
 
 ```text
 INSERT monkey1-disk1,ro
 EJECT
 ```
+
+The `EJECT` line arrives a few hundred milliseconds after the tag leaves the
+field — that is the polling hysteresis, not a fault.
 
 Use `Ctrl+C` to exit the monitor. Close it before running
 `mise run firmware-upload`, since both need exclusive access to the port.

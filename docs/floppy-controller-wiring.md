@@ -1,7 +1,8 @@
 # Floppy Controller Wiring
 
 Physical wiring and mechanical validation for the modified floppy drive that
-hosts the NodeMCU + PN532 NFC reader and the disk-present switch.
+hosts the NodeMCU + PN532 NFC reader. The NFC tag doubles as the disk-present
+sensor, so there is no mechanical switch to wire.
 
 The firmware side is documented in
 [`firmware/retrofloppy-esp8266/README.md`](../firmware/retrofloppy-esp8266/README.md);
@@ -13,8 +14,7 @@ this file records the physical build inside the drive and the bench results.
 | --- | --- |
 | NodeMCU v2 (ESP8266) | USB serial bridge to the Retro PC host and PN532 controller. |
 | PN532 NFC module (I2C) | Reads the NTAG21x / MIFARE Ultralight tag glued inside a floppy shell. |
-| NTAG21x / MIFARE Ultralight tag | Carries the `<id>,<mode>` payload for the disk it is glued to. |
-| Disk-present switch (NO, normally open) | Closes to GND when the drive is empty; opens when a floppy is seated. |
+| NTAG21x / MIFARE Ultralight tag | Carries the `<id>,<mode>` payload for the disk it is glued to, and doubles as the disk-present sensor. |
 | 4.7 kΩ resistors (optional) | I2C pull-ups on SDA/SCL to 3.3 V, only if reads are flaky. |
 
 ## NodeMCU pin assignment
@@ -23,9 +23,8 @@ this file records the physical build inside the drive and the bench results.
 | --- | --- | --- |
 | `D1` | 5 | `Wire` SCL to PN532. |
 | `D2` | 4 | `Wire` SDA to PN532. |
-| `D6` | 12 | Disk-present switch input, `INPUT_PULLUP` with Bounce2 5 ms debounce. |
 | `3V3` | — | PN532 VCC. |
-| `GND` | — | Common ground for PN532 and switch. |
+| `GND` | — | Common ground for the PN532. |
 | `TX` / `RX` | 1 / 3 | USB serial to the Retro PC host (115200 baud, 8N1). |
 
 `D0`, `D3`, `D4`, and `D8` are deliberately avoided because of ESP8266 boot
@@ -49,21 +48,25 @@ strapping constraints (see `firmware/retrofloppy-esp8266/README.md`).
   If reads become flaky, add 4.7 kΩ pull-ups from SDA and SCL to 3.3 V. The
   bench unit did not need them.
 
-## Disk-present switch
+## Disk-present detection
 
-- **Type:** normally-open (NO) momentary lever switch, repurposed from the
-  drive's original write-protect / media-sensor assembly.
-- **Placement:** inside the floppy drive, at the mouth of the slot, positioned
-  so the floppy shell mechanically opens the switch when it is fully seated
-  and lets it close (to GND) when the drive is empty.
-- **Wiring:** one terminal to `D6`, the other to `GND`. `D6` uses the ESP8266
-  internal pull-up, so no external pull-up resistor is needed.
-- **Logic:**
-  - `HIGH` (switch open) = floppy inserted.
-  - `LOW` (switch closed to GND) = drive empty.
-- **Debounce:** Bounce2, 5 ms interval. An earlier build produced
-  bounce-induced false `INSERT`/`EJECT` events until the 5 ms debounce window
-  was tuned; after tuning the switch has been stable (see Bench results).
+There is no mechanical disk-present switch. An earlier build used the drive's
+repurposed media-sensor lever on `D6`, but the switch never actuated reliably
+in the modified drive, so it was removed. Instead the firmware polls the
+PN532 — every 100 ms with a disk seated, every 250 ms with the drive empty —
+and derives the drive state from tag presence:
+
+- Tag becomes readable → `INSERT <payload>`. The event fires only once the
+  disk is seated well enough to actually read, so there is no race between
+  "detected" and "readable".
+- Tag absent for 3 consecutive polls (~300–400 ms) → `EJECT`. The hysteresis
+  absorbs single missed reads of a seated tag.
+
+The mechanical consequence for tag placement is stricter than before: the tag
+must couple with the antenna **only when the disk is fully seated**. If a
+half-inserted disk already reads, move the antenna deeper into the drive or
+increase the tag–antenna distance. A floppy without a tag is invisible — it
+reads as an empty drive.
 
 ## Recommended NFC tag placement
 
@@ -94,23 +97,26 @@ even with the correct tag placement.
 | --- | --- |
 | NodeMCU 3V3 | Internal regulator from USB; also feeds the PN532 `VCC`. |
 | PN532 VCC | NodeMCU `3V3` pin, so the PN532 boots when the NodeMCU is USB-powered. |
-| Disk-present switch | Pulled up by `D6`'s internal pull-up; closes to `GND`. No separate rail. |
-| Ground | NodeMCU `GND` is the common ground for the PN532 and the switch. |
+| Ground | NodeMCU `GND` is the common ground for the PN532. |
 | USB cable | From the NodeMCU micro-USB port straight to the Retro PC host. The host provides both power and the 115200 baud serial link on `TX`/`RX`. |
 
 The whole modified drive is powered through the NodeMCU's USB connection; no
 separate 5 V rail is wired into the floppy chassis. The PN532 draws its
 current from the NodeMCU `3V3` regulator, which is rated for the module's
-standby and active current. If a future build adds pull-ups or a second I2C
-peripheral, re-check that the `3V3` regulator stays within budget.
+standby and active current. Note the PN532 now polls continuously (RF field on
+every 100–250 ms depending on state), so it sits at its active current more of
+the time than the switch-triggered build did; the `3V3` regulator still has
+headroom. If a future build adds pull-ups or a second I2C peripheral, re-check
+the budget.
 
 ## Bench results
 
-### 20 insert/eject cycles
+### 20 insert/eject cycles (switch-based build, historical)
 
-After the 5 ms switch debounce fix, 20 consecutive insert/eject cycles were
-run with the same NTAG21x tag glued in the adopted position (open shutter,
-drive cover removed).
+These results predate the removal of the disk-present switch: they were run on
+the switch-triggered firmware, after the 5 ms debounce fix, with the same
+NTAG21x tag glued in the adopted position (open shutter, drive cover removed).
+The NFC-polling build should be re-validated with a fresh 20-cycle run.
 
 | Result | Count |
 | --- | --- |
@@ -135,9 +141,12 @@ final placement:
 
 ### Issues observed
 
-- **Switch bounce (resolved):** the initial build emitted spurious
-  `INSERT`/`EJECT` events before the Bounce2 debounce interval was set to 5 ms.
-  After the fix the switch has been stable across the 20-cycle run.
+- **Disk-present switch (removed):** the initial build detected the floppy
+  with a repurposed lever switch on `D6`. It first needed a 5 ms Bounce2
+  debounce to stop phantom events, and later proved mechanically unreliable —
+  the lever did not actuate consistently in the modified drive. The switch was
+  removed entirely; presence is now derived from the NFC tag being readable
+  (see “Disk-present detection”).
 - **NFC shielding (ongoing design constraint):** the floppy drive chassis is
   all-metal and blocks the PN532 antenna. Tag placement had to be moved off
   the disk centre, onto the open metal shutter at the head opening, and the
@@ -150,7 +159,7 @@ final placement:
 
 - [x] Documents exact NodeMCU pins used.
 - [x] Documents PN532 interface mode and jumper/switch settings.
-- [x] Documents switch type and placement.
+- [x] Documents how disk presence is detected (NFC polling; no switch).
 - [x] Documents recommended NFC tag placement inside a floppy shell.
 - [x] Documents USB routing/power plan.
 - [x] Records results of 20 insert/eject cycles.
