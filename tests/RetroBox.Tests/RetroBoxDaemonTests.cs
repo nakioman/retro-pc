@@ -313,6 +313,33 @@ public sealed class RetroBoxDaemonTests
         Assert.Equal(0, probe.Calls);
     }
 
+    [Fact]
+    public async Task RunAsync_does_not_treat_a_command_reply_as_a_malformed_event()
+    {
+        var client = new RecordingFloppyControlClient();
+        var output = new StringWriter();
+        var router = new RetroBoxSerialLineRouter();
+        var pending = router.BeginCommand();
+
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            client,
+            new StringReader(
+                """
+                OK
+                INSERT disk1,ro
+
+                """),
+            output,
+            lineRouter: router);
+
+        var exitCode = await daemon.RunAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.IsType<NfcResponse.Ok>(await pending);
+        Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
+    }
+
     private sealed class BlockingTextReader : TextReader
     {
         public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
