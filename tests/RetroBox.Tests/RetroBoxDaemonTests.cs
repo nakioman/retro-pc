@@ -263,11 +263,12 @@ public sealed class RetroBoxDaemonTests
     public async Task WatchSocketAsync_queries_status_once_per_down_to_up_transition()
     {
         var serialOutput = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(new RetroBoxSerialLineRouter(), serialOutput);
         using var cancellation = new CancellationTokenSource();
 
         var watch = RetroBoxDaemon.WatchSocketAsync(
             new ScriptedSocketProbe(false, true, true),
-            serialOutput,
+            channel,
             TimeSpan.FromMilliseconds(5),
             cancellation.Token);
         await Task.Delay(100);
@@ -281,11 +282,12 @@ public sealed class RetroBoxDaemonTests
     public async Task WatchSocketAsync_queries_status_again_after_socket_goes_down()
     {
         var serialOutput = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(new RetroBoxSerialLineRouter(), serialOutput);
         using var cancellation = new CancellationTokenSource();
 
         var watch = RetroBoxDaemon.WatchSocketAsync(
             new ScriptedSocketProbe(true, false, true, true),
-            serialOutput,
+            channel,
             TimeSpan.FromMilliseconds(5),
             cancellation.Token);
         await Task.Delay(100);
@@ -293,6 +295,35 @@ public sealed class RetroBoxDaemonTests
         await watch;
 
         Assert.Equal("STATUS\nSTATUS\n", serialOutput.ToString());
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_serializes_status_polls_behind_an_in_flight_command()
+    {
+        var serialOutput = new StringWriter();
+        var router = new RetroBoxSerialLineRouter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serialOutput);
+        using var cancellation = new CancellationTokenSource();
+
+        var read = channel.ReadTagIdAsync(cancellation.Token);
+        await WaitForPendingCommand(router);
+
+        var watch = RetroBoxDaemon.WatchSocketAsync(
+            new ScriptedSocketProbe(true),
+            channel,
+            TimeSpan.FromMilliseconds(5),
+            cancellation.Token);
+        await Task.Delay(50);
+
+        Assert.DoesNotContain("STATUS", serialOutput.ToString(), StringComparison.Ordinal);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        await read;
+        await Task.Delay(50);
+        cancellation.Cancel();
+        await watch;
+
+        Assert.Contains("STATUS", serialOutput.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -338,6 +369,37 @@ public sealed class RetroBoxDaemonTests
         Assert.Equal(0, exitCode);
         Assert.IsType<NfcResponse.Ok>(await pending);
         Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
+    }
+
+    [Fact]
+    public async Task RunAsync_tracks_the_drive_state_from_events()
+    {
+        var tracker = new RetroBoxDriveStateTracker();
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            new RecordingFloppyControlClient(),
+            new StringReader(
+                """
+                INSERT disk1,ro
+
+                """),
+            new StringWriter(),
+            driveState: tracker);
+
+        await daemon.RunAsync();
+
+        var loaded = Assert.IsType<RetroBoxDriveState.Loaded>(tracker.Current);
+        Assert.Equal("disk1", loaded.FloppyId);
+    }
+
+    private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
+    {
+        for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
     }
 
     private sealed class BlockingTextReader : TextReader

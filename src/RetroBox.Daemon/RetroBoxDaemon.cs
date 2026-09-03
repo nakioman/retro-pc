@@ -10,7 +10,8 @@ public sealed class RetroBoxDaemon(
     bool echoEvents = false,
     TextWriter? serialOutput = null,
     IRetroBoxVmSocketProbe? socketProbe = null,
-    RetroBoxSerialLineRouter? lineRouter = null)
+    RetroBoxSerialLineRouter? lineRouter = null,
+    RetroBoxDriveStateTracker? driveState = null)
 {
     public const string DefaultFloppyControlSocketPath = "/run/retrobox/86box-floppy.sock";
 
@@ -21,9 +22,16 @@ public sealed class RetroBoxDaemon(
         var handler = new RetroBoxFloppyEventHandler(catalog, floppyControlClient);
         var probe = socketProbe ?? new RetroBoxFloppyControlSocketProbe(floppyControlClient);
         var router = lineRouter ?? new RetroBoxSerialLineRouter();
+        var tracker = driveState ?? new RetroBoxDriveStateTracker();
         var exitCode = 0;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var socketWatcher = WatchSocketAsync(probe, serialOutput, DefaultSocketPollInterval, linked.Token);
+
+        // The same channel instance that will later carry NFC read/write commands also carries
+        // the socket watcher's STATUS polls, so both share one gate on the one serial line.
+        IRetroBoxStatusRequester? statusRequester = serialOutput is null
+            ? null
+            : new RetroBoxSerialNfcCommandChannel(router, serialOutput);
+        var socketWatcher = WatchSocketAsync(probe, statusRequester, DefaultSocketPollInterval, linked.Token);
 
         try
         {
@@ -42,6 +50,7 @@ public sealed class RetroBoxDaemon(
                 try
                 {
                     var serialEvent = RetroBoxArduinoSerialProtocol.ParseEvent(line);
+                    tracker.Observe(serialEvent);
                     var result = await handler.HandleAsync(serialEvent, linked.Token);
 
                     if (!echoEvents
@@ -83,11 +92,11 @@ public sealed class RetroBoxDaemon(
     /// <summary>Re-syncs the physical floppy with the VM whenever the 86Box socket becomes available.</summary>
     internal static async Task WatchSocketAsync(
         IRetroBoxVmSocketProbe probe,
-        TextWriter? serialOutput,
+        IRetroBoxStatusRequester? statusRequester,
         TimeSpan pollInterval,
         CancellationToken cancellationToken)
     {
-        if (serialOutput is null)
+        if (statusRequester is null)
         {
             return;
         }
@@ -113,7 +122,14 @@ public sealed class RetroBoxDaemon(
 
             if (ready && (firstProbe || !socketWasReady))
             {
-                await serialOutput.WriteLineAsync(RetroBoxArduinoSerialProtocol.BuildStatusCommand());
+                try
+                {
+                    await statusRequester.SendStatusAsync(cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
             }
 
             socketWasReady = ready;

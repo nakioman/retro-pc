@@ -110,7 +110,7 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     {
         var router = new RetroBoxSerialLineRouter();
         var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(50));
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(300));
 
         await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
             async () => await channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
@@ -125,6 +125,71 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
         var tagId = Assert.IsType<NfcResponse.TagId>(await retry);
         Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
+    [Fact]
+    public async Task WriteTagAsync_asks_for_status_after_a_successful_write()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("OK"));
+        await write;
+
+        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteTagAsync_does_not_ask_for_status_after_a_failed_write()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("ERROR not written"));
+        await write;
+
+        Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_waits_for_a_command_holding_the_gate()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        var read = channel.ReadTagIdAsync();
+        await WaitForPendingCommand(router);
+
+        var status = channel.SendStatusAsync();
+        await Task.Delay(50);
+
+        Assert.False(status.IsCompleted);
+        Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        await read;
+        await status;
+
+        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_does_not_register_a_pending_command()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        await channel.SendStatusAsync();
+
+        Assert.False(router.HasPendingCommand);
     }
 
     private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
