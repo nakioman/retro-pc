@@ -136,7 +136,7 @@ public sealed class RetroBoxFloppyEventHandlerTests
 
         Assert.Equal(RetroBoxFloppyEventHandlerAction.Failed, result.Action);
         Assert.Contains("has no assigned tag", result.Message, StringComparison.Ordinal);
-        Assert.Contains("retrobox nfc write", result.Message, StringComparison.Ordinal);
+        Assert.Contains("--port", result.Message, StringComparison.Ordinal);
         Assert.Empty(client.Calls);
     }
 

@@ -64,7 +64,7 @@ public sealed class RetroBoxFloppyEventHandler(
         {
             return new RetroBoxFloppyEventHandlerResult(
                 RetroBoxFloppyEventHandlerAction.Failed,
-                $"Floppy '{insert.Id}' has no assigned tag; run 'retrobox nfc write {insert.Id}' to assign one.",
+                $"Floppy '{insert.Id}' has no assigned tag; run 'retrobox nfc write {insert.Id} --port /dev/ttyUSB0' to assign one.",
                 null);
         }
 
