@@ -75,6 +75,11 @@ public static class RetroBoxArduinoSerialProtocol
         return "STATUS";
     }
 
+    public static string BuildTagIdCommand()
+    {
+        return "TAGID";
+    }
+
     public static NfcResponse ParseResponse(string? line)
     {
         var trimmedLine = line?.Trim();
@@ -91,6 +96,16 @@ public static class RetroBoxArduinoSerialProtocol
         if (trimmedLine == "OK")
         {
             return new NfcResponse.Ok();
+        }
+
+        const string TagIdPrefix = "Tag ID: ";
+        if (trimmedLine.StartsWith(TagIdPrefix, StringComparison.Ordinal))
+        {
+            var uid = trimmedLine[TagIdPrefix.Length..].Trim();
+            if (uid.Length > 0)
+            {
+                return new NfcResponse.TagId(uid);
+            }
         }
 
         const string ErrorPrefix = "ERROR ";
@@ -173,6 +188,7 @@ public abstract record NfcResponse
 {
     public sealed record Pong() : NfcResponse;
     public sealed record Ok() : NfcResponse;
+    public sealed record TagId(string Uid) : NfcResponse;
     public sealed record Error(string Message) : NfcResponse;
     public sealed record Unknown(string? Line) : NfcResponse;
 }
