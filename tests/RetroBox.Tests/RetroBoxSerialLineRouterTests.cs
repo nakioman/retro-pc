@@ -6,12 +6,56 @@ namespace RetroBox.Tests;
 public sealed class RetroBoxSerialLineRouterTests
 {
     [Fact]
-    public void TryRoute_consumes_an_unsolicited_response_without_completing_anything()
+    public async Task TryRoute_consumes_an_unsolicited_response_without_completing_anything()
     {
         var router = new RetroBoxSerialLineRouter();
 
         Assert.True(router.TryRoute("OK"));
         Assert.False(router.HasPendingCommand);
+
+        var pending = router.BeginCommand();
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+
+        var tagId = Assert.IsType<NfcResponse.TagId>(await pending);
+        Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
+    [Fact]
+    public void TryRoute_falls_through_to_the_event_path_for_an_unprompted_error()
+    {
+        var router = new RetroBoxSerialLineRouter();
+
+        Assert.False(router.TryRoute("ERROR no-tag-detected"));
+    }
+
+    [Fact]
+    public async Task TryRoute_does_not_drain_the_orphan_slot_on_an_unprompted_error()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var timedOut = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        Assert.False(router.TryRoute("ERROR no-tag-detected"));
+
+        var next = router.BeginCommand();
+        Assert.True(router.TryRoute("OK"));
+
+        Assert.False(next.IsCompleted);
+        await Assert.ThrowsAsync<TimeoutException>(async () => await timedOut);
+    }
+
+    [Fact]
+    public async Task TryRoute_does_not_absorb_a_reply_once_the_orphan_window_has_expired()
+    {
+        var router = new RetroBoxSerialLineRouter(TimeSpan.Zero);
+        var timedOut = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        var next = router.BeginCommand();
+        Assert.True(router.TryRoute("OK"));
+
+        Assert.IsType<NfcResponse.Ok>(await next);
+        await Assert.ThrowsAsync<TimeoutException>(async () => await timedOut);
     }
 
     [Fact]
@@ -115,6 +159,7 @@ public sealed class RetroBoxSerialLineRouterTests
         var pending = router.BeginCommand();
         Assert.True(router.TryRoute("OK"));
 
+        Assert.True(pending.IsCompleted);
         Assert.IsType<NfcResponse.Ok>(await pending);
     }
 }

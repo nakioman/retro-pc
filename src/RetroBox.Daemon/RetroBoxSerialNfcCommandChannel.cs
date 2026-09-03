@@ -52,7 +52,17 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
         try
         {
             var reply = router.BeginCommand();
-            await serialOutput.WriteLineAsync(command.AsMemory(), cancellationToken);
+
+            try
+            {
+                await serialOutput.WriteLineAsync(command.AsMemory(), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Nothing reached the wire, so no reply is coming and no orphan may be minted.
+                router.CancelCommand(ex, expectLateReply: false);
+                throw;
+            }
 
             NfcResponse response;
             try

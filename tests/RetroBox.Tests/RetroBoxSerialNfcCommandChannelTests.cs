@@ -1,3 +1,4 @@
+using System.Text;
 using RetroBox.Core;
 using RetroBox.Daemon;
 
@@ -87,6 +88,45 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.IsType<NfcResponse.Ok>(await second);
     }
 
+    [Fact]
+    public async Task SendAsync_frees_the_slot_without_minting_an_orphan_when_the_write_itself_fails()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, new ThrowingTextWriter());
+
+        await Assert.ThrowsAsync<IOException>(async () => await channel.ReadTagIdAsync());
+
+        Assert.False(router.HasPendingCommand);
+
+        // If the failed write had minted an orphan, this reply would be silently absorbed
+        // instead of completing the next command.
+        var next = router.BeginCommand();
+        Assert.True(router.TryRoute("OK"));
+        Assert.IsType<NfcResponse.Ok>(await next);
+    }
+
+    [Fact]
+    public async Task SendAsync_absorbs_a_late_reply_to_a_timed_out_write_so_the_retry_gets_its_own_reply()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
+            async () => await channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        var retry = channel.ReadTagIdAsync();
+        await WaitForPendingCommand(router);
+
+        // The controller's late OK now arrives, answering the timed-out WRITE, not the retry.
+        Assert.True(router.TryRoute("OK"));
+        Assert.False(retry.IsCompleted);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        var tagId = Assert.IsType<NfcResponse.TagId>(await retry);
+        Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
     private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
     {
         for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
@@ -95,5 +135,15 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         }
 
         Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
+    }
+
+    private sealed class ThrowingTextWriter : TextWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override Task WriteLineAsync(ReadOnlyMemory<char> buffer, CancellationToken cancellationToken = default)
+        {
+            throw new IOException("the serial port is gone");
+        }
     }
 }

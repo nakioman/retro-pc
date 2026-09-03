@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RetroBox.Core;
 
 namespace RetroBox.Daemon;
@@ -9,14 +10,24 @@ namespace RetroBox.Daemon;
 /// </summary>
 public sealed class RetroBoxSerialLineRouter
 {
+    public static readonly TimeSpan DefaultOrphanWindow = TimeSpan.FromSeconds(5);
+
     private readonly Lock gate = new();
+    private readonly TimeSpan orphanWindow;
     private TaskCompletionSource<NfcResponse>? pending;
 
     // The wire protocol carries no request ids, so a reply that arrives after its command was
     // cancelled (e.g. by a timeout) cannot be told apart from a reply to whatever command is
-    // pending next. Counting orphans lets a late reply be absorbed instead of being handed to
-    // the wrong caller as that caller's own result.
-    private int orphanedReplies;
+    // pending next. A single expiring slot lets one late reply be absorbed instead of being
+    // handed to the wrong caller as that caller's own result — but only briefly: if nothing
+    // ever arrives, the slot must close on its own, or a genuinely unrelated later reply would
+    // be swallowed forever.
+    private long orphanDeadline;
+
+    public RetroBoxSerialLineRouter(TimeSpan? orphanWindow = null)
+    {
+        this.orphanWindow = orphanWindow ?? DefaultOrphanWindow;
+    }
 
     public bool HasPendingCommand
     {
@@ -51,19 +62,29 @@ public sealed class RetroBoxSerialLineRouter
             return false;
         }
 
-        TaskCompletionSource<NfcResponse>? completion;
+        TaskCompletionSource<NfcResponse> completion;
 
         lock (gate)
         {
-            if (orphanedReplies > 0)
+            // ERROR is the one reply the firmware also emits unprompted (e.g. answering a
+            // background STATUS poll with the drive empty), so it can never be treated as an
+            // orphan or swallowed: with no command waiting, it is an event.
+            var isUnambiguousReply = response is not NfcResponse.Error;
+
+            if (orphanDeadline != 0 && isUnambiguousReply)
             {
-                orphanedReplies--;
-                return true;
+                var expired = Stopwatch.GetTimestamp() >= orphanDeadline;
+                orphanDeadline = 0;
+
+                if (!expired)
+                {
+                    return true;
+                }
             }
 
             if (pending is null)
             {
-                return true;
+                return isUnambiguousReply;
             }
 
             completion = pending;
@@ -74,7 +95,7 @@ public sealed class RetroBoxSerialLineRouter
         return true;
     }
 
-    public void CancelCommand(Exception error)
+    public void CancelCommand(Exception error, bool expectLateReply = true)
     {
         TaskCompletionSource<NfcResponse>? completion;
 
@@ -83,9 +104,10 @@ public sealed class RetroBoxSerialLineRouter
             completion = pending;
             pending = null;
 
-            if (completion is not null)
+            if (completion is not null && expectLateReply)
             {
-                orphanedReplies++;
+                orphanDeadline = Stopwatch.GetTimestamp()
+                    + (long)(orphanWindow.TotalSeconds * Stopwatch.Frequency);
             }
         }
 
