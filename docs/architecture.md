@@ -91,8 +91,8 @@ accepts injected runners/UIs so tests can drive commands in-process.
 ### firmware/retrofloppy-esp8266
 
 ESP8266 (NodeMCU v2) Arduino firmware. Talks to a PN532 over I2C (address
-`0x24`), reads the disk-present switch on `D6` (Bounce2 debounce), and reports
-events over 115200 baud serial. NFC tags carry raw `<id>,<mode>` bytes in pages
+`0x24`), detects disk presence by polling the PN532 for the tag itself (no
+mechanical switch), and reports events over 115200 baud serial. NFC tags carry raw `<id>,<mode>` bytes in pages
 4–11 (32 bytes max), deliberately not NDEF. Vendored PN532 libraries are pinned
 in `sketch.yaml`. See the
 [firmware README](../firmware/retrofloppy-esp8266/README.md) and
