@@ -70,7 +70,8 @@ YamlDotNet.
 - `RetroBoxFloppyImporter` — moves scratch images into the catalog and updates
   `floppies.yaml`.
 - `RetroBoxArduinoSerialProtocol` — parses `INSERT`/`EJECT`/`ERROR`/`INIT` and
-  builds host commands (`WRITE`, `PING`, `STATUS`).
+  builds host commands (`WRITE`, `TAGID`, `PING`, `STATUS`); parses controller
+  replies (`OK`, `PONG`, `Tag ID: <uid>`, `ERROR <msg>`).
 - `RetroBoxNfcClient` / `RetroBoxNfcWriter` — `PING`/`PONG` connectivity and
   tag writing for a cataloged floppy.
 - `RetroBoxVmSelection` — list VMs, get/set the default VM.
@@ -86,7 +87,14 @@ accepts injected runners/UIs so tests can drive commands in-process.
 `RetroBoxDaemon` runs the event loop: it opens the serial device
 (`RetroBoxSerialDeviceRunner`), watches the floppy controller, probes for the
 86Box socket (`RetroBoxVmSocketProbe`), and applies floppy events through
-`RetroBoxFloppyEventHandler`.
+`RetroBoxFloppyEventHandler`. Since a command reply and a floppy event can
+arrive on the same serial line in either order, `RetroBoxSerialLineRouter`
+splits the two apart; `RetroBoxSerialNfcCommandChannel` sits on top of it to
+serialize controller commands (`WRITE`/`TAGID`/`STATUS`) behind a timeout, so
+every caller on the one physical line — today the socket-poll loop, later a
+web layer writing tags — shares one gate instead of racing each other on the
+wire. `RetroBoxDriveStateTracker` tracks what is currently in the drive from
+the events it observes.
 
 ### firmware/retrofloppy-esp8266
 
