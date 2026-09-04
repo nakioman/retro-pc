@@ -66,20 +66,27 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     // The watcher's death is sticky and independent of the catalog snapshot: once inotify stops
     // delivering events, a later successful reload (the panel's own writes still call Reload
     // directly) must not make the outage look resolved when nothing fixed the watcher itself.
-    // Composed here, in the one place callers take both halves atomically, rather than in a
-    // separate LastError so a snapshot read can never see the error half update without the
-    // catalog half — there is nothing to tear between them, since both come from one field read.
-    public RetroBoxCatalogSnapshot Snapshot => snapshot with { Error = ComposedError };
+    // Both volatile fields are read into locals exactly once here, and the pair is composed from
+    // those locals: reading either field twice (once for the catalog, again for the error) would
+    // let a Reload() landing in between pair one snapshot's catalog with another's error.
+    public RetroBoxCatalogSnapshot Snapshot
+    {
+        get
+        {
+            var current = snapshot;
+            var watcherFailure = watcherFailureMessage;
+            return current with { Error = Compose(watcherFailure, current.Error) };
+        }
+    }
 
     public RetroBoxCatalogData Current => Snapshot.Catalog;
 
     public string? LastError => Snapshot.Error;
 
-    private string? ComposedError => watcherFailureMessage is null
-        ? snapshot.Error
-        : snapshot.Error is null
-            ? watcherFailureMessage
-            : $"{watcherFailureMessage} {snapshot.Error}";
+    private static string? Compose(string? watcherFailure, string? snapshotError) =>
+        watcherFailure is null ? snapshotError
+        : snapshotError is null ? watcherFailure
+        : $"{watcherFailure} {snapshotError}";
 
     public bool TryReload() => Reload();
 
