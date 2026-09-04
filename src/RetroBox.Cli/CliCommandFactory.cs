@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using RetroBox.Core;
@@ -70,19 +71,16 @@ public static class CliCommandFactory
         {
             Description = "Print the 86Box socket request each event would send instead of connecting.",
         };
-        var webPortOption = new Option<int>("--web-port")
+        // Deliberately not Option<int>: the value reaches ExecStart from a hand-edited
+        // /etc/retrobox/daemon.env, so an empty WEB_PORT= or a typo must not become a usage
+        // error. Exit 1 under Restart=on-failure is an indefinite crash loop with the hardware
+        // loop down over a panel setting, so the raw token is parsed in the action instead and
+        // an unusable value degrades to "no panel", like every other web-panel failure.
+        var webPortOption = new Option<string?>("--web-port")
         {
-            Description = "Port for the web panel. 0 disables it.",
-            DefaultValueFactory = _ => RetroBoxWebOptions.DefaultPort,
+            Description = "Port for the web panel. 0 disables it; an unusable value disables it with a warning.",
+            DefaultValueFactory = _ => RetroBoxWebOptions.DefaultPort.ToString(CultureInfo.InvariantCulture),
         };
-        webPortOption.Validators.Add(result =>
-        {
-            var value = result.GetValueOrDefault<int>();
-            if (value is < 0 or > 65535)
-            {
-                result.AddError($"--web-port must be between 0 and 65535, was {value}.");
-            }
-        });
 
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
@@ -102,7 +100,7 @@ public static class CliCommandFactory
                 parseResult.GetValue(serialPortOption),
                 parseResult.GetValue(serialBaudOption),
                 parseResult.GetValue(echoOption),
-                parseResult.GetValue(webPortOption));
+                ResolveWebPort(parseResult.GetValue(webPortOption)));
 
             if (daemonRunner is not null)
             {
@@ -228,6 +226,20 @@ public static class CliCommandFactory
         });
 
         return command;
+    }
+
+    // Internal and tested directly: every unusable spelling of WEB_PORT has to reach the same
+    // answer, and driving each one through a live daemon invocation would say nothing more.
+    internal static int ResolveWebPort(string? value)
+    {
+        if (int.TryParse(value, CultureInfo.InvariantCulture, out var port) && port is >= 0 and <= 65535)
+        {
+            return port;
+        }
+
+        Console.Error.WriteLine(
+            $"--web-port must be between 0 and 65535, was '{value}'; continuing without the web panel.");
+        return 0;
     }
 
     private static async Task<RetroBoxSerialDevice?> TryOpenSerialDevice(RetroBoxSerialDeviceOptions? options)

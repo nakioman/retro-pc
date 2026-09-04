@@ -159,18 +159,94 @@ public sealed class CliHelpSmokeTests
         Assert.Contains("--web-port", output.ToString(), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Daemon_rejects_a_web_port_outside_the_valid_range()
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    [InlineData("65536")]
+    [InlineData(null)]
+    public void ResolveWebPort_disables_the_panel_for_an_unusable_value(string? value)
     {
-        var error = new StringWriter();
-        var command = CliCommandFactory.CreateRootCommand();
-        var parseResult = command.Parse(["daemon", "--web-port", "-1"]);
-        parseResult.InvocationConfiguration.Error = error;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
 
-        var exitCode = parseResult.Invoke();
+        try
+        {
+            Console.SetError(stderr);
 
-        Assert.NotEqual(0, exitCode);
-        Assert.Contains("--web-port", error.ToString(), StringComparison.Ordinal);
+            Assert.Equal(0, CliCommandFactory.ResolveWebPort(value));
+            Assert.Contains("--web-port", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("8080", 8080)]
+    [InlineData("65535", 65535)]
+    public void ResolveWebPort_keeps_a_usable_value_and_says_nothing(string value, int expected)
+    {
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        try
+        {
+            Console.SetError(stderr);
+
+            Assert.Equal(expected, CliCommandFactory.ResolveWebPort(value));
+            Assert.Equal(string.Empty, stderr.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    public void Daemon_degrades_to_no_panel_when_the_web_port_is_unusable(string webPort)
+    {
+        // An unusable --web-port used to be a usage error (and, empty, an unhandled exception
+        // from the option's own validator). Either way exit 1 hands the unit to
+        // Restart=on-failure and crash-loops the appliance over a panel setting, with the
+        // hardware loop down; WEB_PORT= in a hand-edited daemon.env is enough to trigger it.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-badport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        try
+        {
+            Console.SetIn(TextReader.Null);
+            Console.SetError(stderr);
+
+            var command = CliCommandFactory.CreateRootCommand();
+            var exitCode = command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+                "--web-port",
+                webPort,
+            ]).Invoke();
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("continuing without the web panel", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
