@@ -539,6 +539,103 @@ public sealed class CliHelpSmokeTests
         }
     }
 
+    [Fact]
+    public async Task Daemon_keeps_retrying_when_the_serial_device_fails_with_a_raw_IOException()
+    {
+        // SerialDeviceWriter does not wrap failures the way SerialDeviceReader does, so a write to
+        // a vanished port (the socket watcher's STATUS poll, in particular) surfaces a raw
+        // IOException. That must be caught alongside RetroBoxSerialDeviceException, or an unplug
+        // first observed by a write instead of a read still takes the whole daemon down.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-ioexception", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                attempts++;
+                TextReader reader = attempts == 1 ? new ThrowingAfterFirstLineReader() : TextReader.Null;
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), reader, TextWriter.Null));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-ioexception-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller went away", invocation);
+
+            Assert.False(invocation.IsCompleted, $"The daemon exited on a raw IOException instead of retrying: {stderr}");
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_reports_the_connected_diagnostic_only_once_per_connection()
+    {
+        // A device that opens fine but reads EOF at once (a half-dead adapter, a stale node during
+        // udev churn) reopens on every retry interval; the "connected" diagnostic must not reprint
+        // on each of those reopens, only on a genuine transition into the connected state.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-eofloop", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref attempts);
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), TextReader.Null, TextWriter.Null));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-eof-loop-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller connected", invocation);
+            await WaitForCondition(() => Volatile.Read(ref attempts) >= 2, invocation);
+
+            Assert.Equal(1, CountOccurrences(stderr.ToString(), "Floppy controller connected."));
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+        }
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         return (haystack.Length - haystack.Replace(needle, string.Empty, StringComparison.Ordinal).Length) / needle.Length;
@@ -618,6 +715,26 @@ public sealed class CliHelpSmokeTests
         Assert.Fail($"The daemon never printed '{fragment}' within {CatalogPollBudget}. stderr so far: {stderr}");
     }
 
+    // Bounded poll for an arbitrary condition, for assertions WaitForStderr's fixed-fragment
+    // match cannot express (waiting for a call count, for instance).
+    private static async Task WaitForCondition(Func<bool> predicate, Task<int> invokeTask)
+    {
+        var deadline = DateTime.UtcNow + CatalogPollBudget;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            Assert.False(invokeTask.IsCompleted, "The daemon exited before the condition was met.");
+            await Task.Delay(20);
+        }
+
+        Assert.Fail($"The condition was not met within {CatalogPollBudget}.");
+    }
+
     private static async Task<T> AwaitWithinBound<T>(Task<T> task)
     {
         var completed = await Task.WhenAny(task, Task.Delay(ExitBudget));
@@ -661,6 +778,23 @@ public sealed class CliHelpSmokeTests
             {
                 return null;
             }
+        }
+    }
+
+    /// <summary>Serves one line, then simulates a vanished port with a raw (unwrapped) IOException.</summary>
+    private sealed class ThrowingAfterFirstLineReader : TextReader
+    {
+        private bool served;
+
+        public override ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            if (!served)
+            {
+                served = true;
+                return ValueTask.FromResult<string?>("INIT 1.0");
+            }
+
+            throw new IOException("Floppy controller serial device vanished.");
         }
     }
 }

@@ -234,7 +234,13 @@ public static class CliCommandFactory
             return exitCode;
         }
 
+        // The reader wraps every failure into RetroBoxSerialDeviceException, but the writer does
+        // not: a write to a vanished port (the socket watcher's STATUS poll, in particular)
+        // surfaces a raw IOException, and so can Dispose() on a device whose port disappeared
+        // underneath it. Both must be caught here, or an unplug first observed by a write instead
+        // of a read still takes the whole daemon down - exactly what this loop exists to prevent.
         var reportedUnavailable = false;
+        var reportedConnected = false;
         var lastExitCode = 0;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -247,6 +253,8 @@ public static class CliCommandFactory
             }
             catch (RetroBoxSerialDeviceException ex)
             {
+                reportedConnected = false;
+
                 // Reported once per outage, not once per attempt: the installer writes a
                 // --serial-port even with no controller detected, so an appliance that never had
                 // one would otherwise fill the journal.
@@ -266,9 +274,17 @@ public static class CliCommandFactory
             }
 
             reportedUnavailable = false;
-            Console.Error.WriteLine("Floppy controller connected.");
 
-            using (device)
+            // Reported once per connection, not once per iteration: a device that opens fine but
+            // reads EOF immediately (a half-dead adapter, a stale node during udev churn) would
+            // otherwise have this line printed again every retry interval, forever.
+            if (!reportedConnected)
+            {
+                reportedConnected = true;
+                Console.Error.WriteLine("Floppy controller connected.");
+            }
+
+            try
             {
                 try
                 {
@@ -280,9 +296,22 @@ public static class CliCommandFactory
                         request.Echo,
                         device.Writer).RunAsync(cancellationToken);
                 }
-                catch (RetroBoxSerialDeviceException ex)
+                catch (Exception ex) when (ex is RetroBoxSerialDeviceException or IOException)
                 {
+                    reportedConnected = false;
                     Console.Error.WriteLine($"Floppy controller went away: {ex.Message}");
+                }
+            }
+            finally
+            {
+                try
+                {
+                    device.Dispose();
+                }
+                catch (Exception ex) when (ex is RetroBoxSerialDeviceException or IOException)
+                {
+                    reportedConnected = false;
+                    Console.Error.WriteLine($"Floppy controller went away while closing: {ex.Message}");
                 }
             }
 
