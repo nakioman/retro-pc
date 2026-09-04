@@ -76,6 +76,14 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
 
         try
         {
+            // Deliberately inside the gate, not before it. A window is armed by the outgoing
+            // gate holder's own timeout or follow-up, which happens while that holder still
+            // holds the gate — so a caller that checked the slot before queuing for the gate
+            // could still have a window armed underneath it by the time it gets in. Waiting in
+            // here means the window, if any, is already fully armed before this ever looks at
+            // it. Now that the window closes on the follow-up's own event answer (not just its
+            // full timeout), this wait is bounded by a genuine ERROR/timeout case, not a routine
+            // per-command stall — so it costs SendStatusAsync nothing on the ordinary happy path.
             await router.WaitForClearSlotAsync(cancellationToken);
 
             var reply = router.BeginCommand();
