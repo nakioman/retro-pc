@@ -153,6 +153,23 @@ public static class RetroBoxNfcEndpoints
 
         catalogSource.TryReload();
 
+        // Only now: the firmware answers a WRITE and then stays quiet, so it has to be asked to
+        // re-announce the seated tag, and that answer comes back as an INSERT the daemon handles
+        // against the catalog as it stands at that instant. Sent from inside WriteTagAsync it
+        // raced the YAML save and this reload -- the mount guard would see Nfc: false and refuse
+        // the floppy just assigned, logging "has no assigned tag" while the panel showed a green
+        // badge, with a manual eject and reinsert as the only recovery.
+        try
+        {
+            await nfcChannel.SendStatusAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is RetroBoxNfcCommandUnavailableException or IOException
+            or InvalidOperationException or UnauthorizedAccessException)
+        {
+            // The tag is written and the catalog committed, so this is not a failed request: all
+            // that is lost is the automatic mount, which the next insert performs anyway.
+        }
+
         return Results.Json(
             new RetroBoxNfcWriteResult("written", null, null, tagUid),
             RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult);

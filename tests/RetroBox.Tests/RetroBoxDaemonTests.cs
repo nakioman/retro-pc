@@ -436,6 +436,11 @@ public sealed class RetroBoxDaemonTests
         input.WriteLine("OK");
 
         Assert.IsType<NfcResponse.Ok>(await write);
+
+        // The re-announce is the caller's job now, not WriteTagAsync's: the INSERT it produces is
+        // handled against the catalog as it stands at that moment, so it has to follow the
+        // caller's own commit rather than race it.
+        await channel.SendStatusAsync();
         Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
 
         input.WriteLine("INSERT disk1,ro");

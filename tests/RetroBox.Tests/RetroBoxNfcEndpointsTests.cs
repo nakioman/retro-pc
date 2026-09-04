@@ -49,7 +49,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         using var response = await PostAsync(context, "disk1", confirm: false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
 
         var catalog = await context.Client.GetStringAsync("/api/catalog");
         Assert.Contains("\"id\":\"disk1\"", catalog, StringComparison.Ordinal);
@@ -120,7 +120,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         using var response = await PostAsync(context, "disk1", confirm: false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         using var response = await PostAsync(context, "disk1", confirm: false, tagUid: "04A13BFE");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
     }
 
     [Theory]
@@ -369,6 +369,51 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         var floppy = new RetroBoxConfigStore(root).Load().Floppies["disk1"];
         Assert.True(floppy.Nfc);
         Assert.Equal("04A13BFE", floppy.NfcUid);
+    }
+
+    [Fact]
+    public async Task The_re_announce_goes_out_only_after_the_catalog_commit()
+    {
+        // The firmware's STATUS answer comes back as an INSERT, which the daemon's read loop
+        // handles against whatever the catalog says at that instant. Sent from inside
+        // WriteTagAsync it raced the YAML save and the reload: the mount guard would see
+        // Nfc: false and refuse the very floppy just assigned, logging "has no assigned tag"
+        // while the panel showed a green badge. Recovery was a manual eject and reinsert.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        bool? committedOnDisk = null;
+        bool? visibleToTheDaemon = null;
+        channel.OnSendStatus = () =>
+        {
+            committedOnDisk = new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc;
+            visibleToTheDaemon = context.Source.Snapshot.Catalog.Floppies["disk1"].Nfc;
+        };
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["TAGID", "WRITE:disk1:ro", "STATUS"], channel.Calls);
+        Assert.True(committedOnDisk, "The re-announce went out before the catalog was saved.");
+        Assert.True(visibleToTheDaemon, "The re-announce went out before the daemon could see the assignment.");
+    }
+
+    [Fact]
+    public async Task No_re_announce_goes_out_when_the_commit_is_refused()
+    {
+        var channel = new StubNfcCommandChannel
+        {
+            TagIdResponse = new NfcResponse.TagId("04A13BFE"),
+            BeforeWriteResponse = () =>
+                new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root))
+                    .UpdateLabelAndMode("disk1", null, RetroBoxFloppyCatalogRules.ReadWriteMode),
+        };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain("STATUS", channel.Calls);
     }
 
     private static Task<HttpResponseMessage> PostAsync(

@@ -135,51 +135,18 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     }
 
     [Fact]
-    public async Task A_follow_up_answer_is_not_handed_to_the_next_command()
+    public async Task A_status_poll_s_designed_insert_event_closes_the_hold_immediately()
     {
         var router = new RetroBoxSerialLineRouter();
         var serial = new StringWriter();
         var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5));
 
-        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
-        await WaitForPendingCommand(router);
-        Assert.True(router.TryRoute("OK"));
-        await write;
+        await channel.SendStatusAsync();
 
-        var next = channel.ReadTagIdAsync();
-
-        // The next command must not even be on the wire yet: the quarantine holds it until the
-        // follow-up's own answer has been accounted for. (These two are the ones that actually
-        // fail if the quarantine wait is removed.)
-        Assert.False(router.HasPendingCommand);
-        Assert.DoesNotContain("TAGID", serial.ToString(), StringComparison.Ordinal);
-
-        // The follow-up STATUS's own answer is still in flight; it must not complete the next
-        // command.
-        Assert.True(router.TryRoute("ERROR no-tag-detected"));
-        Assert.False(next.IsCompleted);
-
-        await WaitForPendingCommand(router);
-        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
-        Assert.IsType<NfcResponse.TagId>(await next);
-    }
-
-    [Fact]
-    public async Task A_follow_up_s_designed_insert_event_closes_the_hold_immediately()
-    {
-        var router = new RetroBoxSerialLineRouter();
-        var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5));
-
-        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
-        await WaitForPendingCommand(router);
-        Assert.True(router.TryRoute("OK"));
-        await write;
-
-        // The ordinary happy path: the follow-up STATUS's answer arrives as the INSERT event it
-        // was designed to produce, not as ERROR. That must close the hold immediately rather than
-        // riding out the whole window — otherwise every command right after a write stalls for
-        // the window's full duration.
+        // The ordinary happy path: STATUS's answer arrives as the INSERT event it was designed to
+        // produce, not as ERROR. That must close the hold immediately rather than riding out the
+        // whole window — otherwise every command right after a re-announce stalls for the
+        // window's full duration.
         Assert.False(router.TryRoute("INSERT disk1,ro"));
 
         var next = channel.ReadTagIdAsync();
@@ -192,8 +159,11 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     }
 
     [Fact]
-    public async Task WriteTagAsync_asks_for_status_after_a_successful_write()
+    public async Task WriteTagAsync_leaves_the_re_announce_to_its_caller()
     {
+        // The re-announce arrives as an INSERT the daemon handles against the catalog as it
+        // stands at that instant, so it has to follow the caller's commit. Sent from in here it
+        // raced that commit, and the mount guard refused the floppy just assigned.
         var router = new RetroBoxSerialLineRouter();
         var serial = new StringWriter();
         var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
@@ -201,21 +171,6 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
         await WaitForPendingCommand(router);
         Assert.True(router.TryRoute("OK"));
-        await write;
-
-        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task WriteTagAsync_does_not_ask_for_status_after_a_failed_write()
-    {
-        var router = new RetroBoxSerialLineRouter();
-        var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
-
-        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
-        await WaitForPendingCommand(router);
-        Assert.True(router.TryRoute("ERROR not written"));
         await write;
 
         Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);

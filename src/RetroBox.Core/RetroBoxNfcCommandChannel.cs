@@ -1,7 +1,7 @@
 namespace RetroBox.Core;
 
 /// <summary>Sends commands to the floppy controller and awaits its reply.</summary>
-public interface IRetroBoxNfcCommandChannel
+public interface IRetroBoxNfcCommandChannel : IRetroBoxStatusRequester
 {
     Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default);
 

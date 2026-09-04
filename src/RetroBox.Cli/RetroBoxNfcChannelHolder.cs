@@ -19,6 +19,9 @@ internal sealed class RetroBoxNfcChannelHolder : IRetroBoxNfcCommandChannel
     public Task<NfcResponse> WriteTagAsync(string id, string mode, CancellationToken cancellationToken = default) =>
         Require().WriteTagAsync(id, mode, cancellationToken);
 
+    public Task SendStatusAsync(CancellationToken cancellationToken = default) =>
+        Require().SendStatusAsync(cancellationToken);
+
     private IRetroBoxNfcCommandChannel Require() =>
         current ?? throw new RetroBoxNfcCommandUnavailableException("No floppy controller is connected.");
 }

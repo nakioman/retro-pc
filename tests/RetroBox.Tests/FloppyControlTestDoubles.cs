@@ -63,6 +63,24 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
         BeforeWriteResponse?.Invoke();
         return Task.FromResult(WriteResponse);
     }
+
+    /// <summary>
+    /// Runs when SendStatusAsync is called, letting a test observe the world exactly as the
+    /// firmware's re-announce would find it.
+    /// </summary>
+    public Action? OnSendStatus { get; set; }
+
+    public Task SendStatusAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add("STATUS");
+        OnSendStatus?.Invoke();
+        return Task.CompletedTask;
+    }
 }
 
 internal static class RetroBoxSerialLineRouterTestHelpers
