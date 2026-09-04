@@ -56,11 +56,11 @@ says so in the journal, rather than stopping the daemon.
 
 A floppy uploaded through the panel is listed but cannot be inserted until an
 NFC tag is written for it: uploads always land untagged, and the daemon refuses
-to mount an untagged floppy. The panel shows those with a "No NFC" badge and
-cannot write tags yet. Writing one needs the serial port the daemon holds
-exclusively, so it means stopping `retrobox-daemon.service`, running
-`retrobox nfc write <id> --port <SERIAL_DEVICE>`, and starting the service
-again.
+to mount an untagged floppy. The panel shows those with a "No NFC" badge.
+Assigning a tag means putting the physical disk in the drive and using the
+panel's drive section: it reads whatever tag is currently seated, offers the
+catalog to assign it to, and writes it over the same serial connection the
+daemon already holds — no stopping the service, no console command.
 
 ## Accounts and permissions
 

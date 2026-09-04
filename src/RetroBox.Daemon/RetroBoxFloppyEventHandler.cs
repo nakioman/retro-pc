@@ -64,15 +64,9 @@ public sealed class RetroBoxFloppyEventHandler(
 
         if (!floppy.Nfc)
         {
-            // Writing a tag needs the serial port this daemon holds open exclusively, so the
-            // message must not tell the operator to run 'retrobox nfc write' as they stand: on
-            // the appliance that command cannot open the port while the service is running.
             return new RetroBoxFloppyEventHandlerResult(
                 RetroBoxFloppyEventHandlerAction.Failed,
-                $"Floppy '{insert.Id}' has no assigned tag, and this daemon holds the serial port. "
-                + "To assign one, log in over SSH, stop retrobox-daemon.service, run "
-                + $"'retrobox nfc write {insert.Id} --port <SERIAL_DEVICE from /etc/retrobox/daemon.env>', "
-                + "then start the service again.",
+                $"Floppy '{insert.Id}' has no assigned tag; put it in the drive and assign it from the web panel.",
                 null);
         }
 
