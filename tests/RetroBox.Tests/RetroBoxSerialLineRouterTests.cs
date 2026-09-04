@@ -209,14 +209,18 @@ public sealed class RetroBoxSerialLineRouterTests
     [Fact]
     public async Task WaitForClearSlotAsync_waits_out_an_orphan_window()
     {
-        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromMilliseconds(200));
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(1), timeProvider: time);
         _ = router.BeginCommand();
         router.CancelCommand(new TimeoutException("no reply"));
 
         var wait = router.WaitForClearSlotAsync(CancellationToken.None);
-
         Assert.False(wait.IsCompleted);
-        await AwaitWithinBound(wait);
+
+        // Drive the window's expiry explicitly rather than waiting it out in real time.
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        await wait;
     }
 
     [Fact]

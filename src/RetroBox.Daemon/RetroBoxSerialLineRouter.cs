@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using RetroBox.Core;
 
 namespace RetroBox.Daemon;
@@ -14,6 +13,7 @@ public sealed class RetroBoxSerialLineRouter
 
     private readonly Lock gate = new();
     private readonly TimeSpan orphanWindow;
+    private readonly TimeProvider timeProvider;
     private TaskCompletionSource<NfcResponse>? pending;
 
     // The wire protocol carries no request ids, so a reply that arrives after its command was
@@ -35,9 +35,10 @@ public sealed class RetroBoxSerialLineRouter
     // instant TryRoute absorbs the straggler instead of always riding out the full window.
     private TaskCompletionSource<bool>? orphanCleared;
 
-    public RetroBoxSerialLineRouter(TimeSpan? orphanWindow = null)
+    public RetroBoxSerialLineRouter(TimeSpan? orphanWindow = null, TimeProvider? timeProvider = null)
     {
         this.orphanWindow = orphanWindow ?? DefaultOrphanWindow;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public bool HasPendingCommand
@@ -107,7 +108,7 @@ public sealed class RetroBoxSerialLineRouter
 
             if (orphanDeadline != 0 && (isUnambiguousReply || orphanAbsorbsAnyReply))
             {
-                var expired = Stopwatch.GetTimestamp() >= orphanDeadline;
+                var expired = timeProvider.GetTimestamp() >= orphanDeadline;
                 ClearOrphanWindow();
 
                 if (!expired)
@@ -180,21 +181,40 @@ public sealed class RetroBoxSerialLineRouter
                     return;
                 }
 
-                var ticks = orphanDeadline - Stopwatch.GetTimestamp();
+                var ticks = orphanDeadline - timeProvider.GetTimestamp();
                 if (ticks <= 0)
                 {
                     ClearOrphanWindow();
                     return;
                 }
 
-                remaining = TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
-                clearedSignal = orphanCleared?.Task ?? Task.CompletedTask;
+                remaining = TimeSpan.FromSeconds((double)ticks / timeProvider.TimestampFrequency);
+
+                // orphanDeadline != 0 is supposed to be maintained in lock-step with
+                // orphanCleared: both are set together in ArmOrphanWindow and cleared together
+                // in ClearOrphanWindow. If that invariant ever broke, falling back to a
+                // completed task would degrade into a hot spin instead of failing loudly.
+                clearedSignal = orphanCleared?.Task
+                    ?? throw new InvalidOperationException(
+                        "orphanDeadline is armed but orphanCleared is null.");
             }
 
-            // Race the remaining window against TryRoute absorbing the straggler early. The
-            // loop re-checks afterwards rather than trusting either signal blindly, because the
+            // Race the remaining window against TryRoute absorbing the straggler early,
+            // cancelling the delay's own timer as soon as either one wins so a signal hit
+            // doesn't leave a real timer registered for the rest of the window. The loop
+            // re-checks afterwards rather than trusting either signal blindly, because the
             // deadline may already have moved on by the time either one completes.
-            await Task.WhenAny(Task.Delay(remaining, cancellationToken), clearedSignal);
+            using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            try
+            {
+                await Task.WhenAny(Task.Delay(remaining, timeProvider, delayCts.Token), clearedSignal);
+            }
+            finally
+            {
+                delayCts.Cancel();
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
         }
     }
@@ -202,7 +222,13 @@ public sealed class RetroBoxSerialLineRouter
     // Must be called while holding gate.
     private void ArmOrphanWindow(bool absorbsAnyReply)
     {
-        orphanDeadline = Stopwatch.GetTimestamp() + (long)(orphanWindow.TotalSeconds * Stopwatch.Frequency);
+        // A window can already be open (e.g. BeginCommand/CancelCommand run again while a
+        // follow-up hold is still armed): complete the stale signal first, or a waiter on the
+        // old one would wake late for no reason once it's overwritten below.
+        orphanCleared?.TrySetResult(true);
+
+        orphanDeadline = timeProvider.GetTimestamp()
+            + (long)(orphanWindow.TotalSeconds * timeProvider.TimestampFrequency);
         orphanAbsorbsAnyReply = absorbsAnyReply;
         orphanCleared = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
