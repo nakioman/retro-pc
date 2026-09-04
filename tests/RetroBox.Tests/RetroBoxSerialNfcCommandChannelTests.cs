@@ -55,14 +55,22 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     [Fact]
     public async Task SendAsync_times_out_when_the_controller_never_replies()
     {
-        var router = new RetroBoxSerialLineRouter();
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(timeProvider: time);
         var channel = new RetroBoxSerialNfcCommandChannel(
             router,
             new StringWriter(),
-            TimeSpan.FromMilliseconds(50));
+            TimeSpan.FromSeconds(5),
+            time);
 
-        await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
-            async () => await channel.ReadTagIdAsync());
+        var read = channel.ReadTagIdAsync();
+        await WaitForRegisteredTimer(time);
+
+        // Drive the timeout's expiry explicitly rather than waiting out a real duration and
+        // racing it.
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(() => WithFailureDeadline(read));
 
         Assert.False(router.HasPendingCommand);
     }
@@ -109,14 +117,23 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     [Fact]
     public async Task A_retry_after_a_timeout_is_not_answered_by_the_previous_command_s_late_reply()
     {
-        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30));
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30), timeProvider: time);
         var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(50));
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5), time);
 
-        await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
-            async () => await channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForRegisteredTimer(time);
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(() => WithFailureDeadline(write));
 
         var retry = channel.ReadTagIdAsync();
+
+        // Proof the retry has actually reached the quarantine rather than merely being slow off
+        // the mark: the only timer that can be registered now is WaitForClearSlotAsync's own.
+        // Without this the three assertions below could all pass vacuously.
+        await WaitForRegisteredTimer(time);
 
         // The retry must not even be on the wire yet: the quarantine holds it until the straggler
         // is accounted for. (These two are the ones that actually fail if the quarantine wait is
@@ -125,12 +142,15 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.False(router.HasPendingCommand);
         Assert.DoesNotContain("TAGID", serial.ToString(), StringComparison.Ordinal);
         Assert.False(retry.IsCompleted);
+
+        // The clock is never advanced past this point, so absorbing the straggler is the only
+        // thing that can release the retry — riding out the 30s window is not available to it.
         Assert.True(router.TryRoute("OK"));
 
         await WaitForPendingCommand(router);
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
 
-        var tagId = Assert.IsType<NfcResponse.TagId>(await retry);
+        var tagId = Assert.IsType<NfcResponse.TagId>(await WithFailureDeadline(retry));
         Assert.Equal("04A13BFE", tagId.Uid);
     }
 
@@ -249,6 +269,28 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
         await task;
     }
+
+    /// <summary>
+    /// Polls until the code under test has registered its timer against the fake clock. A timer's
+    /// due time is fixed when it is created, so advancing beforehand simply carries that due time
+    /// along with the clock and nothing ever fires.
+    /// </summary>
+    private static async Task WaitForRegisteredTimer(RetroBoxFakeTimeProvider time)
+    {
+        for (var attempt = 0; attempt < 200 && !time.HasPendingTimers; attempt++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(time.HasPendingTimers, "No timer was ever registered against the fake clock.");
+    }
+
+    // Not a timing budget: with the clock under the test's control, nothing here is expected to
+    // take any real time at all. It exists so that a regression which stops one of these tasks
+    // from ever completing fails with a readable message instead of hanging the test host.
+    private static Task WithFailureDeadline(Task task) => task.WaitAsync(TimeSpan.FromSeconds(30));
+
+    private static Task<T> WithFailureDeadline<T>(Task<T> task) => task.WaitAsync(TimeSpan.FromSeconds(30));
 
     private sealed class ThrowingTextWriter : TextWriter
     {

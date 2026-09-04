@@ -118,6 +118,23 @@ internal sealed class RetroBoxFakeTimeProvider : TimeProvider
         }
     }
 
+    /// <summary>
+    /// True once something has registered a timer against this clock. Tests poll for this before
+    /// advancing: a timer's due time is computed when it is created, so advancing before the code
+    /// under test has registered its timer simply moves the due time along with the clock and
+    /// nothing fires.
+    /// </summary>
+    public bool HasPendingTimers
+    {
+        get
+        {
+            lock (gate)
+            {
+                return pendingTimers.Count > 0;
+            }
+        }
+    }
+
     public void Advance(TimeSpan amount)
     {
         List<FakeTimer> due;

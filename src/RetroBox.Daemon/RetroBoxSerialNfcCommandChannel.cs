@@ -14,16 +14,24 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
     private readonly RetroBoxSerialLineRouter router;
     private readonly TextWriter serialOutput;
     private readonly TimeSpan timeout;
+    private readonly TimeProvider timeProvider;
     private readonly SemaphoreSlim gate = new(1, 1);
 
+    /// <param name="timeProvider">
+    /// Drives the reply timeout. Injectable for the same reason RetroBoxSerialLineRouter takes
+    /// one: a test that has to reach the timeout must advance a clock, not wait out a real
+    /// duration and race it.
+    /// </param>
     public RetroBoxSerialNfcCommandChannel(
         RetroBoxSerialLineRouter router,
         TextWriter serialOutput,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        TimeProvider? timeProvider = null)
     {
         this.router = router;
         this.serialOutput = serialOutput;
         this.timeout = timeout ?? DefaultTimeout;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
@@ -103,7 +111,7 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             NfcResponse response;
             try
             {
-                response = await reply.WaitAsync(timeout, cancellationToken);
+                response = await reply.WaitAsync(timeout, timeProvider, cancellationToken);
             }
             catch (TimeoutException)
             {
