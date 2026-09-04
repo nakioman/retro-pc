@@ -47,9 +47,7 @@ internal sealed class MutableCatalogSource(RetroBoxCatalogData initial) : IRetro
 {
     private RetroBoxCatalogData current = initial;
 
-    public RetroBoxCatalogData Current => current;
-
-    public string? LastError => null;
+    public RetroBoxCatalogSnapshot Snapshot => new(current, null);
 
     public void Publish(RetroBoxCatalogData catalog) => current = catalog;
 }

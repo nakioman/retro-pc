@@ -14,7 +14,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private readonly TimeSpan debounce;
     private readonly FileSystemWatcher? watcher;
     private readonly Lock gate = new();
-    private volatile CatalogSnapshot snapshot;
+    private volatile RetroBoxCatalogSnapshot snapshot;
     private volatile string? watcherFailureMessage;
     private CancellationTokenSource? pendingReload;
     private bool disposed;
@@ -28,7 +28,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         string? initialError = null)
     {
         store = new RetroBoxConfigStore(rootPath);
-        snapshot = new CatalogSnapshot(initial, initialError);
+        snapshot = new RetroBoxCatalogSnapshot(initial, initialError);
         this.onReloadFailed = onReloadFailed;
         this.debounce = debounce ?? DefaultDebounce;
 
@@ -63,12 +63,19 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         watcher.EnableRaisingEvents = true;
     }
 
-    public RetroBoxCatalogData Current => snapshot.Catalog;
-
     // The watcher's death is sticky and independent of the catalog snapshot: once inotify stops
     // delivering events, a later successful reload (the panel's own writes still call Reload
     // directly) must not make the outage look resolved when nothing fixed the watcher itself.
-    public string? LastError => watcherFailureMessage is null
+    // Composed here, in the one place callers take both halves atomically, rather than in a
+    // separate LastError so a snapshot read can never see the error half update without the
+    // catalog half — there is nothing to tear between them, since both come from one field read.
+    public RetroBoxCatalogSnapshot Snapshot => snapshot with { Error = ComposedError };
+
+    public RetroBoxCatalogData Current => Snapshot.Catalog;
+
+    public string? LastError => Snapshot.Error;
+
+    private string? ComposedError => watcherFailureMessage is null
         ? snapshot.Error
         : snapshot.Error is null
             ? watcherFailureMessage
@@ -88,7 +95,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         {
             try
             {
-                snapshot = new CatalogSnapshot(store.Load(), null);
+                snapshot = new RetroBoxCatalogSnapshot(store.Load(), null);
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
             {
@@ -198,6 +205,4 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
                 $"Catalog watcher failed unexpectedly, catalog changes will not be picked up automatically: {ex.Message}");
         }
     }
-
-    private sealed record CatalogSnapshot(RetroBoxCatalogData Catalog, string? Error);
 }
