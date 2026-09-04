@@ -374,7 +374,8 @@ public sealed class CliHelpSmokeTests
                 Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
 
                 // Shutdown comes from cancellation, not from stdin: a daemon that is serving the
-                // panel deliberately outlives its input stream (see the serial-less test below).
+                // panel deliberately outlives its input stream (see
+                // Daemon_parks_serving_the_panel_after_stdin_eof_with_no_serial_port_configured).
                 cancellation.Cancel();
                 input.Complete();
                 var exitCode = await AwaitWithinBound(invokeTask);
@@ -384,6 +385,83 @@ public sealed class CliHelpSmokeTests
                 // fail once the daemon (and, with it, the web panel) has exited.
                 await Assert.ThrowsAsync<HttpRequestException>(
                     () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_parks_serving_the_panel_after_stdin_eof_with_no_serial_port_configured()
+    {
+        // With no --serial-port at all, SuperviseSerialDeviceAsync reads events from stdin
+        // directly instead of retrying a device open. That path used to be exercised by
+        // Daemon_keeps_serving_the_panel_when_the_serial_device_is_unavailable, but that test
+        // configures a (missing) --serial-port, which now takes the retry-loop branch instead and
+        // never touches stdin at all. Nothing was left asserting that a daemon with no controller
+        // configured, and stdin at EOF, still parks and keeps serving the panel rather than
+        // exiting - this test is that guard.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-noserialport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        const int maxAttempts = 6;
+
+        try
+        {
+            using var client = new HttpClient();
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                Console.SetIn(TextReader.Null);
+                Console.SetError(stderr);
+
+                var port = ReserveFreeTcpPort();
+                var url = $"http://127.0.0.1:{port}/api/catalog";
+                var command = CliCommandFactory.CreateRootCommand();
+                using var cancellation = new CancellationTokenSource();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    missingRoot,
+                    "--web-port",
+                    port.ToString(),
+                ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+                var poll = await WaitForCatalogResponse(client, url, stderr);
+
+                if (poll.LostPortRace)
+                {
+                    cancellation.Cancel();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
+
+                // Re-poll a few times rather than asserting once: each round trip through Kestrel
+                // takes real wall-clock time, giving the stdin-EOF fast path every opportunity to
+                // have already run and exited if parking were broken, without a bare fixed sleep.
+                for (var recheck = 0; recheck < 5; recheck++)
+                {
+                    Assert.False(invokeTask.IsCompleted, $"The daemon exited after stdin EOF instead of parking: {stderr}");
+                    Assert.Contains("\"floppies\"", await client.GetStringAsync(url), StringComparison.Ordinal);
+                }
+
+                cancellation.Cancel();
+                Assert.Equal(0, await AwaitWithinBound(invokeTask));
+                await Assert.ThrowsAsync<HttpRequestException>(() => client.GetStringAsync(url));
                 return;
             }
 
