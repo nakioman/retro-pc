@@ -1,7 +1,11 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Threading.Channels;
 using RetroBox.Cli;
 
 namespace RetroBox.Tests;
 
+[Collection(CliConsoleTestCollection.Name)]
 public sealed class CliHelpSmokeTests
 {
     public static TheoryData<string[]> HelpInvocations =>
@@ -115,10 +119,13 @@ public sealed class CliHelpSmokeTests
 
             // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
             // the command starts with an empty catalog and reports why instead of refusing to run.
+            // --web-port 0 keeps this test from binding a real port on the host.
             var exitCode = command.Parse([
                 "daemon",
                 "--config-root",
                 missingRoot,
+                "--web-port",
+                "0",
             ]).Invoke();
 
             Assert.Equal(0, exitCode);
@@ -132,6 +139,273 @@ public sealed class CliHelpSmokeTests
             if (Directory.Exists(missingRoot))
             {
                 Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Daemon_help_documents_the_web_port_option()
+    {
+        var output = new StringWriter();
+        var command = CliCommandFactory.CreateRootCommand();
+        var parseResult = command.Parse(["daemon", "--help"]);
+        parseResult.InvocationConfiguration.Output = output;
+
+        Assert.Equal(0, parseResult.Invoke());
+        Assert.Contains("--web-port", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Daemon_rejects_a_web_port_outside_the_valid_range()
+    {
+        var error = new StringWriter();
+        var command = CliCommandFactory.CreateRootCommand();
+        var parseResult = command.Parse(["daemon", "--web-port", "-1"]);
+        parseResult.InvocationConfiguration.Error = error;
+
+        var exitCode = parseResult.Invoke();
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("--web-port", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsRecoverableWebHostBindFailure_treats_an_IOException_as_recoverable()
+    {
+        // The shape Kestrel actually wraps SocketError.AddressAlreadyInUse in - the busy-port
+        // path already has a live end-to-end repro; this is the unit-level guard for the type.
+        Assert.True(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new IOException("Failed to bind to address http://0.0.0.0:8080: address already in use.")));
+    }
+
+    [Fact]
+    public void IsRecoverableWebHostBindFailure_treats_a_SocketException_as_recoverable()
+    {
+        // Every bind failure other than "address already in use" surfaces as a raw
+        // SocketException, not an IOException - EACCES on a privileged port (--web-port 80 under
+        // the appliance's unprivileged systemd user) is the concrete case that motivated this.
+        Assert.True(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new SocketException((int)SocketError.AccessDenied)));
+    }
+
+    [Fact]
+    public void IsRecoverableWebHostBindFailure_does_not_treat_an_unrelated_exception_as_recoverable()
+    {
+        // A genuine programming error must still propagate and abort the daemon loudly, not be
+        // swallowed as though it were a mere port conflict.
+        Assert.False(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new InvalidOperationException("not a bind failure")));
+    }
+
+    [Fact]
+    public void Daemon_degrades_to_no_panel_when_the_web_port_is_already_in_use()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-portbusy", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        using var occupant = new TcpListener(IPAddress.Any, 0);
+        occupant.Start();
+        var port = ((IPEndPoint)occupant.LocalEndpoint).Port;
+
+        try
+        {
+            Console.SetIn(TextReader.Null);
+            Console.SetError(stderr);
+
+            var command = CliCommandFactory.CreateRootCommand();
+
+            // The panel is the secondary function; the hardware loop is the primary one. An
+            // occupied port must degrade to "no panel", not abort the daemon.
+            var exitCode = command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+                "--web-port",
+                port.ToString(),
+            ]).Invoke();
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("continuing without it", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+            occupant.Stop();
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_serves_the_panel_on_the_configured_web_port_and_stops_it_when_the_daemon_exits()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-webport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+
+        // ReserveFreeTcpPort() has an inherent gap between reading a free port and Kestrel
+        // binding it later: another process (or TIME_WAIT from an earlier test) can take the
+        // port in between. The CLI now degrades a lost race to "no panel" instead of throwing
+        // (see TryStartWebHost), so a lost race here surfaces as WaitForCatalogResponse never
+        // seeing the panel come up, not as an exception. Retrying the whole reserve-and-start
+        // cycle on that specific signal - and only that signal - keeps the test honest: a
+        // genuine host failure still fails loudly on the first attempt.
+        const int maxAttempts = 6;
+
+        try
+        {
+            using var client = new HttpClient();
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                var input = new PipeTextReader();
+                Console.SetIn(input);
+                Console.SetError(stderr);
+
+                var port = ReserveFreeTcpPort();
+                var command = CliCommandFactory.CreateRootCommand();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    missingRoot,
+                    "--web-port",
+                    port.ToString(),
+                ]).Invoke());
+
+                var poll = await WaitForCatalogResponse(client, $"http://127.0.0.1:{port}/api/catalog", stderr);
+
+                if (poll.LostPortRace)
+                {
+                    input.Complete();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
+
+                input.Complete();
+                var exitCode = await AwaitWithinBound(invokeTask);
+                Assert.Equal(0, exitCode);
+
+                // The host must actually be gone, not merely idle: a fresh connection attempt has to
+                // fail once the daemon (and, with it, the web panel) has exited.
+                await Assert.ThrowsAsync<HttpRequestException>(
+                    () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    private static int ReserveFreeTcpPort()
+    {
+        using var probe = new TcpListener(IPAddress.Any, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return port;
+    }
+
+    private readonly record struct CatalogPollResult(bool LostPortRace, string Body);
+
+    // A generous ceiling, not a fixed sleep: a healthy run returns in milliseconds and pays
+    // nothing extra, but starting the CLI daemon action, bringing up Kestrel, and serving a
+    // request can legitimately take much longer than a couple of seconds on a contended
+    // machine (thread-pool pressure from the rest of the parallel test run, a busy host). The
+    // poll still fails - with a readable message - rather than hanging forever.
+    private static readonly TimeSpan CatalogPollBudget = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ExitBudget = TimeSpan.FromSeconds(30);
+
+    // Polls for either outcome of a --web-port attempt: the panel answering, or the CLI's own
+    // "continuing without it" diagnostic (see TryStartWebHost) showing this attempt lost the
+    // port race. Anything else after the polling budget is a genuine failure and throws, so a
+    // lost race is never confused with the host actually failing to serve.
+    private static async Task<CatalogPollResult> WaitForCatalogResponse(HttpClient client, string url, StringWriter stderr)
+    {
+        Exception? lastError = null;
+        var deadline = DateTime.UtcNow + CatalogPollBudget;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (stderr.ToString().Contains("continuing without it", StringComparison.Ordinal))
+            {
+                return new CatalogPollResult(LostPortRace: true, Body: string.Empty);
+            }
+
+            try
+            {
+                var body = await client.GetStringAsync(url);
+                return new CatalogPollResult(LostPortRace: false, Body: body);
+            }
+            catch (HttpRequestException ex)
+            {
+                lastError = ex;
+                await Task.Delay(20);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"The web panel never came up within {CatalogPollBudget}. stderr so far: {stderr}", lastError);
+    }
+
+    private static async Task<T> AwaitWithinBound<T>(Task<T> task)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(ExitBudget));
+
+        Assert.True(ReferenceEquals(completed, task), $"The awaited task did not complete within {ExitBudget}.");
+        return await task;
+    }
+
+    /// <summary>Feeds lines to Console.In on demand, like a real terminal would, without a fixed sleep.</summary>
+    private sealed class PipeTextReader : TextReader
+    {
+        private readonly Channel<string> channel =
+            Channel.CreateUnbounded<string>();
+
+        public void Complete() => channel.Writer.TryComplete();
+
+        // Console.SetIn wraps whatever is assigned in a SyncTextReader, whose ReadLineAsync goes
+        // through the synchronous ReadLine, not this type's ReadLineAsync(CancellationToken)
+        // override. Both are overridden so the reader blocks correctly however it is reached.
+        public override string? ReadLine()
+        {
+            try
+            {
+                return channel.Reader.ReadAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch (ChannelClosedException)
+            {
+                return null;
+            }
+        }
+
+        public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await channel.Reader.ReadAsync(cancellationToken);
+            }
+            catch (ChannelClosedException)
+            {
+                return null;
             }
         }
     }

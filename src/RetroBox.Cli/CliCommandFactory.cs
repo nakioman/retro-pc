@@ -1,6 +1,11 @@
 using System.CommandLine;
+using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using RetroBox.Web;
+
+[assembly: InternalsVisibleTo("RetroBox.Tests")]
 
 namespace RetroBox.Cli;
 
@@ -9,7 +14,8 @@ public sealed record RetroBoxDaemonCommandRequest(
     string? FloppyControlSocketPath,
     string? SerialPort,
     int? SerialBaud,
-    bool Echo);
+    bool Echo,
+    int WebPort);
 
 public sealed record RetroBoxBootCommandRequest(
     string ConfigRoot,
@@ -64,6 +70,19 @@ public static class CliCommandFactory
         {
             Description = "Print the 86Box socket request each event would send instead of connecting.",
         };
+        var webPortOption = new Option<int>("--web-port")
+        {
+            Description = "Port for the web panel. 0 disables it.",
+            DefaultValueFactory = _ => RetroBoxWebOptions.DefaultPort,
+        };
+        webPortOption.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<int>();
+            if (value is < 0 or > 65535)
+            {
+                result.AddError($"--web-port must be between 0 and 65535, was {value}.");
+            }
+        });
 
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
@@ -72,16 +91,18 @@ public static class CliCommandFactory
             serialPortOption,
             serialBaudOption,
             echoOption,
+            webPortOption,
         };
 
-        command.SetAction(parseResult =>
+        command.SetAction(async parseResult =>
         {
             var request = new RetroBoxDaemonCommandRequest(
                 parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath,
                 parseResult.GetValue(socketPathOption),
                 parseResult.GetValue(serialPortOption),
                 parseResult.GetValue(serialBaudOption),
-                parseResult.GetValue(echoOption));
+                parseResult.GetValue(echoOption),
+                parseResult.GetValue(webPortOption));
 
             if (daemonRunner is not null)
             {
@@ -141,6 +162,9 @@ public static class CliCommandFactory
                     cancellation.Cancel();
                 };
 
+                await using var webHost = await TryStartWebHost(
+                    request.WebPort, request.ConfigRoot, catalogSource, cancellation.Token);
+
                 var daemon = new RetroBoxDaemon(
                     catalogSource,
                     client,
@@ -149,7 +173,7 @@ public static class CliCommandFactory
                     request.Echo,
                     device?.Writer);
 
-                return daemon.RunAsync(cancellation.Token).GetAwaiter().GetResult();
+                return await daemon.RunAsync(cancellation.Token);
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException
                 or UnauthorizedAccessException or RetroBoxSerialDeviceException)
@@ -160,6 +184,39 @@ public static class CliCommandFactory
 
         return command;
     }
+
+    private static async Task<RetroBoxWebHost?> TryStartWebHost(
+        int port, string configRoot, IRetroBoxCatalogSource catalogSource, CancellationToken cancellationToken)
+    {
+        if (port == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await RetroBoxWebHost.StartAsync(
+                new RetroBoxWebOptions { Port = port, ConfigRoot = configRoot },
+                catalogSource,
+                cancellationToken);
+        }
+        catch (Exception ex) when (IsRecoverableWebHostBindFailure(ex))
+        {
+            // The panel is the secondary function; the hardware loop is the primary one. A busy
+            // or forbidden port (EACCES on a privileged port, for instance) must degrade to "no
+            // panel", exactly like an unreadable catalog degrades to "empty catalog" a few lines
+            // up. A genuine programming error is not one of these two shapes and still propagates.
+            Console.Error.WriteLine($"Web panel could not start on port {port}, continuing without it: {ex.Message}");
+            return null;
+        }
+    }
+
+    // Kestrel wraps only SocketError.AddressAlreadyInUse in an IOException; every other bind
+    // failure (EACCES on a privileged port, AddressNotAvailable, ...) surfaces as a raw
+    // SocketException. Both must be caught for a busy or forbidden --web-port to degrade to "no
+    // panel" instead of aborting the daemon; internal and tested directly since a live repro of
+    // every bind-failure shape (EACCES in particular) depends on the test process's privileges.
+    internal static bool IsRecoverableWebHostBindFailure(Exception ex) => ex is IOException or SocketException;
 
     private static Command CreatePlaceholderCommand(string name, string description)
     {

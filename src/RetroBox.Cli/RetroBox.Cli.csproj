@@ -2,8 +2,10 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.10" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\RetroBox.Core\RetroBox.Core.csproj" />
     <ProjectReference Include="..\RetroBox.Daemon\RetroBox.Daemon.csproj" />
+    <ProjectReference Include="..\RetroBox.Web\RetroBox.Web.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

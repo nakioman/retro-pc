@@ -3,6 +3,7 @@
     <Project Path="src/RetroBox.Cli/RetroBox.Cli.csproj" />
     <Project Path="src/RetroBox.Core/RetroBox.Core.csproj" />
     <Project Path="src/RetroBox.Daemon/RetroBox.Daemon.csproj" />
+    <Project Path="src/RetroBox.Web/RetroBox.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RetroBox.Tests/RetroBox.Tests.csproj" />
