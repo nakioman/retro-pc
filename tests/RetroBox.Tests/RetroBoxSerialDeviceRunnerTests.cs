@@ -6,6 +6,17 @@ namespace RetroBox.Tests;
 public sealed class RetroBoxSerialDeviceRunnerTests
 {
     [Fact]
+    public async Task OpenAsync_reports_a_missing_device_as_an_unavailable_serial_device()
+    {
+        // The controller-less appliance case, over the real SerialPort rather than a test stream:
+        // the CLI can only degrade to "no controller" if every way a missing /dev node fails
+        // arrives as RetroBoxSerialDeviceException, and the shape differs across platforms.
+        var runner = new RetroBoxSerialDeviceRunner($"/dev/retrobox-missing-{Guid.NewGuid():N}");
+
+        await Assert.ThrowsAsync<RetroBoxSerialDeviceException>(() => runner.OpenAsync());
+    }
+
+    [Fact]
     public async Task OpenReaderAsync_reads_lines_and_tolerates_crlf()
     {
         var runner = new RetroBoxSerialDeviceRunner(_ => Task.FromResult(

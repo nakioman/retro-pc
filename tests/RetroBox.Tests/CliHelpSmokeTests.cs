@@ -119,7 +119,11 @@ public sealed class CliHelpSmokeTests
 
             // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
             // the command starts with an empty catalog and reports why instead of refusing to run.
-            // --web-port 0 keeps this test from binding a real port on the host.
+            // --web-port 0 keeps this test from binding a real port on the host, and it is also
+            // why exiting at stdin EOF is the right answer here: with the panel explicitly
+            // disabled and no controller there is nothing left to serve. The case that must not
+            // exit is a panel that is actually up - see
+            // Daemon_keeps_serving_the_panel_when_the_serial_device_is_unavailable.
             var exitCode = command.Parse([
                 "daemon",
                 "--config-root",
@@ -155,18 +159,94 @@ public sealed class CliHelpSmokeTests
         Assert.Contains("--web-port", output.ToString(), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Daemon_rejects_a_web_port_outside_the_valid_range()
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    [InlineData("65536")]
+    [InlineData(null)]
+    public void ResolveWebPort_disables_the_panel_for_an_unusable_value(string? value)
     {
-        var error = new StringWriter();
-        var command = CliCommandFactory.CreateRootCommand();
-        var parseResult = command.Parse(["daemon", "--web-port", "-1"]);
-        parseResult.InvocationConfiguration.Error = error;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
 
-        var exitCode = parseResult.Invoke();
+        try
+        {
+            Console.SetError(stderr);
 
-        Assert.NotEqual(0, exitCode);
-        Assert.Contains("--web-port", error.ToString(), StringComparison.Ordinal);
+            Assert.Equal(0, CliCommandFactory.ResolveWebPort(value));
+            Assert.Contains("--web-port", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("8080", 8080)]
+    [InlineData("65535", 65535)]
+    public void ResolveWebPort_keeps_a_usable_value_and_says_nothing(string value, int expected)
+    {
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        try
+        {
+            Console.SetError(stderr);
+
+            Assert.Equal(expected, CliCommandFactory.ResolveWebPort(value));
+            Assert.Equal(string.Empty, stderr.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    public void Daemon_degrades_to_no_panel_when_the_web_port_is_unusable(string webPort)
+    {
+        // An unusable --web-port used to be a usage error (and, empty, an unhandled exception
+        // from the option's own validator). Either way exit 1 hands the unit to
+        // Restart=on-failure and crash-loops the appliance over a panel setting, with the
+        // hardware loop down; WEB_PORT= in a hand-edited daemon.env is enough to trigger it.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-badport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        try
+        {
+            Console.SetIn(TextReader.Null);
+            Console.SetError(stderr);
+
+            var command = CliCommandFactory.CreateRootCommand();
+            var exitCode = command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+                "--web-port",
+                webPort,
+            ]).Invoke();
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("continuing without the web panel", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -271,18 +351,20 @@ public sealed class CliHelpSmokeTests
 
                 var port = ReserveFreeTcpPort();
                 var command = CliCommandFactory.CreateRootCommand();
+                using var cancellation = new CancellationTokenSource();
                 var invokeTask = Task.Run(() => command.Parse([
                     "daemon",
                     "--config-root",
                     missingRoot,
                     "--web-port",
                     port.ToString(),
-                ]).Invoke());
+                ]).InvokeAsync(cancellationToken: cancellation.Token));
 
                 var poll = await WaitForCatalogResponse(client, $"http://127.0.0.1:{port}/api/catalog", stderr);
 
                 if (poll.LostPortRace)
                 {
+                    cancellation.Cancel();
                     input.Complete();
                     await AwaitWithinBound(invokeTask);
                     continue;
@@ -290,6 +372,9 @@ public sealed class CliHelpSmokeTests
 
                 Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
 
+                // Shutdown comes from cancellation, not from stdin: a daemon that is serving the
+                // panel deliberately outlives its input stream (see the serial-less test below).
+                cancellation.Cancel();
                 input.Complete();
                 var exitCode = await AwaitWithinBound(invokeTask);
                 Assert.Equal(0, exitCode);
@@ -298,6 +383,86 @@ public sealed class CliHelpSmokeTests
                 // fail once the daemon (and, with it, the web panel) has exited.
                 await Assert.ThrowsAsync<HttpRequestException>(
                     () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_keeps_serving_the_panel_when_the_serial_device_is_unavailable()
+    {
+        // The guard the unit change never had. The installer writes SERIAL_DEVICE=/dev/ttyUSB0
+        // even when it detected no controller, so on a controller-less appliance ExecStart opens
+        // a device that is not there, and systemd hands the process /dev/null on stdin. Both must
+        // degrade to "no controller, panel still up": exiting either way (non-zero from the
+        // failed open, or zero at stdin EOF) leaves the appliance with no panel at all.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-noserial", Guid.NewGuid().ToString("N"));
+        var missingDevice = $"/dev/retrobox-missing-{Guid.NewGuid():N}";
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        const int maxAttempts = 6;
+
+        try
+        {
+            using var client = new HttpClient();
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                Console.SetIn(TextReader.Null);
+                Console.SetError(stderr);
+
+                var port = ReserveFreeTcpPort();
+                var url = $"http://127.0.0.1:{port}/api/catalog";
+                var command = CliCommandFactory.CreateRootCommand();
+                using var cancellation = new CancellationTokenSource();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    missingRoot,
+                    "--serial-port",
+                    missingDevice,
+                    "--web-port",
+                    port.ToString(),
+                ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+                var poll = await WaitForCatalogResponse(client, url, stderr);
+
+                if (poll.LostPortRace)
+                {
+                    cancellation.Cancel();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
+
+                // The panel can answer before the failed open is even attempted (the host starts
+                // first, on purpose), so both diagnostics are waited for rather than read once.
+                // The second one is also the ordering the assertions below need: once it appears
+                // the read loop has already ended on stdin EOF, so a daemon that is still running
+                // and still answering is proof that EOF did not take the panel down with it.
+                await WaitForStderr(stderr, "Floppy controller is unavailable", invokeTask);
+                await WaitForStderr(stderr, "the web panel keeps serving", invokeTask);
+
+                Assert.False(invokeTask.IsCompleted, $"The daemon exited while the panel was serving: {stderr}");
+                Assert.Contains("\"floppies\"", await client.GetStringAsync(url), StringComparison.Ordinal);
+
+                cancellation.Cancel();
+                Assert.Equal(0, await AwaitWithinBound(invokeTask));
+                await Assert.ThrowsAsync<HttpRequestException>(() => client.GetStringAsync(url));
                 return;
             }
 
@@ -335,9 +500,11 @@ public sealed class CliHelpSmokeTests
     private static readonly TimeSpan ExitBudget = TimeSpan.FromSeconds(30);
 
     // Polls for either outcome of a --web-port attempt: the panel answering, or the CLI's own
-    // "continuing without it" diagnostic (see TryStartWebHost) showing this attempt lost the
-    // port race. Anything else after the polling budget is a genuine failure and throws, so a
-    // lost race is never confused with the host actually failing to serve.
+    // "Web panel could not start" diagnostic (see TryStartWebHost) showing this attempt lost the
+    // port race. That exact phrase is the sentinel, not the shared "continuing without it"
+    // suffix, which an unavailable serial device also prints. Anything else after the polling
+    // budget is a genuine failure and throws, so a lost race is never confused with the host
+    // actually failing to serve.
     private static async Task<CatalogPollResult> WaitForCatalogResponse(HttpClient client, string url, StringWriter stderr)
     {
         Exception? lastError = null;
@@ -345,7 +512,7 @@ public sealed class CliHelpSmokeTests
 
         while (DateTime.UtcNow < deadline)
         {
-            if (stderr.ToString().Contains("continuing without it", StringComparison.Ordinal))
+            if (stderr.ToString().Contains("Web panel could not start", StringComparison.Ordinal))
             {
                 return new CatalogPollResult(LostPortRace: true, Body: string.Empty);
             }
@@ -364,6 +531,27 @@ public sealed class CliHelpSmokeTests
 
         throw new InvalidOperationException(
             $"The web panel never came up within {CatalogPollBudget}. stderr so far: {stderr}", lastError);
+    }
+
+    // Bounded poll for one of the daemon's stderr diagnostics: a healthy run sees it in
+    // milliseconds, and a run that never prints it fails with the whole of stderr rather than
+    // hanging. A daemon that has already exited can never print it, so that is reported first.
+    private static async Task WaitForStderr(StringWriter stderr, string fragment, Task<int> invokeTask)
+    {
+        var deadline = DateTime.UtcNow + CatalogPollBudget;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (stderr.ToString().Contains(fragment, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Assert.False(invokeTask.IsCompleted, $"The daemon exited before printing '{fragment}': {stderr}");
+            await Task.Delay(20);
+        }
+
+        Assert.Fail($"The daemon never printed '{fragment}' within {CatalogPollBudget}. stderr so far: {stderr}");
     }
 
     private static async Task<T> AwaitWithinBound<T>(Task<T> task)

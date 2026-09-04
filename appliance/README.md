@@ -45,6 +45,23 @@ floppy-control socket is ready it asks the floppy controller for the current
 physical floppy (`STATUS` over serial) and applies it, so floppy swaps made
 while the VM was off are loaded when it powers on.
 
+## Web panel
+
+The appliance hosts an unauthenticated floppy management panel on the LAN at
+`http://<appliance>:8080`. The panel lists, uploads, renames, re-modes, and
+deletes cataloged floppies; it runs whether or not the floppy controller is
+attached. Disable it by setting `WEB_PORT=0` in `/etc/retrobox/daemon.env`; an
+unusable value there (empty, or not a port number) disables the panel too and
+says so in the journal, rather than stopping the daemon.
+
+A floppy uploaded through the panel is listed but cannot be inserted until an
+NFC tag is written for it: uploads always land untagged, and the daemon refuses
+to mount an untagged floppy. The panel shows those with a "No NFC" badge and
+cannot write tags yet. Writing one needs the serial port the daemon holds
+exclusively, so it means stopping `retrobox-daemon.service`, running
+`retrobox nfc write <id> --port <SERIAL_DEVICE>`, and starting the service
+again.
+
 ## Accounts and permissions
 
 The appliance uses a single account, `retrobox`.

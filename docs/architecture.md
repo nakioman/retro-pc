@@ -96,6 +96,34 @@ web layer writing tags — shares one gate instead of racing each other on the
 wire. `RetroBoxDriveStateTracker` tracks what is currently in the drive from
 the events it observes.
 
+### src/RetroBox.Web
+
+The daemon hosts a floppy management panel (Minimal API with embedded static
+assets, preserved in the AOT single-file binary) on the port specified by
+`WEB_PORT` (default 8080), listening on every interface. It is hosted inside the
+daemon process because the daemon owns the serial port exclusively. The panel
+runs without a floppy controller attached, allowing catalog management with no
+hardware dependencies. It is **unauthenticated and openly writable**: anyone on
+the LAN can list, upload, rename, re-mode, and delete floppies. Authentication
+and TLS are explicitly out of scope, consistent with the appliance's existing
+guest-writable Samba share and the principle that the appliance is a LAN-trusted
+device.
+
+Uploads always land untagged (`nfc: false`), and the daemon refuses to mount an
+untagged floppy, so a floppy uploaded through the panel is listed but cannot be
+inserted until a tag is written for it. The panel marks those with a "No NFC"
+badge carrying that explanation; assigning tags from the panel is a later phase,
+and until then it means stopping the daemon service (it holds the serial port)
+and running `retrobox nfc write`.
+
+The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
+the daemon: edits from the panel, from `retrobox import` on the host, or over
+SSH are picked up without restarting. A malformed `floppies.yaml` at startup no
+longer blocks the daemon — it starts with an empty catalog and reports the
+validation error, allowing the panel to fix it. A catalog reload that fails
+validation during runtime is discarded, leaving the daemon running with the
+previous valid state.
+
 ### firmware/retrofloppy-esp8266
 
 ESP8266 (NodeMCU v2) Arduino firmware. Talks to a PN532 over I2C (address
@@ -163,7 +191,8 @@ The `nfc` field tracks whether a physical NFC tag has been assigned to this flop
   (`mise run publish-linux-x64`) and installed at `/opt/retrobox/retrobox`.
 - 86Box runs as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`.
 - Systemd units under `appliance/installer/payload/units/` supervise boot and
-  the daemon; the daemon unit is gated on the serial device existing.
+  the daemon; the daemon runs whether or not the floppy controller is attached,
+  serving the LAN panel in either case.
 - Root filesystem is read-only; `/data` is the persistent, writable partition.
 
 ## Releases
