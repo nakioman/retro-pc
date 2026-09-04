@@ -163,6 +163,39 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
         Assert.Throws<RetroBoxUnknownFloppyException>(() => library.AssignTag("nope", "04A13BFE"));
     }
 
+    [Fact]
+    public void AssignTag_rejects_a_write_whose_mode_no_longer_matches_the_catalog()
+    {
+        WriteCatalog("disk1");
+        var store = new RetroBoxConfigStore(root);
+        var library = new RetroBoxFloppyLibrary(store);
+
+        // Simulates a PATCH that changed the mode while a tag write for the old mode was already
+        // in flight. UpdateLabelAndMode already cleared Nfc/NfcUid for exactly this reason: the
+        // tag's payload is "<id>,<mode>", so committing the write now would silently resurrect a
+        // tag whose payload the catalog no longer matches.
+        library.UpdateLabelAndMode("disk1", null, RetroBoxFloppyCatalogRules.ReadWriteMode);
+
+        Assert.Throws<RetroBoxCatalogException>(
+            () => library.AssignTag("disk1", "04A13BFE", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        var floppy = store.Load().Floppies["disk1"];
+        Assert.False(floppy.Nfc);
+        Assert.Null(floppy.NfcUid);
+    }
+
+    [Fact]
+    public void AssignTag_skips_the_mode_check_when_no_expected_mode_is_given()
+    {
+        WriteCatalog("disk1");
+        var store = new RetroBoxConfigStore(root);
+        var library = new RetroBoxFloppyLibrary(store);
+
+        library.AssignTag("disk1", "04A13BFE");
+
+        Assert.True(store.Load().Floppies["disk1"].Nfc);
+    }
+
     private void WriteCatalog(params string[] floppyIds)
     {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");
