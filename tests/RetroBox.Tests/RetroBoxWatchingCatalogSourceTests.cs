@@ -125,6 +125,20 @@ public sealed class RetroBoxWatchingCatalogSourceTests : IDisposable
         Assert.Equal(2, source.Current.Floppies.Count);
     }
 
+    [Fact]
+    public void A_watcher_error_is_reported_so_a_frozen_catalog_is_not_silent()
+    {
+        WriteCatalog("disk1");
+        var initial = new RetroBoxConfigStore(root).Load();
+        var failures = new List<string>();
+        using var source = new RetroBoxWatchingCatalogSource(root, initial, failures.Add, watchFileSystem: false);
+
+        source.ReportWatcherFailure(new IOException("inotify watch limit reached"));
+
+        Assert.Contains("catalog changes will no longer be noticed", Assert.Single(failures), StringComparison.Ordinal);
+        Assert.NotNull(source.LastError);
+    }
+
     private void WriteCatalog(params string[] floppyIds)
     {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");

@@ -8,6 +8,13 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 {
     public const string DefaultRootPath = "/data/retrobox";
 
+    /// <summary>
+    /// Every save copies each YAML aside first. Before the web panel these accumulated slowly;
+    /// now an upload, a delete and a rename each add three, on the appliance's only writable
+    /// partition.
+    /// </summary>
+    public const int BackupsKept = 3;
+
     private readonly string rootPath = string.IsNullOrWhiteSpace(rootPath)
             ? DefaultRootPath
             : Path.GetFullPath(rootPath);
@@ -21,6 +28,8 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
             .Build();
+
+    private static readonly string[] SavedFileNames = ["config.yaml", "vms.yaml", "floppies.yaml"];
 
     public RetroBoxCatalogData Load()
     {
@@ -43,6 +52,11 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
             ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
         ]);
+
+        foreach (var fileName in SavedFileNames)
+        {
+            PruneBackups(fileName);
+        }
     }
 
     public void UpdateDefaultVm(string vmId)
@@ -120,6 +134,26 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
     private string ResolvePath(string fileName)
     {
         return Path.Combine(rootPath, fileName);
+    }
+
+    private void PruneBackups(string fileName)
+    {
+        var stale = Directory.GetFiles(rootPath, $"{fileName}.*.bak")
+            .OrderByDescending(path => path, StringComparer.Ordinal)
+            .Skip(BackupsKept);
+
+        foreach (var path in stale)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A backup that cannot be removed is clutter, never a reason to fail a save that
+                // already succeeded.
+            }
+        }
     }
 
     private static string CreateBackupPath(string path)

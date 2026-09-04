@@ -58,6 +58,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         watcher.Created += OnCatalogChanged;
         watcher.Deleted += OnCatalogChanged;
         watcher.Renamed += OnCatalogChanged;
+        watcher.Error += OnWatcherError;
         watcher.EnableRaisingEvents = true;
     }
 
@@ -116,6 +117,27 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private void OnCatalogChanged(object sender, FileSystemEventArgs e)
     {
         ScheduleReload();
+    }
+
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        ReportWatcherFailure(e.GetException());
+    }
+
+    /// <summary>
+    /// On inotify buffer overflow or watch-limit exhaustion the watcher stops raising events and
+    /// can clear EnableRaisingEvents, which would silently return this source to the frozen
+    /// snapshot it exists to replace. Explicit reloads (the panel's own writes) still work.
+    /// </summary>
+    internal void ReportWatcherFailure(Exception error)
+    {
+        lock (gate)
+        {
+            snapshot = snapshot with { Error = error.Message };
+        }
+
+        onReloadFailed?.Invoke(
+            $"Catalog watcher failed; catalog changes will no longer be noticed automatically: {error.Message}");
     }
 
     // A single save rewrites several YAML files and raises several events; debouncing coalesces

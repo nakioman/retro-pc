@@ -176,6 +176,23 @@ public sealed class RetroBoxConfigStoreTests
     }
 
     [Fact]
+    public void Save_keeps_only_the_most_recent_backups()
+    {
+        var root = CreateValidRoot();
+        var store = new RetroBoxConfigStore(root);
+        var data = store.Load();
+
+        for (var save = 0; save < 6; save++)
+        {
+            store.Save(data);
+        }
+
+        var backups = Directory.GetFiles(root, "floppies.yaml.*.bak");
+
+        Assert.Equal(RetroBoxConfigStore.BackupsKept, backups.Length);
+    }
+
+    [Fact]
     public void Save_persists_nfc_flag_in_yaml()
     {
         var root = CreateValidRoot();
