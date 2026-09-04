@@ -9,7 +9,8 @@ public sealed class RetroBoxDaemon(
     TextWriter output,
     bool echoEvents = false,
     TextWriter? serialOutput = null,
-    IRetroBoxVmSocketProbe? socketProbe = null)
+    IRetroBoxVmSocketProbe? socketProbe = null,
+    RetroBoxSerialLineRouter? lineRouter = null)
 {
     public const string DefaultFloppyControlSocketPath = "/run/retrobox/86box-floppy.sock";
 
@@ -19,6 +20,7 @@ public sealed class RetroBoxDaemon(
     {
         var handler = new RetroBoxFloppyEventHandler(catalog, floppyControlClient);
         var probe = socketProbe ?? new RetroBoxFloppyControlSocketProbe(floppyControlClient);
+        var router = lineRouter ?? new RetroBoxSerialLineRouter();
         var exitCode = 0;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var socketWatcher = WatchSocketAsync(probe, serialOutput, DefaultSocketPollInterval, linked.Token);
@@ -28,6 +30,11 @@ public sealed class RetroBoxDaemon(
             while (await input.ReadLineAsync(linked.Token) is { } line)
             {
                 if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                if (router.TryRoute(line))
                 {
                     continue;
                 }
