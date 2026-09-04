@@ -25,7 +25,8 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
     [Fact]
     public void Delete_removes_the_entry_and_then_the_image()
     {
-        var image = WriteCatalog("disk1");
+        WriteCatalog("disk1");
+        var image = Path.Combine(root, "disk1.img");
         var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
 
         library.Delete("disk1");
@@ -133,15 +134,53 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
         Assert.Throws<RetroBoxCatalogUnavailableException>(() => library.UpdateLabelAndMode("disk1", "Renamed", null));
     }
 
-    private string WriteCatalog(string id)
+    [Fact]
+    public void AssignTag_records_the_uid_and_takes_it_from_the_previous_owner()
     {
-        var image = Path.Combine(root, $"{id}.img");
-        File.WriteAllBytes(image, new byte[16]);
+        WriteCatalog("disk1", "disk2");
+        var store = new RetroBoxConfigStore(root);
+        var library = new RetroBoxFloppyLibrary(store);
+
+        library.AssignTag("disk1", "04A13BFE");
+        library.AssignTag("disk2", "04A13BFE");
+
+        var floppies = store.Load().Floppies;
+
+        Assert.True(floppies["disk2"].Nfc);
+        Assert.Equal("04A13BFE", floppies["disk2"].NfcUid);
+
+        // The tag is physical: disk1 no longer has one, and the mount guard must refuse it.
+        Assert.False(floppies["disk1"].Nfc);
+        Assert.Null(floppies["disk1"].NfcUid);
+    }
+
+    [Fact]
+    public void AssignTag_rejects_an_unknown_floppy()
+    {
+        WriteCatalog("disk1");
+        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
+
+        Assert.Throws<RetroBoxUnknownFloppyException>(() => library.AssignTag("nope", "04A13BFE"));
+    }
+
+    private void WriteCatalog(params string[] floppyIds)
+    {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");
         File.WriteAllText(Path.Combine(root, "vms.yaml"), $"vms:\n  dos:\n    label: DOS\n    path: {root}\n");
-        File.WriteAllText(
-            Path.Combine(root, "floppies.yaml"),
-            $"floppies:\n  {id}:\n    label: {id}\n    image: {image}\n    mode: ro\n    size: 1.44M\n    nfc: true\n");
-        return image;
+
+        var lines = new List<string> { "floppies:" };
+        foreach (var id in floppyIds)
+        {
+            var image = Path.Combine(root, $"{id}.img");
+            File.WriteAllBytes(image, new byte[16]);
+            lines.Add($"  {id}:");
+            lines.Add($"    label: {id}");
+            lines.Add($"    image: {image}");
+            lines.Add("    mode: ro");
+            lines.Add("    size: 1.44M");
+            lines.Add("    nfc: true");
+        }
+
+        File.WriteAllText(Path.Combine(root, "floppies.yaml"), string.Join('\n', lines) + '\n');
     }
 }

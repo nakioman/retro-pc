@@ -76,6 +76,41 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
     }
 
     /// <summary>
+    /// Records a written tag. Any other floppy holding this UID loses it: the tag is a physical
+    /// object, so once it is reassigned the old entry genuinely has no tag, and leaving it
+    /// claiming one would let the mount guard accept a stale tag.
+    /// </summary>
+    public void AssignTag(string id, string tagUid)
+    {
+        RunExclusively(() =>
+        {
+            var data = LoadOrThrow();
+            var floppy = RequireFloppy(data, id);
+
+            var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal);
+
+            foreach (var (otherId, other) in data.Floppies)
+            {
+                if (!string.Equals(otherId, id, StringComparison.Ordinal)
+                    && string.Equals(other.NfcUid, tagUid, StringComparison.Ordinal))
+                {
+                    var released = other with { };
+                    released.Nfc = false;
+                    released.NfcUid = null;
+                    floppies[otherId] = released;
+                }
+            }
+
+            var assigned = floppy with { };
+            assigned.Nfc = true;
+            assigned.NfcUid = tagUid;
+            floppies[id] = assigned;
+
+            store.Save(data with { Floppies = floppies });
+        });
+    }
+
+    /// <summary>
     /// Runs an arbitrary catalog-mutating action under the same instance lock as Delete and
     /// UpdateLabelAndMode. The upload endpoint does its own load/resolve-id/save sequence outside
     /// this class (through RetroBoxFloppyImporter); without sharing this lock, two concurrent
