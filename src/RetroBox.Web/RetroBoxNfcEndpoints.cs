@@ -12,7 +12,6 @@ public static class RetroBoxNfcEndpoints
     // instead of serialising behind it.
     public static void Map(
         WebApplication app,
-        RetroBoxWebOptions options,
         IRetroBoxCatalogSource catalogSource,
         IRetroBoxNfcCommandChannel? nfcChannel,
         RetroBoxFloppyLibrary library)
