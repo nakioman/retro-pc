@@ -12,15 +12,12 @@ Type=simple
 User=retrobox
 Group=retrobox
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides
-# SERIAL_DEVICE, SERIAL_BAUD, and FLOPPY_CONTROL_SOCKET.
+# SERIAL_DEVICE, SERIAL_BAUD, FLOPPY_CONTROL_SOCKET, and WEB_PORT.
 EnvironmentFile=/etc/retrobox/daemon.env
-# Skip the unit (without failing) when the floppy controller is not attached:
-# with no SERIAL_DEVICE there is nothing for the daemon to watch. Exits 1-254
-# from ExecCondition= leave the unit inactive, so Restart= is not triggered.
-ExecCondition=/bin/sh -c 'test -e "$SERIAL_DEVICE"'
-# The daemon opens the serial device itself (--serial-port/--serial-baud) and
-# drives the 86Box floppy control socket.
-ExecStart=/opt/retrobox/retrobox daemon --serial-port "$SERIAL_DEVICE" --serial-baud "$SERIAL_BAUD" --floppy-control-socket "$FLOPPY_CONTROL_SOCKET"
+# The daemon runs even with no floppy controller attached, serving the web panel
+# on WEB_PORT. It opens the serial device itself (--serial-port/--serial-baud),
+# drives the 86Box floppy control socket, and hosts the LAN floppy panel.
+ExecStart=/opt/retrobox/retrobox daemon --serial-port "$SERIAL_DEVICE" --serial-baud "$SERIAL_BAUD" --floppy-control-socket "$FLOPPY_CONTROL_SOCKET" --web-port "$WEB_PORT"
 Restart=on-failure
 RestartSec=2
 

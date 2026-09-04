@@ -96,6 +96,21 @@ web layer writing tags — shares one gate instead of racing each other on the
 wire. `RetroBoxDriveStateTracker` tracks what is currently in the drive from
 the events it observes.
 
+### src/RetroBox.Web
+
+The daemon hosts a LAN-only floppy management panel (Minimal API with embedded
+static assets) on the port specified by `WEB_PORT` (default 8080), listening on
+every interface. The panel runs without a floppy controller attached, allowing
+catalog management with no hardware dependencies. It is **unauthenticated and
+LAN-trusted**: authentication is deliberately deferred to a future phase and
+network isolation is assumed.
+
+The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
+the daemon: edits from the panel, from `retrobox import` on the host, or over
+SSH are picked up without restarting. A catalog reload that fails validation is
+discarded, leaving the daemon running with the previous valid state rather than
+crashing on a malformed file.
+
 ### firmware/retrofloppy-esp8266
 
 ESP8266 (NodeMCU v2) Arduino firmware. Talks to a PN532 over I2C (address
@@ -163,7 +178,8 @@ The `nfc` field tracks whether a physical NFC tag has been assigned to this flop
   (`mise run publish-linux-x64`) and installed at `/opt/retrobox/retrobox`.
 - 86Box runs as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`.
 - Systemd units under `appliance/installer/payload/units/` supervise boot and
-  the daemon; the daemon unit is gated on the serial device existing.
+  the daemon; the daemon runs whether or not the floppy controller is attached,
+  serving the LAN panel in either case.
 - Root filesystem is read-only; `/data` is the persistent, writable partition.
 
 ## Releases

@@ -246,6 +246,8 @@ write_hardware_config() {
 # changes; prefer a stable /dev/serial/by-id/* path.
 SERIAL_DEVICE=$SERIAL_DEVICE
 SERIAL_BAUD=$SERIAL_BAUD
+# Web panel port on the LAN. Set to 0 to disable the panel.
+WEB_PORT=${RETROPC_WEB_PORT:-8080}
 FLOPPY_CONTROL_SOCKET=/run/retrobox/86box-floppy.sock
 EOF
 
