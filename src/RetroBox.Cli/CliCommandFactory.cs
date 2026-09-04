@@ -71,6 +71,14 @@ public static class CliCommandFactory
             Description = "Port for the web panel. 0 disables it.",
             DefaultValueFactory = _ => RetroBoxWebOptions.DefaultPort,
         };
+        webPortOption.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<int>();
+            if (value is < 0 or > 65535)
+            {
+                result.AddError($"--web-port must be between 0 and 65535, was {value}.");
+            }
+        });
 
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
@@ -150,13 +158,8 @@ public static class CliCommandFactory
                     cancellation.Cancel();
                 };
 
-                var webPort = request.WebPort;
-                await using var webHost = webPort == 0
-                    ? null
-                    : await RetroBoxWebHost.StartAsync(
-                        new RetroBoxWebOptions { Port = webPort, ConfigRoot = request.ConfigRoot },
-                        catalogSource,
-                        cancellation.Token);
+                await using var webHost = await TryStartWebHost(
+                    request.WebPort, request.ConfigRoot, catalogSource, cancellation.Token);
 
                 var daemon = new RetroBoxDaemon(
                     catalogSource,
@@ -176,6 +179,31 @@ public static class CliCommandFactory
         });
 
         return command;
+    }
+
+    private static async Task<RetroBoxWebHost?> TryStartWebHost(
+        int port, string configRoot, IRetroBoxCatalogSource catalogSource, CancellationToken cancellationToken)
+    {
+        if (port == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await RetroBoxWebHost.StartAsync(
+                new RetroBoxWebOptions { Port = port, ConfigRoot = configRoot },
+                catalogSource,
+                cancellationToken);
+        }
+        catch (IOException ex)
+        {
+            // The panel is the secondary function; the hardware loop is the primary one. A busy
+            // port must degrade to "no panel", exactly like an unreadable catalog degrades to
+            // "empty catalog" a few lines up.
+            Console.Error.WriteLine($"Web panel could not start on port {port}, continuing without it: {ex.Message}");
+            return null;
+        }
     }
 
     private static Command CreatePlaceholderCommand(string name, string description)

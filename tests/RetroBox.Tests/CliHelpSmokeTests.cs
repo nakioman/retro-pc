@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Threading.Channels;
 using RetroBox.Cli;
 
 namespace RetroBox.Tests;
@@ -149,5 +152,186 @@ public sealed class CliHelpSmokeTests
 
         Assert.Equal(0, parseResult.Invoke());
         Assert.Contains("--web-port", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Daemon_rejects_a_web_port_outside_the_valid_range()
+    {
+        var error = new StringWriter();
+        var command = CliCommandFactory.CreateRootCommand();
+        var parseResult = command.Parse(["daemon", "--web-port", "-1"]);
+        parseResult.InvocationConfiguration.Error = error;
+
+        var exitCode = parseResult.Invoke();
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("--web-port", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Daemon_degrades_to_no_panel_when_the_web_port_is_already_in_use()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-portbusy", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+
+        using var occupant = new TcpListener(IPAddress.Any, 0);
+        occupant.Start();
+        var port = ((IPEndPoint)occupant.LocalEndpoint).Port;
+
+        try
+        {
+            Console.SetIn(TextReader.Null);
+            Console.SetError(stderr);
+
+            var command = CliCommandFactory.CreateRootCommand();
+
+            // The panel is the secondary function; the hardware loop is the primary one. An
+            // occupied port must degrade to "no panel", not abort the daemon.
+            var exitCode = command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+                "--web-port",
+                port.ToString(),
+            ]).Invoke();
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("continuing without it", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+            occupant.Stop();
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_serves_the_panel_on_the_configured_web_port_and_stops_it_when_the_daemon_exits()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-webport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var input = new PipeTextReader();
+        var port = ReserveFreeTcpPort();
+
+        try
+        {
+            Console.SetIn(input);
+            Console.SetError(stderr);
+
+            var command = CliCommandFactory.CreateRootCommand();
+            var invokeTask = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+                "--web-port",
+                port.ToString(),
+            ]).Invoke());
+
+            using var client = new HttpClient();
+            var body = await WaitForCatalogResponse(client, $"http://127.0.0.1:{port}/api/catalog");
+            Assert.Contains("\"floppies\"", body, StringComparison.Ordinal);
+
+            input.Complete();
+            var exitCode = await AwaitWithinBound(invokeTask);
+            Assert.Equal(0, exitCode);
+
+            // The host must actually be gone, not merely idle: a fresh connection attempt has to
+            // fail once the daemon (and, with it, the web panel) has exited.
+            await Assert.ThrowsAsync<HttpRequestException>(
+                () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    private static int ReserveFreeTcpPort()
+    {
+        using var probe = new TcpListener(IPAddress.Any, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return port;
+    }
+
+    private static async Task<string> WaitForCatalogResponse(HttpClient client, string url)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            try
+            {
+                return await client.GetStringAsync(url);
+            }
+            catch (HttpRequestException ex)
+            {
+                lastError = ex;
+                await Task.Delay(20);
+            }
+        }
+
+        throw new InvalidOperationException("The web panel never came up.", lastError);
+    }
+
+    private static async Task<T> AwaitWithinBound<T>(Task<T> task)
+    {
+        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        return await task;
+    }
+
+    /// <summary>Feeds lines to Console.In on demand, like a real terminal would, without a fixed sleep.</summary>
+    private sealed class PipeTextReader : TextReader
+    {
+        private readonly Channel<string> channel =
+            Channel.CreateUnbounded<string>();
+
+        public void Complete() => channel.Writer.TryComplete();
+
+        // Console.SetIn wraps whatever is assigned in a SyncTextReader, whose ReadLineAsync goes
+        // through the synchronous ReadLine, not this type's ReadLineAsync(CancellationToken)
+        // override. Both are overridden so the reader blocks correctly however it is reached.
+        public override string? ReadLine()
+        {
+            try
+            {
+                return channel.Reader.ReadAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch (ChannelClosedException)
+            {
+                return null;
+            }
+        }
+
+        public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await channel.Reader.ReadAsync(cancellationToken);
+            }
+            catch (ChannelClosedException)
+            {
+                return null;
+            }
+        }
     }
 }

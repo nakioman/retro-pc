@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using RetroBox.Core;
 
 namespace RetroBox.Web;
@@ -26,6 +28,14 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var builder = WebApplication.CreateSlimBuilder();
+
+        // Kestrel and the generic host log to Console.Out by default, the same writer the daemon
+        // uses for its own operator output (floppy-insert lines, catalog diagnostics). Left alone
+        // every request prints four INFO lines and buries the daemon's own log; the startup and
+        // shutdown status banners are misleading too, since the CLI's own Console.CancelKeyPress
+        // handler drives shutdown, not this host's lifetime messages.
+        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        builder.Services.Configure<ConsoleLifetimeOptions>(lifetime => lifetime.SuppressStatusMessages = true);
 
         // Bound to every interface on purpose: the panel is useless if it is not reachable from
         // a phone on the LAN.
@@ -52,8 +62,14 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync();
-        await app.DisposeAsync();
+        try
+        {
+            await app.StopAsync();
+        }
+        finally
+        {
+            await app.DisposeAsync();
+        }
     }
 
     private static IResult ServeAsset(string relativePath)
