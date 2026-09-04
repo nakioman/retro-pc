@@ -193,6 +193,26 @@ public sealed class RetroBoxConfigStoreTests
     }
 
     [Fact]
+    public void Save_keeps_only_the_most_recent_backups_for_every_saved_file()
+    {
+        // The list of files pruned must be the same list actually written, not a second,
+        // hand-maintained copy of it - otherwise a file added to one and not the other silently
+        // stops being pruned.
+        var root = CreateValidRoot();
+        var store = new RetroBoxConfigStore(root);
+        var data = store.Load();
+
+        for (var save = 0; save < 6; save++)
+        {
+            store.Save(data);
+        }
+
+        Assert.Equal(RetroBoxConfigStore.BackupsKept, Directory.GetFiles(root, "config.yaml.*.bak").Length);
+        Assert.Equal(RetroBoxConfigStore.BackupsKept, Directory.GetFiles(root, "vms.yaml.*.bak").Length);
+        Assert.Equal(RetroBoxConfigStore.BackupsKept, Directory.GetFiles(root, "floppies.yaml.*.bak").Length);
+    }
+
+    [Fact]
     public void Save_persists_nfc_flag_in_yaml()
     {
         var root = CreateValidRoot();

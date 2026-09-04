@@ -29,8 +29,6 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
             .Build();
 
-    private static readonly string[] SavedFileNames = ["config.yaml", "vms.yaml", "floppies.yaml"];
-
     public RetroBoxCatalogData Load()
     {
         var config = LoadConfig();
@@ -47,13 +45,16 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         Validate(data);
         Directory.CreateDirectory(rootPath);
 
-        SaveYamlSet([
+        (string FileName, string Yaml)[] files =
+        [
             ("config.yaml", serializer.Serialize(data.Config)),
             ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
             ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
-        ]);
+        ];
 
-        foreach (var fileName in SavedFileNames)
+        SaveYamlSet(files);
+
+        foreach (var (fileName, _) in files)
         {
             PruneBackups(fileName);
         }
