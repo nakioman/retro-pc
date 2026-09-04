@@ -74,6 +74,16 @@ Fit checklist:
 
 ## Programming the tag
 
+On the appliance, program the tag from the web panel: put the blank in the
+drive and use the panel's drive section, which writes it over the serial
+connection the daemon already holds and records the tag's UID in the catalog
+alongside `nfc: true`.
+
+The commands below are for a bench rig with no daemon running — they need the
+serial port to themselves, and neither of them records the tag's UID, so a
+floppy tagged this way is left without the UID the panel uses to spot a tag
+that already belongs to another disk.
+
 ```bash
 mise run cli -- nfc write <id>            # looks the id up in floppies.yaml
 mise run nfc-test -- write <id>,<mode>    # raw payload, no catalog lookup

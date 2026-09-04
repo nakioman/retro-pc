@@ -61,6 +61,12 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
         RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library, driveState);
         app.MapGet("/", () => ServeAsset("index.html"));
+
+        // A catch-all rather than "/{asset}": the panel's own assets sit at the root today, but a
+        // single segment turns any future nested reference into a 404 that looks like a missing
+        // file. Widening it is safe because RetroBoxStaticAssets.TryGet is an allow-list -- it
+        // rejects "..", and only names that resolve to an embedded resource ever return content,
+        // so nothing here can reach the filesystem.
         app.MapGet("/{*asset}", (string asset) => ServeAsset(asset));
 
         await app.StartAsync(cancellationToken);
