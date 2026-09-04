@@ -292,11 +292,25 @@ public sealed class RetroBoxDaemonTests
             channel,
             TimeSpan.FromMilliseconds(5),
             cancellation.Token);
-        await Task.Delay(100);
+
+        // Poll for exactly 2 STATUS writes with a generous timeout (~2 seconds)
+        for (var attempt = 0; attempt < 200 && !HasExactlyTwoStatuses(serialOutput); attempt++)
+        {
+            await Task.Delay(10);
+        }
+
         cancellation.Cancel();
         await watch;
 
-        Assert.Equal("STATUS\nSTATUS\n", serialOutput.ToString());
+        var expected = $"STATUS{Environment.NewLine}STATUS{Environment.NewLine}";
+        Assert.Equal(expected, serialOutput.ToString());
+
+        static bool HasExactlyTwoStatuses(StringWriter writer)
+        {
+            var output = writer.ToString();
+            var parts = output.Split("STATUS", StringSplitOptions.None);
+            return parts.Length == 3;
+        }
     }
 
     [Fact]
