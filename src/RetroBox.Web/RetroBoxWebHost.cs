@@ -25,7 +25,9 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
     public static async Task<RetroBoxWebHost> StartAsync(
         RetroBoxWebOptions options,
         IRetroBoxCatalogSource catalogSource,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IRetroBoxDriveState? driveState = null,
+        IRetroBoxNfcCommandChannel? nfcChannel = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
 
@@ -49,8 +51,9 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
 
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
         RetroBoxLibraryEndpoints.Map(app, options, catalogSource);
+        RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel);
         app.MapGet("/", () => ServeAsset("index.html"));
-        app.MapGet("/{asset}", (string asset) => ServeAsset(asset));
+        app.MapGet("/{*asset}", (string asset) => ServeAsset(asset));
 
         await app.StartAsync(cancellationToken);
 
