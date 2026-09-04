@@ -60,7 +60,12 @@ public static class RetroBoxNfcEndpoints
 
             tagUid = tag.Uid;
 
-            var previousFloppyId = FindOwner(catalog, tagUid, request.FloppyId, driveState);
+            // Re-read rather than reuse the snapshot taken before the round trip: that one can be
+            // many seconds old by now (quarantine wait plus the five second command timeout), and
+            // an assignment that landed in between would otherwise be invisible here. AssignTag
+            // re-reads under its own lock, so only the warning was ever at stake.
+            var previousFloppyId = FindOwner(
+                catalogSource.Snapshot.Catalog, tagUid, request.FloppyId, driveState);
 
             if (previousFloppyId is not null && !request.Confirm)
             {

@@ -28,6 +28,13 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
     /// </summary>
     public Action? BeforeWriteResponse { get; init; }
 
+    /// <summary>
+    /// Runs just before ReadTagIdAsync returns its response, letting a test simulate a
+    /// concurrent assignment landing while this request's TAGID round trip is still in flight --
+    /// the window the endpoint's ownership check has to be read inside of.
+    /// </summary>
+    public Action? BeforeTagIdResponse { get; set; }
+
     public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
     {
         if (ThrowOnCall is not null)
@@ -36,6 +43,7 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
         }
 
         Calls.Add("TAGID");
+        BeforeTagIdResponse?.Invoke();
         return Task.FromResult(TagIdResponse);
     }
 

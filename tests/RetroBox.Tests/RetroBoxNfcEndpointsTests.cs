@@ -139,6 +139,31 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_sees_an_assignment_that_landed_while_its_tagid_was_in_flight()
+    {
+        // The serial round trip is the slow part of this request -- quarantine wait plus a five
+        // second command timeout -- so a snapshot taken before it can be many seconds stale by
+        // the time the ownership check runs. AssignTag re-reads under its own lock, so the
+        // catalog stays consistent either way; what a stale snapshot loses is the warning.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        channel.BeforeTagIdResponse = () =>
+        {
+            new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root)).AssignTag("disk2", "04A13BFE", "ro");
+            context.Source.TryReload();
+        };
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
+        Assert.Contains("disk2", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Write_reports_a_controller_that_refuses_the_write()
     {
         var channel = new StubNfcCommandChannel
