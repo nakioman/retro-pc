@@ -60,6 +60,14 @@ public sealed class RetroBoxFloppyEventHandler(
                 null);
         }
 
+        if (!floppy.Nfc)
+        {
+            return new RetroBoxFloppyEventHandlerResult(
+                RetroBoxFloppyEventHandlerAction.Failed,
+                $"Floppy '{insert.Id}' has no assigned tag; run 'retrobox nfc write {insert.Id} --port /dev/ttyUSB0' to assign one.",
+                null);
+        }
+
         if (insert.Mode == RetroBoxFloppyCatalogRules.ReadWriteMode
             && floppy.Mode != RetroBoxFloppyCatalogRules.ReadWriteMode)
         {

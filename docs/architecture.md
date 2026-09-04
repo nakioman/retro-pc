@@ -147,6 +147,8 @@ floppies:
     nfc: true
 ```
 
+The `nfc` field tracks whether a physical NFC tag has been assigned to this floppy. When `true`, the daemon accepts inserts for this floppy ID. When `false`, the daemon refuses any insert attempt (without touching the 86Box socket) because no tag has been written for this catalog entry yet. Use `retrobox nfc write <id> --port <serial-port>` to write a tag to a cataloged floppy.
+
 ## Deployment model
 
 - The `retrobox` binary is published as a **Native AOT Linux x64** single file

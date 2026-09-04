@@ -4,7 +4,11 @@ namespace RetroBox.Tests;
 
 internal static class FloppyControlTestCatalogs
 {
-    public static RetroBoxCatalogData CreateCatalog(string floppyId, string imagePath, string mode)
+    public static RetroBoxCatalogData CreateCatalog(
+        string floppyId,
+        string imagePath,
+        string mode,
+        bool nfc = true)
     {
         return new RetroBoxCatalogData(
             new RetroBoxConfig { DefaultVm = "dos" },
@@ -19,6 +23,7 @@ internal static class FloppyControlTestCatalogs
                     Label = "Disk 1",
                     Image = imagePath,
                     Mode = mode,
+                    Nfc = nfc,
                 },
             });
     }

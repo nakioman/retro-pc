@@ -123,8 +123,29 @@ public sealed class RetroBoxFloppyEventHandlerTests
         Assert.Empty(client.Calls);
     }
 
-    private static RetroBoxCatalogData CreateCatalog(string floppyId, string imagePath, string mode)
+    [Fact]
+    public async Task HandleAsync_refuses_to_mount_a_floppy_with_no_assigned_tag()
     {
-        return FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode);
+        var client = new RecordingFloppyControlClient();
+        var handler = new RetroBoxFloppyEventHandler(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode, nfc: false),
+            client);
+
+        var result = await handler.HandleAsync(
+            new RetroBoxArduinoInsertEvent("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        Assert.Equal(RetroBoxFloppyEventHandlerAction.Failed, result.Action);
+        Assert.Contains("has no assigned tag", result.Message, StringComparison.Ordinal);
+        Assert.Contains("--port", result.Message, StringComparison.Ordinal);
+        Assert.Empty(client.Calls);
+    }
+
+    private static RetroBoxCatalogData CreateCatalog(
+        string floppyId,
+        string imagePath,
+        string mode,
+        bool nfc = true)
+    {
+        return FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode, nfc);
     }
 }
