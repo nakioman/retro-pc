@@ -515,12 +515,13 @@ public sealed class RetroBoxDaemonTests
         }
     }
 
-    private static RetroBoxCatalogData CreateCatalog(
+    private static IRetroBoxCatalogSource CreateCatalog(
         string floppyId,
         string imagePath,
         string mode,
         bool nfc = true)
     {
-        return FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode, nfc);
+        return new RetroBoxStaticCatalogSource(
+            FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode, nfc));
     }
 }

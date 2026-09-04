@@ -3,7 +3,7 @@ using RetroBox.Core;
 namespace RetroBox.Daemon;
 
 public sealed class RetroBoxDaemon(
-    RetroBoxCatalogData catalog,
+    IRetroBoxCatalogSource catalogSource,
     IRetroBoxFloppyControlClient floppyControlClient,
     TextReader input,
     TextWriter output,
@@ -20,7 +20,7 @@ public sealed class RetroBoxDaemon(
 
     public async Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
-        var handler = new RetroBoxFloppyEventHandler(catalog, floppyControlClient);
+        var handler = new RetroBoxFloppyEventHandler(catalogSource, floppyControlClient);
         var probe = socketProbe ?? new RetroBoxFloppyControlSocketProbe(floppyControlClient);
         var router = lineRouter ?? new RetroBoxSerialLineRouter();
         var tracker = driveState ?? new RetroBoxDriveStateTracker();

@@ -97,16 +97,18 @@ public sealed class CliHelpSmokeTests
     }
 
     [Fact]
-    public void Daemon_returns_failure_for_missing_catalog_root()
+    public void Daemon_starts_with_an_empty_catalog_when_the_catalog_root_is_missing()
     {
         var command = CliCommandFactory.CreateRootCommand();
 
+        // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
+        // the command starts with an empty catalog and reports why instead of refusing to run.
         var exitCode = command.Parse([
             "daemon",
             "--config-root",
             Path.Combine(Path.GetTempPath(), "retrobox-missing", Guid.NewGuid().ToString("N")),
         ]).Invoke();
 
-        Assert.Equal(1, exitCode);
+        Assert.Equal(0, exitCode);
     }
 }

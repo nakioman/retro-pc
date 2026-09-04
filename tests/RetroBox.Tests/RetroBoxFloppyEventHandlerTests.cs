@@ -140,12 +140,35 @@ public sealed class RetroBoxFloppyEventHandlerTests
         Assert.Empty(client.Calls);
     }
 
-    private static RetroBoxCatalogData CreateCatalog(
+    [Fact]
+    public async Task HandleAsync_sees_a_floppy_added_to_the_catalog_after_construction()
+    {
+        var client = new RecordingFloppyControlClient();
+        var source = new MutableCatalogSource(
+            FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        var handler = new RetroBoxFloppyEventHandler(source, client);
+
+        var before = await handler.HandleAsync(
+            new RetroBoxArduinoInsertEvent("disk2", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        Assert.Equal(RetroBoxFloppyEventHandlerAction.Failed, before.Action);
+
+        source.Publish(
+            FloppyControlTestCatalogs.CreateCatalog("disk2", "/data/floppies/disk2.img", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        var after = await handler.HandleAsync(
+            new RetroBoxArduinoInsertEvent("disk2", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        Assert.Equal(RetroBoxFloppyEventHandlerAction.Inserted, after.Action);
+        Assert.Equal("insert:0:/data/floppies/disk2.img:True", Assert.Single(client.Calls));
+    }
+
+    private static IRetroBoxCatalogSource CreateCatalog(
         string floppyId,
         string imagePath,
         string mode,
         bool nfc = true)
     {
-        return FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode, nfc);
+        return new RetroBoxStaticCatalogSource(
+            FloppyControlTestCatalogs.CreateCatalog(floppyId, imagePath, mode, nfc));
     }
 }

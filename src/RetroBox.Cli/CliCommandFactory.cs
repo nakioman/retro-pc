@@ -90,15 +90,38 @@ public static class CliCommandFactory
 
             try
             {
-                var catalog = new RetroBoxConfigStore(request.ConfigRoot).Load();
+                var store = new RetroBoxConfigStore(request.ConfigRoot);
+                RetroBoxCatalogData initial;
+                string? startupError = null;
+
+                try
+                {
+                    initial = store.Load();
+                }
+                catch (RetroBoxCatalogException ex)
+                {
+                    // A malformed catalog must not cost the owner the panel as well. Without it
+                    // the only way back into the appliance is the GRUB recovery entry, so the
+                    // daemon starts with an empty catalog and reports why.
+                    initial = RetroBoxCatalogData.Empty;
+                    startupError = ex.Message;
+                    Console.Error.WriteLine($"Catalog is invalid; starting with an empty catalog: {ex.Message}");
+                }
+
+                using var catalogSource = new RetroBoxWatchingCatalogSource(
+                    request.ConfigRoot,
+                    initial,
+                    message => Console.Error.WriteLine(message),
+                    initialError: startupError);
+
                 var socketPath = RetroBoxDaemon.ResolveFloppyControlSocketPath(
                     request.FloppyControlSocketPath,
-                    catalog.Config.FloppyControlSocketPath);
+                    catalogSource.Current.Config.FloppyControlSocketPath);
                 var serialOptions = RetroBoxDaemon.ResolveSerialDeviceOptions(
                     request.SerialPort,
                     request.SerialBaud,
-                    catalog.Config.SerialPort,
-                    catalog.Config.SerialBaud);
+                    catalogSource.Current.Config.SerialPort,
+                    catalogSource.Current.Config.SerialBaud);
 
                 IRetroBoxFloppyControlClient client = request.Echo
                     ? RetroBoxFloppyControlClient.CreateEcho(Console.Out)
@@ -119,7 +142,7 @@ public static class CliCommandFactory
                 };
 
                 var daemon = new RetroBoxDaemon(
-                    catalog,
+                    catalogSource,
                     client,
                     device?.Reader ?? Console.In,
                     Console.Out,
