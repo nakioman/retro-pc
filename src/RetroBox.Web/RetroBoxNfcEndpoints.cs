@@ -31,7 +31,7 @@ public static class RetroBoxNfcEndpoints
     {
         if (string.IsNullOrEmpty(request.FloppyId))
         {
-            return Error(StatusCodes.Status400BadRequest, "invalid-request", "A floppy id is required.");
+            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "invalid-request", "A floppy id is required.");
         }
 
         // A confirmed request is exempt from the ownership check below -- the user already
@@ -40,7 +40,7 @@ public static class RetroBoxNfcEndpoints
         // the 409 was raised" are not the same disk.
         if (request.Confirm && string.IsNullOrEmpty(request.TagUid))
         {
-            return Error(
+            return RetroBoxWebResults.Error(
                 StatusCodes.Status400BadRequest,
                 "invalid-request",
                 "A confirmed reassignment must carry the tag uid the conflict reported.");
@@ -48,13 +48,13 @@ public static class RetroBoxNfcEndpoints
 
         if (nfcChannel is null)
         {
-            return Error(StatusCodes.Status503ServiceUnavailable, "no-controller", "No floppy controller is connected.");
+            return RetroBoxWebResults.Error(StatusCodes.Status503ServiceUnavailable, "no-controller", "No floppy controller is connected.");
         }
 
         var catalog = catalogSource.Snapshot.Catalog;
         if (!catalog.Floppies.TryGetValue(request.FloppyId, out var floppy))
         {
-            return Error(StatusCodes.Status404NotFound, "unknown-floppy", $"Unknown floppy '{request.FloppyId}'.");
+            return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-floppy", $"Unknown floppy '{request.FloppyId}'.");
         }
 
         // Every serial exchange happens outside RetroBoxFloppyLibrary's lock. Each is bounded at
@@ -67,7 +67,7 @@ public static class RetroBoxNfcEndpoints
             var presence = await nfcChannel.ReadTagIdAsync(cancellationToken);
             if (presence is not NfcResponse.TagId tag)
             {
-                return Error(StatusCodes.Status409Conflict, "no-tag-present", "There is no floppy in the drive.");
+                return RetroBoxWebResults.Error(StatusCodes.Status409Conflict, "no-tag-present", "There is no floppy in the drive.");
             }
 
             tagUid = tag.Uid;
@@ -79,7 +79,7 @@ public static class RetroBoxNfcEndpoints
             if (!string.IsNullOrEmpty(request.TagUid)
                 && !string.Equals(request.TagUid, tagUid, StringComparison.Ordinal))
             {
-                return Error(
+                return RetroBoxWebResults.Error(
                     StatusCodes.Status409Conflict,
                     "tag-changed",
                     $"The tag in the drive is now '{tagUid}', not '{request.TagUid}'. Nothing was written.");
@@ -106,7 +106,7 @@ public static class RetroBoxNfcEndpoints
 
             if (await nfcChannel.WriteTagAsync(request.FloppyId, floppy.Mode, cancellationToken) is not NfcResponse.Ok)
             {
-                return Error(StatusCodes.Status502BadGateway, "write-failed", "The controller could not write the tag.");
+                return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "write-failed", "The controller could not write the tag.");
             }
         }
         catch (RetroBoxNfcCommandTimeoutException ex)
@@ -117,7 +117,7 @@ public static class RetroBoxNfcEndpoints
             // opened, turning one request into roughly fifteen seconds, and the panel is already
             // subscribed to /api/drive/events, which performs exactly that TAGID probe within a
             // couple of seconds and shows what is actually on the tag.
-            return Error(StatusCodes.Status504GatewayTimeout, "write-unconfirmed", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status504GatewayTimeout, "write-unconfirmed", ex.Message);
         }
         catch (Exception ex) when (ex is RetroBoxNfcCommandUnavailableException or IOException
             or InvalidOperationException or UnauthorizedAccessException)
@@ -126,7 +126,7 @@ public static class RetroBoxNfcEndpoints
             // throws once its channel is null (device unplugged) — the production shape of "no
             // controller," distinct from the defensive nfcChannel-is-null branch above, which a
             // real appliance never actually takes.
-            return Error(StatusCodes.Status503ServiceUnavailable, "no-controller", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status503ServiceUnavailable, "no-controller", ex.Message);
         }
 
         try
@@ -135,11 +135,11 @@ public static class RetroBoxNfcEndpoints
         }
         catch (RetroBoxUnknownFloppyException ex)
         {
-            return Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
         }
         catch (RetroBoxCatalogUnavailableException ex)
         {
-            return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
         catch (RetroBoxFloppyModeChangedException ex)
         {
@@ -148,7 +148,7 @@ public static class RetroBoxNfcEndpoints
             // reason (mode is baked into the tag's payload) — committing this write now would
             // silently undo that. Caught by its own type, not the base RetroBoxCatalogException,
             // so an unrelated validation failure from store.Save is never mislabelled as this.
-            return Error(StatusCodes.Status409Conflict, "mode-changed", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status409Conflict, "mode-changed", ex.Message);
         }
 
         catalogSource.TryReload();
@@ -205,13 +205,5 @@ public static class RetroBoxNfcEndpoints
             && !string.Equals(loaded.FloppyId, requestedFloppyId, StringComparison.Ordinal)
             ? loaded.FloppyId
             : null;
-    }
-
-    private static IResult Error(int statusCode, string code, string message)
-    {
-        return Results.Json(
-            new RetroBoxErrorView(code, message),
-            RetroBoxWebJsonContext.Default.RetroBoxErrorView,
-            statusCode: statusCode);
     }
 }
