@@ -98,18 +98,24 @@ the events it observes.
 
 ### src/RetroBox.Web
 
-The daemon hosts a LAN-only floppy management panel (Minimal API with embedded
-static assets) on the port specified by `WEB_PORT` (default 8080), listening on
-every interface. The panel runs without a floppy controller attached, allowing
-catalog management with no hardware dependencies. It is **unauthenticated and
-LAN-trusted**: authentication is deliberately deferred to a future phase and
-network isolation is assumed.
+The daemon hosts a floppy management panel (Minimal API with embedded static
+assets, preserved in the AOT single-file binary) on the port specified by
+`WEB_PORT` (default 8080), listening on every interface. It is hosted inside the
+daemon process because the daemon owns the serial port exclusively. The panel
+runs without a floppy controller attached, allowing catalog management with no
+hardware dependencies. It is **unauthenticated and openly writable**: anyone on
+the LAN can list, upload, rename, re-mode, and delete floppies. Authentication
+and TLS are explicitly out of scope, consistent with the appliance's existing
+guest-writable Samba share and the principle that the appliance is a LAN-trusted
+device.
 
 The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
 the daemon: edits from the panel, from `retrobox import` on the host, or over
-SSH are picked up without restarting. A catalog reload that fails validation is
-discarded, leaving the daemon running with the previous valid state rather than
-crashing on a malformed file.
+SSH are picked up without restarting. A malformed `floppies.yaml` at startup no
+longer blocks the daemon — it starts with an empty catalog and reports the
+validation error, allowing the panel to fix it. A catalog reload that fails
+validation during runtime is discarded, leaving the daemon running with the
+previous valid state.
 
 ### firmware/retrofloppy-esp8266
 

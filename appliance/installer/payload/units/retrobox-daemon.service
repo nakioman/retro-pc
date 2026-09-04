@@ -11,6 +11,9 @@ ConditionKernelCommandLine=!retropc.norun
 Type=simple
 User=retrobox
 Group=retrobox
+# Fallback WEB_PORT in case daemon.env is from an older install (pre-panel).
+# EnvironmentFile below may override it.
+Environment=WEB_PORT=8080
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides
 # SERIAL_DEVICE, SERIAL_BAUD, FLOPPY_CONTROL_SOCKET, and WEB_PORT.
 EnvironmentFile=/etc/retrobox/daemon.env
