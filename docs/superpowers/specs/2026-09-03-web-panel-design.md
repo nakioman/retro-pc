@@ -420,7 +420,7 @@ xUnit, TDD, no network and no hardware.
 ## Implementation phases
 
 The scope is wide enough that a single undifferentiated plan would be hard to
-review. It decomposes into four phases, each independently shippable and each
+review. It decomposes into five phases, each independently shippable and each
 leaving the appliance in a working state:
 
 1. **Serial command channel.** The line router, the `TAGID` protocol
@@ -431,14 +431,23 @@ leaving the appliance in a working state:
 2. **Web host and library management.** `RetroBox.Web`, the embedded static
    panel, optional serial in the daemon unit, and the catalog/upload/delete/
    patch endpoints. Ships a usable panel with no NFC and no games.
-3. **Games and NFC assignment.** `games.yaml`, `RetroBoxGame` activation, the
-   grouped UI, and the write-tag flow with its reassignment warning.
-4. **Cover art and localization.** `scraper.yaml`, the ScreenScraper client
-   behind `IRetroBoxCoverSource`, the search-and-confirm UI, and the es/en
-   dictionary.
+3. **NFC assignment.** Live drive state, `TAGID` presence detection, the
+   write-tag flow with its reassignment warning, and the assign UI. Split out
+   from games because nothing in it depends on games, and because until it
+   ships a floppy uploaded through the panel cannot be inserted at all — the
+   panel's own primary workflow produces something inert.
+4. **Games grouping.** `games.yaml`, `RetroBoxGame` activation, and the grouped
+   UI.
+5. **Cover art.** `scraper.yaml`, the ScreenScraper client behind
+   `IRetroBoxCoverSource`, and the search-and-confirm UI. It depends on games
+   existing, which is why it follows them.
 
-Phase 1 is a prerequisite for phase 3. Phases 2 and 4 are otherwise
-independent.
+Localization is **not** a phase of its own. Spanish and English shipped with
+the panel in phase 2, because the UI is written there and deferring the strings
+would have meant writing every one of them twice.
+
+Phase 1 is a prerequisite for phase 3, and phase 4 for phase 5. Phase 2 is
+otherwise independent.
 
 ## Phase 2 prerequisites
 
