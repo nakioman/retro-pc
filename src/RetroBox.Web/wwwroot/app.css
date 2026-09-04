@@ -12,6 +12,12 @@
 
 * { box-sizing: border-box; }
 
+/* The UA stylesheet's [hidden] { display: none } is author-overridable, and several rules
+   below (e.g. .actions { display: flex }) do exactly that on elements toggled via .hidden.
+   This rule sits ahead of them in source order but wins on specificity+importance regardless,
+   so any element's `hidden` attribute always actually hides it. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   padding: 1.5rem;

@@ -42,12 +42,16 @@ const STRINGS = {
     assignButton: "Grabar tag",
     assignReassign: "Reasignar este tag",
     assignDone: "Tag grabado",
+    assignPlaceholder: "Elegi un disquete...",
+    assignNoSelection: "Elegi un disquete de la lista antes de grabar el tag.",
     confirmReassign: "Ese tag ya es de \"{owner}\". Reasignarlo a este disquete?",
     "no-tag-present": "No hay ningun disco en la disquetera.",
     "tag-already-assigned": "Ese tag ya esta asignado a otro disquete.",
     "write-failed": "El controlador no pudo grabar el tag.",
     "write-unconfirmed": "No se pudo confirmar si el tag quedo grabado. Fijate que dice la disquetera.",
-    "no-controller": "No hay controlador de disquetes conectado."
+    "no-controller": "No hay controlador de disquetes conectado.",
+    "mode-changed": "El modo del disquete cambio mientras se grababa el tag.",
+    "invalid-request": "La solicitud no es valida."
   },
   en: {
     subtitle: "Floppy library",
@@ -90,12 +94,16 @@ const STRINGS = {
     assignButton: "Write tag",
     assignReassign: "Reassign this tag",
     assignDone: "Tag written",
+    assignPlaceholder: "Choose a floppy...",
+    assignNoSelection: "Choose a floppy from the list before writing the tag.",
     confirmReassign: "That tag already belongs to \"{owner}\". Reassign it to this floppy?",
     "no-tag-present": "There is no disk in the drive.",
     "tag-already-assigned": "That tag is already assigned to another floppy.",
     "write-failed": "The controller could not write the tag.",
     "write-unconfirmed": "Could not confirm whether the tag was written. Check the drive.",
-    "no-controller": "No floppy controller is connected."
+    "no-controller": "No floppy controller is connected.",
+    "mode-changed": "The floppy's mode changed while the tag was being written.",
+    "invalid-request": "That request is not valid."
   }
 };
 
@@ -210,8 +218,8 @@ function renderRow(floppy) {
   const badge = document.createElement("span");
   badge.className = "badge " + (floppy.nfc ? "tagged" : "untagged");
   badge.textContent = floppy.nfc ? t("tagged") : t("untagged");
-  // An uploaded floppy is listed but inert until a tag is written for it, and the panel cannot
-  // write one yet. Without this the badge is an unexplained amber label with no action.
+  // An uploaded floppy is listed but inert until a tag is written for it. Without this the
+  // badge is an unexplained amber label with no hint that the drive section above can fix it.
   if (!floppy.nfc) {
     badge.title = t("untaggedHelp");
   }
@@ -302,6 +310,12 @@ async function uploadFiles(files) {
 
 let drive = { state: "unavailable", floppyId: null, mode: null, tagUid: null };
 
+// A transient status line (e.g. "Tag written") that renderDrive prefers over its normal detail
+// text. render() re-invokes renderDrive on every catalog reload, which would otherwise stomp the
+// message before anyone reads it; this survives that and is cleared only by an actual drive-state
+// change, not by a reload.
+let driveNotice = null;
+
 function renderDrive() {
   const section = document.getElementById("drive");
   const state = document.getElementById("drive-state");
@@ -309,21 +323,27 @@ function renderDrive() {
   const assign = document.getElementById("assign");
   const target = document.getElementById("assign-target");
 
-  section.hidden = drive.state === "unavailable";
-  if (section.hidden) {
+  // The section stays visible even with no controller: an explanation beats a card that just
+  // vanishes. Only the assign control (which needs a controller to do anything) is hidden.
+  section.hidden = false;
+
+  if (drive.state === "unavailable") {
+    state.textContent = t("driveUnavailable");
+    detail.textContent = "";
+    assign.hidden = true;
     return;
   }
 
   if (drive.state === "loaded") {
     const known = floppies.find((floppy) => floppy.id === drive.floppyId);
     state.textContent = t("driveLoaded", { label: known ? known.label : drive.floppyId });
-    detail.textContent = t("assignReassign");
+    detail.textContent = driveNotice || t("assignReassign");
   } else if (drive.state === "blankTag") {
     state.textContent = t("driveBlankTag", { uid: drive.tagUid });
-    detail.textContent = "";
+    detail.textContent = driveNotice || "";
   } else {
     state.textContent = t("driveEmpty");
-    detail.textContent = "";
+    detail.textContent = driveNotice || "";
   }
 
   assign.hidden = drive.state === "empty";
@@ -333,6 +353,16 @@ function renderDrive() {
 
   const selected = target.value;
   target.textContent = "";
+
+  // A disabled placeholder is the initial selection so writing a tag always takes a deliberate
+  // choice — nothing here proves a blankTag reading is actually free (Ruling 27), and unlike the
+  // reassignment case, a blank tag draws no 409 from the server to catch an accidental default.
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.disabled = true;
+  placeholder.textContent = t("assignPlaceholder");
+  target.appendChild(placeholder);
+
   for (const floppy of floppies) {
     const option = document.createElement("option");
     option.value = floppy.id;
@@ -340,9 +370,7 @@ function renderDrive() {
     target.appendChild(option);
   }
 
-  if (selected) {
-    target.value = selected;
-  }
+  target.value = floppies.some((floppy) => floppy.id === selected) ? selected : "";
 }
 
 function subscribeToDrive() {
@@ -350,12 +378,14 @@ function subscribeToDrive() {
 
   source.addEventListener("message", (event) => {
     drive = JSON.parse(event.data);
+    driveNotice = null;
     renderDrive();
   });
 
   // EventSource reconnects on its own; a failure only means the panel is momentarily blind.
   source.addEventListener("error", () => {
     drive = { state: "unavailable", floppyId: null, mode: null, tagUid: null };
+    driveNotice = null;
     renderDrive();
   });
 }
@@ -365,6 +395,10 @@ async function writeTag(confirm) {
   const floppyId = document.getElementById("assign-target").value;
 
   if (!floppyId) {
+    // The picker's placeholder has no floppy behind it, and a floppy removed from the catalog
+    // between renders resolves to this same empty value (see renderDrive) — either way the click
+    // must say something rather than silently doing nothing.
+    window.alert(t("assignNoSelection"));
     return;
   }
 
@@ -378,7 +412,7 @@ async function writeTag(confirm) {
     });
 
     if (response.ok) {
-      document.getElementById("drive-detail").textContent = t("assignDone");
+      driveNotice = t("assignDone");
       await loadCatalog();
       return;
     }
@@ -409,9 +443,6 @@ async function writeTag(confirm) {
   }
 }
 
-document.getElementById("assign-write").addEventListener("click", () => writeTag(false));
-subscribeToDrive();
-
 document.getElementById("pick").addEventListener("click", () => document.getElementById("file").click());
 document.getElementById("file").addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
@@ -425,7 +456,11 @@ document.getElementById("language").addEventListener("change", (event) => {
   applyStaticText();
   render();
 });
+// Wired last: if #assign-write were ever missing from the markup, a TypeError here must not
+// take the listeners above (upload, search, language) down with it.
+document.getElementById("assign-write").addEventListener("click", () => writeTag(false));
 
 document.getElementById("language").value = language;
 applyStaticText();
 loadCatalog();
+subscribeToDrive();
