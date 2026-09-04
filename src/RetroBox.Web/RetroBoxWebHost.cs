@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -21,14 +20,6 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
 
     public Uri BaseAddress { get; }
 
-    // MapGet's Delegate overload carries RequiresUnreferencedCode/RequiresDynamicCode because it
-    // can fall back to reflection-based invocation. Under -p:PublishAot=true the Minimal API
-    // RequestDelegateGenerator intercepts these calls with source-generated code instead, and the
-    // toolchain spike for this task confirmed a linux-x64 native publish of this exact code
-    // produces zero AOT/trim warnings. The suppression only applies to this method, so it does not
-    // force every caller of StartAsync to also become annotated.
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Resolved by the RequestDelegateGenerator under PublishAot; verified warning-free by the toolchain spike.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Resolved by the RequestDelegateGenerator under PublishAot; verified warning-free by the toolchain spike.")]
     public static async Task<RetroBoxWebHost> StartAsync(
         RetroBoxWebOptions options,
         IRetroBoxCatalogSource catalogSource,
