@@ -1,7 +1,11 @@
 using System.CommandLine;
+using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using RetroBox.Core;
 using RetroBox.Daemon;
 using RetroBox.Web;
+
+[assembly: InternalsVisibleTo("RetroBox.Tests")]
 
 namespace RetroBox.Cli;
 
@@ -196,15 +200,23 @@ public static class CliCommandFactory
                 catalogSource,
                 cancellationToken);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (IsRecoverableWebHostBindFailure(ex))
         {
             // The panel is the secondary function; the hardware loop is the primary one. A busy
-            // port must degrade to "no panel", exactly like an unreadable catalog degrades to
-            // "empty catalog" a few lines up.
+            // or forbidden port (EACCES on a privileged port, for instance) must degrade to "no
+            // panel", exactly like an unreadable catalog degrades to "empty catalog" a few lines
+            // up. A genuine programming error is not one of these two shapes and still propagates.
             Console.Error.WriteLine($"Web panel could not start on port {port}, continuing without it: {ex.Message}");
             return null;
         }
     }
+
+    // Kestrel wraps only SocketError.AddressAlreadyInUse in an IOException; every other bind
+    // failure (EACCES on a privileged port, AddressNotAvailable, ...) surfaces as a raw
+    // SocketException. Both must be caught for a busy or forbidden --web-port to degrade to "no
+    // panel" instead of aborting the daemon; internal and tested directly since a live repro of
+    // every bind-failure shape (EACCES in particular) depends on the test process's privileges.
+    internal static bool IsRecoverableWebHostBindFailure(Exception ex) => ex is IOException or SocketException;
 
     private static Command CreatePlaceholderCommand(string name, string description)
     {

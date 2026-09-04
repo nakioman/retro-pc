@@ -169,6 +169,34 @@ public sealed class CliHelpSmokeTests
     }
 
     [Fact]
+    public void IsRecoverableWebHostBindFailure_treats_an_IOException_as_recoverable()
+    {
+        // The shape Kestrel actually wraps SocketError.AddressAlreadyInUse in - the busy-port
+        // path already has a live end-to-end repro; this is the unit-level guard for the type.
+        Assert.True(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new IOException("Failed to bind to address http://0.0.0.0:8080: address already in use.")));
+    }
+
+    [Fact]
+    public void IsRecoverableWebHostBindFailure_treats_a_SocketException_as_recoverable()
+    {
+        // Every bind failure other than "address already in use" surfaces as a raw
+        // SocketException, not an IOException - EACCES on a privileged port (--web-port 80 under
+        // the appliance's unprivileged systemd user) is the concrete case that motivated this.
+        Assert.True(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new SocketException((int)SocketError.AccessDenied)));
+    }
+
+    [Fact]
+    public void IsRecoverableWebHostBindFailure_does_not_treat_an_unrelated_exception_as_recoverable()
+    {
+        // A genuine programming error must still propagate and abort the daemon loudly, not be
+        // swallowed as though it were a mere port conflict.
+        Assert.False(CliCommandFactory.IsRecoverableWebHostBindFailure(
+            new InvalidOperationException("not a bind failure")));
+    }
+
+    [Fact]
     public void Daemon_degrades_to_no_panel_when_the_web_port_is_already_in_use()
     {
         var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-portbusy", Guid.NewGuid().ToString("N"));
