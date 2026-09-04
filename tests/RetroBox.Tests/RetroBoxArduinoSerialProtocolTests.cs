@@ -161,4 +161,43 @@ public sealed class RetroBoxArduinoSerialProtocolTests
         Assert.Throws<RetroBoxArduinoSerialProtocolException>(() =>
             RetroBoxArduinoSerialProtocol.BuildWriteCommand(id, mode));
     }
+
+    [Fact]
+    public void BuildTagIdCommand_returns_the_firmware_verb()
+    {
+        Assert.Equal("TAGID", RetroBoxArduinoSerialProtocol.BuildTagIdCommand());
+    }
+
+    [Fact]
+    public void ParseResponse_reads_a_tag_id()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("Tag ID: 04A13BFE");
+
+        var tagId = Assert.IsType<NfcResponse.TagId>(response);
+        Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
+    [Fact]
+    public void ParseResponse_trims_the_tag_id_line()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("  Tag ID: 04A13BFE\r\n");
+
+        var tagId = Assert.IsType<NfcResponse.TagId>(response);
+        Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
+    [Fact]
+    public void ParseResponse_ignores_a_tag_id_line_with_no_uid()
+    {
+        Assert.IsType<NfcResponse.Unknown>(RetroBoxArduinoSerialProtocol.ParseResponse("Tag ID: "));
+    }
+
+    [Fact]
+    public void ParseResponse_keeps_no_tag_detected_as_an_error()
+    {
+        var response = RetroBoxArduinoSerialProtocol.ParseResponse("ERROR no-tag-detected");
+
+        var error = Assert.IsType<NfcResponse.Error>(response);
+        Assert.Equal("no-tag-detected", error.Message);
+    }
 }
