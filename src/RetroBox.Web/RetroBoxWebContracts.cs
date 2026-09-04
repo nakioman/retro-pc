@@ -8,7 +8,10 @@ public sealed record RetroBoxCatalogView(RetroBoxFloppyView[] Floppies, string? 
 
 public sealed record RetroBoxErrorView(string Code, string Message);
 
+public sealed record RetroBoxFloppyPatch(string? Label, string? Mode);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]
 [JsonSerializable(typeof(RetroBoxErrorView))]
+[JsonSerializable(typeof(RetroBoxFloppyPatch))]
 public sealed partial class RetroBoxWebJsonContext : JsonSerializerContext;

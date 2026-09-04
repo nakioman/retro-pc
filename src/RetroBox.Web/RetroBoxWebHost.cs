@@ -40,12 +40,15 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         // Bound to every interface on purpose: the panel is useless if it is not reachable from
         // a phone on the LAN.
         builder.WebHost.UseUrls($"http://0.0.0.0:{options.Port}");
+        builder.WebHost.ConfigureKestrel(kestrel =>
+            kestrel.Limits.MaxRequestBodySize = RetroBoxLibraryEndpoints.MaxUploadBytes);
         builder.Services.ConfigureHttpJsonOptions(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, RetroBoxWebJsonContext.Default));
 
         var app = builder.Build();
 
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
+        RetroBoxLibraryEndpoints.Map(app, options, catalogSource);
         app.MapGet("/", () => ServeAsset("index.html"));
         app.MapGet("/{asset}", (string asset) => ServeAsset(asset));
 
