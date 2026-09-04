@@ -1,6 +1,7 @@
 using System.CommandLine;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using RetroBox.Web;
 
 namespace RetroBox.Cli;
 
@@ -9,7 +10,8 @@ public sealed record RetroBoxDaemonCommandRequest(
     string? FloppyControlSocketPath,
     string? SerialPort,
     int? SerialBaud,
-    bool Echo);
+    bool Echo,
+    int WebPort);
 
 public sealed record RetroBoxBootCommandRequest(
     string ConfigRoot,
@@ -64,6 +66,11 @@ public static class CliCommandFactory
         {
             Description = "Print the 86Box socket request each event would send instead of connecting.",
         };
+        var webPortOption = new Option<int>("--web-port")
+        {
+            Description = "Port for the web panel. 0 disables it.",
+            DefaultValueFactory = _ => RetroBoxWebOptions.DefaultPort,
+        };
 
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
@@ -72,16 +79,18 @@ public static class CliCommandFactory
             serialPortOption,
             serialBaudOption,
             echoOption,
+            webPortOption,
         };
 
-        command.SetAction(parseResult =>
+        command.SetAction(async parseResult =>
         {
             var request = new RetroBoxDaemonCommandRequest(
                 parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath,
                 parseResult.GetValue(socketPathOption),
                 parseResult.GetValue(serialPortOption),
                 parseResult.GetValue(serialBaudOption),
-                parseResult.GetValue(echoOption));
+                parseResult.GetValue(echoOption),
+                parseResult.GetValue(webPortOption));
 
             if (daemonRunner is not null)
             {
@@ -141,6 +150,14 @@ public static class CliCommandFactory
                     cancellation.Cancel();
                 };
 
+                var webPort = request.WebPort;
+                await using var webHost = webPort == 0
+                    ? null
+                    : await RetroBoxWebHost.StartAsync(
+                        new RetroBoxWebOptions { Port = webPort, ConfigRoot = request.ConfigRoot },
+                        catalogSource,
+                        cancellation.Token);
+
                 var daemon = new RetroBoxDaemon(
                     catalogSource,
                     client,
@@ -149,7 +166,7 @@ public static class CliCommandFactory
                     request.Echo,
                     device?.Writer);
 
-                return daemon.RunAsync(cancellation.Token).GetAwaiter().GetResult();
+                return await daemon.RunAsync(cancellation.Token);
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException
                 or UnauthorizedAccessException or RetroBoxSerialDeviceException)

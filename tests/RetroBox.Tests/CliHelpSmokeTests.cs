@@ -115,10 +115,13 @@ public sealed class CliHelpSmokeTests
 
             // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
             // the command starts with an empty catalog and reports why instead of refusing to run.
+            // --web-port 0 keeps this test from binding a real port on the host.
             var exitCode = command.Parse([
                 "daemon",
                 "--config-root",
                 missingRoot,
+                "--web-port",
+                "0",
             ]).Invoke();
 
             Assert.Equal(0, exitCode);
@@ -134,5 +137,17 @@ public sealed class CliHelpSmokeTests
                 Directory.Delete(missingRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void Daemon_help_documents_the_web_port_option()
+    {
+        var output = new StringWriter();
+        var command = CliCommandFactory.CreateRootCommand();
+        var parseResult = command.Parse(["daemon", "--help"]);
+        parseResult.InvocationConfiguration.Output = output;
+
+        Assert.Equal(0, parseResult.Invoke());
+        Assert.Contains("--web-port", output.ToString(), StringComparison.Ordinal);
     }
 }
