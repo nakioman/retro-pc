@@ -4,9 +4,47 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RetroBox</title>
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
-<h1>RetroBox</h1>
-<p id="status">Cargando…</p>
+<header>
+  <div class="brand">
+    <span class="brand-mark">RB</span>
+    <div>
+      <h1>RetroBox</h1>
+      <p class="subtitle" data-i18n="subtitle"></p>
+    </div>
+  </div>
+  <div class="header-tools">
+    <input type="search" id="search" data-i18n-placeholder="searchPlaceholder">
+    <select id="language" aria-label="Language">
+      <option value="es">Espanol</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <section class="card drop">
+    <h2 data-i18n="uploadTitle"></h2>
+    <p class="hint" data-i18n="uploadHint"></p>
+    <input type="file" id="file" accept=".img,.ima,.dsk" multiple hidden>
+    <button id="pick" class="primary" data-i18n="uploadButton"></button>
+    <p id="upload-status" class="hint" role="status"></p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2 data-i18n="libraryTitle"></h2>
+      <span id="stats" class="hint"></span>
+    </div>
+    <p id="catalog-error" class="error" role="alert" hidden></p>
+    <p id="library-error" class="error" role="alert" hidden></p>
+    <ul id="library" class="library"></ul>
+    <p id="empty" class="hint" data-i18n="empty" hidden></p>
+  </section>
+</main>
+
+<script src="app.js"></script>
 </body>
 </html>
