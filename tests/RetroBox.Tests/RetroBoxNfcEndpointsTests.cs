@@ -82,6 +82,43 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_refuses_a_tag_the_tracker_says_belongs_to_another_floppy()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        // A tag written before this phase existed: AssignTag is the only writer of NfcUid, so on
+        // an appliance upgraded into this phase every already-tagged floppy has Nfc: true and
+        // NfcUid: null and the catalog-only check can never match. The firmware still knows the
+        // owner and announces it through INSERT, which is what must catch this.
+        context.DriveState.Observe(new RetroBoxArduinoInsertEvent("disk1", "ro"));
+
+        using var response = await PostAsync(context, "disk2", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
+        Assert.Contains("disk1", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Write_rewrites_the_tag_of_the_floppy_the_tracker_already_reports_loaded()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        // Same floppy: the tracker's owner is the request's own target, so there is nothing to
+        // warn about and the write must go straight through without a confirmation round trip.
+        context.DriveState.Observe(new RetroBoxArduinoInsertEvent("disk1", "ro"));
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+    }
+
+    [Fact]
     public async Task Write_reassigns_with_confirmation_and_takes_the_tag_from_the_previous_owner()
     {
         var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };

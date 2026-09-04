@@ -14,10 +14,11 @@ public static class RetroBoxNfcEndpoints
         WebApplication app,
         IRetroBoxCatalogSource catalogSource,
         IRetroBoxNfcCommandChannel? nfcChannel,
-        RetroBoxFloppyLibrary library)
+        RetroBoxFloppyLibrary library,
+        IRetroBoxDriveState? driveState)
     {
         app.MapPost("/api/nfc/write", (RetroBoxNfcWriteRequest request, CancellationToken cancellationToken) =>
-            WriteAsync(request, library, catalogSource, nfcChannel, cancellationToken));
+            WriteAsync(request, library, catalogSource, nfcChannel, driveState, cancellationToken));
     }
 
     private static async Task<IResult> WriteAsync(
@@ -25,6 +26,7 @@ public static class RetroBoxNfcEndpoints
         RetroBoxFloppyLibrary library,
         IRetroBoxCatalogSource catalogSource,
         IRetroBoxNfcCommandChannel? nfcChannel,
+        IRetroBoxDriveState? driveState,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(request.FloppyId))
@@ -58,18 +60,15 @@ public static class RetroBoxNfcEndpoints
 
             tagUid = tag.Uid;
 
-            var currentOwner = catalog.Floppies
-                .FirstOrDefault(entry =>
-                    !string.Equals(entry.Key, request.FloppyId, StringComparison.Ordinal)
-                    && string.Equals(entry.Value.NfcUid, tagUid, StringComparison.Ordinal));
+            var previousFloppyId = FindOwner(catalog, tagUid, request.FloppyId, driveState);
 
-            if (currentOwner.Key is not null && !request.Confirm)
+            if (previousFloppyId is not null && !request.Confirm)
             {
                 return Results.Json(
                     new RetroBoxNfcWriteResult(
                         "tag-already-assigned",
-                        currentOwner.Key,
-                        $"This tag is already assigned to '{currentOwner.Key}'. Confirm to reassign it."),
+                        previousFloppyId,
+                        $"This tag is already assigned to '{previousFloppyId}'. Confirm to reassign it."),
                     RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult,
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -126,6 +125,38 @@ public static class RetroBoxNfcEndpoints
         return Results.Json(
             new RetroBoxNfcWriteResult("written", null, null),
             RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult);
+    }
+
+    /// <summary>
+    /// Names the floppy that already owns <paramref name="tagUid"/>, or null when nothing does.
+    /// </summary>
+    private static string? FindOwner(
+        RetroBoxCatalogData catalog,
+        string tagUid,
+        string requestedFloppyId,
+        IRetroBoxDriveState? driveState)
+    {
+        var recorded = catalog.Floppies
+            .FirstOrDefault(entry =>
+                !string.Equals(entry.Key, requestedFloppyId, StringComparison.Ordinal)
+                && string.Equals(entry.Value.NfcUid, tagUid, StringComparison.Ordinal));
+
+        if (recorded.Key is not null)
+        {
+            return recorded.Key;
+        }
+
+        // AssignTag is the only writer of NfcUid, so on an appliance that predates this phase
+        // every tagged floppy carries Nfc: true with NfcUid: null and the recorded check above
+        // can never match — the first panel assignment would silently steal the tag. The
+        // firmware knows better: a non-blank tag names its owner in the INSERT the tracker
+        // observed, whatever the catalog happens to have written down. This branch only ever
+        // adds a warning the recorded check missed, so an Unknown tracker (no controller has
+        // reported yet) degrades to exactly the recorded-only behaviour.
+        return driveState?.Current is RetroBoxDriveState.Loaded loaded
+            && !string.Equals(loaded.FloppyId, requestedFloppyId, StringComparison.Ordinal)
+            ? loaded.FloppyId
+            : null;
     }
 
     private static IResult Error(int statusCode, string code, string message)
