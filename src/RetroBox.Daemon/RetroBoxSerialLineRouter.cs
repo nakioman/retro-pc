@@ -73,9 +73,10 @@ public sealed class RetroBoxSerialLineRouter
         {
             // A follow-up's designed answer is an INSERT/EJECT event, which parses here rather
             // than as a command reply, so it never reaches the orphan check below. A follow-up-
-            // armed window must still close on it — otherwise it rides out its full duration on
-            // the ordinary happy path, wide open to swallow an unrelated ERROR that arrives
-            // during that stretch.
+            // armed window closes on any valid event this way, not just INSERT/EJECT — INIT
+            // (a controller reset) counts too, since the follow-up's answer is lost either way.
+            // Without this, the window would ride out its full duration on the ordinary happy
+            // path, wide open to swallow an unrelated ERROR that arrives during that stretch.
             bool mayCloseOnEvent;
             lock (gate)
             {

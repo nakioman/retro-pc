@@ -198,6 +198,23 @@ public sealed class RetroBoxSerialLineRouterTests
         Assert.False(next.IsCompleted);
     }
 
+    [Theory]
+    [InlineData("GARBAGE")]
+    [InlineData("INSERT BAD_ID,ro")]
+    public void TryRoute_does_not_close_a_follow_up_armed_window_on_a_line_that_is_not_a_valid_event(string line)
+    {
+        var router = new RetroBoxSerialLineRouter();
+        router.ExpectOrphanedReply();
+
+        // Neither a reply nor a valid event: it must not be mistaken for the follow-up's
+        // designed answer, so the window stays open.
+        Assert.False(router.TryRoute(line));
+
+        // With the window still open, the follow-up's real answer -- an unrelated-looking ERROR
+        // as far as the router can tell -- is still absorbed rather than treated as an event.
+        Assert.True(router.TryRoute("ERROR no-tag-detected"));
+    }
+
     [Fact]
     public async Task WaitForClearSlotAsync_returns_at_once_when_no_orphan_is_outstanding()
     {
@@ -220,34 +237,30 @@ public sealed class RetroBoxSerialLineRouterTests
         // Drive the window's expiry explicitly rather than waiting it out in real time.
         time.Advance(TimeSpan.FromSeconds(1));
 
-        await wait;
+        await WithFailureDeadline(wait);
     }
 
     [Fact]
     public async Task WaitForClearSlotAsync_returns_once_the_late_reply_is_absorbed()
     {
-        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30));
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30), timeProvider: time);
         _ = router.BeginCommand();
         router.CancelCommand(new TimeoutException("no reply"));
 
         var wait = router.WaitForClearSlotAsync(CancellationToken.None);
         Assert.False(wait.IsCompleted);
 
-        // The straggler arrives: the slot is clear immediately, without waiting out the window.
+        // The straggler arrives: the slot is clear immediately, without waiting out the window
+        // — the fake clock is never advanced, so nothing but the absorb signal can release this.
         Assert.True(router.TryRoute("OK"));
 
-        await AwaitWithinBound(wait);
+        await WithFailureDeadline(wait);
     }
 
-    // A cleared orphan slot is signalled rather than merely timed out, so a caller waiting on
-    // it wakes up promptly instead of riding out the whole window. Bound the wait instead of
-    // awaiting the task directly, so a lost signal fails fast with a readable message instead
-    // of hanging for the full CI timeout.
-    private static async Task AwaitWithinBound(Task task)
-    {
-        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
-
-        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
-        await task;
-    }
+    // Not a timing budget: nothing here is expected to take anywhere near this long. It exists
+    // so that a regression which stops the wait from ever completing (e.g. broken deadline
+    // arithmetic, or a lost cleared-signal) fails this test with a readable message instead of
+    // hanging the test host indefinitely.
+    private static Task WithFailureDeadline(Task task) => task.WaitAsync(TimeSpan.FromSeconds(30));
 }
