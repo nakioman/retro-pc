@@ -26,16 +26,19 @@ public sealed class RetroBoxStaticAssetsTests
         Assert.False(RetroBoxStaticAssets.TryGet(relativePath, out _, out _));
     }
 
-    [Fact]
-    public void The_panel_loads_nothing_from_the_network()
+    [Theory]
+    [InlineData("index.html")]
+    [InlineData("app.css")]
+    [InlineData("app.js")]
+    public void The_panel_loads_nothing_from_the_network(string relativePath)
     {
-        Assert.True(RetroBoxStaticAssets.TryGet("index.html", out var html, out _));
+        Assert.True(RetroBoxStaticAssets.TryGet(relativePath, out var content, out _));
 
-        var markup = Encoding.UTF8.GetString(html);
+        var text = Encoding.UTF8.GetString(content);
 
-        Assert.DoesNotContain("http://", markup, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("https://", markup, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("//cdn.", markup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("http://", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("//cdn.", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -60,7 +63,7 @@ public sealed class RetroBoxStaticAssetsTests
 
         Assert.True(block.Success, $"Could not find the '{language}' dictionary in app.js.");
 
-        return Regex.Matches(block.Groups["body"].Value, @"^\s{4}([A-Za-z0-9_]+):", RegexOptions.Multiline)
+        return Regex.Matches(block.Groups["body"].Value, @"^\s{4}""?([A-Za-z0-9_-]+)""?:", RegexOptions.Multiline)
             .Select(match => match.Groups[1].Value)
             .OrderBy(key => key, StringComparer.Ordinal)
             .ToArray();

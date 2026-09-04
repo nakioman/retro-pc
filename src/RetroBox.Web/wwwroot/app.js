@@ -20,6 +20,7 @@ const STRINGS = {
     uploaded: "Listo",
     stats: "{count} disquetes, {tagged} grabados",
     loadFailed: "No se pudo leer el catalogo.",
+    networkError: "No se pudo conectar con RetroBox. Revisa la conexion e intenta de nuevo.",
     "unsupported-extension": "Solo se aceptan imagenes .img, .ima y .dsk.",
     "file-too-large": "La imagen supera el limite de subida.",
     "unusable-name": "Ese nombre de archivo no da un ID valido.",
@@ -52,6 +53,7 @@ const STRINGS = {
     uploaded: "Done",
     stats: "{count} floppies, {tagged} tagged",
     loadFailed: "Could not read the catalog.",
+    networkError: "Could not reach RetroBox. Check the connection and try again.",
     "unsupported-extension": "Only .img, .ima and .dsk images are accepted.",
     "file-too-large": "The image exceeds the upload limit.",
     "unusable-name": "That filename yields no valid ID.",
@@ -190,17 +192,22 @@ function renderRow(floppy) {
 
 async function patchFloppy(id, patch, button) {
   button.disabled = true;
-  const response = await fetch("/api/floppies/" + encodeURIComponent(id), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch)
-  });
+  try {
+    const response = await fetch("/api/floppies/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch)
+    });
 
-  if (!response.ok) {
-    window.alert(await readError(response));
+    if (!response.ok) {
+      window.alert(await readError(response));
+    }
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
   }
 
-  button.disabled = false;
   await loadCatalog();
 }
 
@@ -210,12 +217,17 @@ async function deleteFloppy(id, button) {
   }
 
   button.disabled = true;
-  const response = await fetch("/api/floppies/" + encodeURIComponent(id), { method: "DELETE" });
-  if (!response.ok) {
-    window.alert(await readError(response));
+  try {
+    const response = await fetch("/api/floppies/" + encodeURIComponent(id), { method: "DELETE" });
+    if (!response.ok) {
+      window.alert(await readError(response));
+    }
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
   }
 
-  button.disabled = false;
   await loadCatalog();
 }
 
@@ -227,9 +239,18 @@ async function uploadFiles(files) {
     const body = new FormData();
     body.append("file", file, file.name);
 
-    const response = await fetch("/api/floppies", { method: "POST", body });
-    if (!response.ok) {
-      status.textContent = file.name + ": " + (await readError(response));
+    let failure = null;
+    try {
+      const response = await fetch("/api/floppies", { method: "POST", body });
+      if (!response.ok) {
+        failure = await readError(response);
+      }
+    } catch (error) {
+      failure = t("networkError");
+    }
+
+    if (failure !== null) {
+      status.textContent = file.name + ": " + failure;
       await loadCatalog();
       return;
     }
