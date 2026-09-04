@@ -165,6 +165,39 @@ public sealed class RetroBoxSerialLineRouterTests
         Assert.IsType<NfcResponse.Ok>(await pending);
     }
 
+    [Theory]
+    [InlineData("INSERT disk1,ro")]
+    [InlineData("EJECT")]
+    public void TryRoute_closes_a_follow_up_armed_window_on_its_designed_event_answer(string eventLine)
+    {
+        var router = new RetroBoxSerialLineRouter();
+        router.ExpectOrphanedReply();
+
+        // The follow-up's designed answer is an event, not a reply, so it never reaches the
+        // orphan-absorb check by the usual route — it must still close the window.
+        Assert.False(router.TryRoute(eventLine));
+
+        // With the window closed, an unrelated ERROR arriving afterward is not swallowed as
+        // the straggler: it falls through as its own unprompted event, same as always.
+        Assert.False(router.TryRoute("ERROR no-tag-detected"));
+    }
+
+    [Fact]
+    public void TryRoute_does_not_close_a_timeout_armed_window_on_an_event()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var timedOut = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        // A timeout-armed window has nothing to do with events; it must stay open so it can
+        // still absorb the late OK.
+        Assert.False(router.TryRoute("INSERT disk1,ro"));
+
+        var next = router.BeginCommand();
+        Assert.True(router.TryRoute("OK"));
+        Assert.False(next.IsCompleted);
+    }
+
     [Fact]
     public async Task WaitForClearSlotAsync_returns_at_once_when_no_orphan_is_outstanding()
     {

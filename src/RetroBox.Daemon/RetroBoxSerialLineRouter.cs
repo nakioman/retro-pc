@@ -70,6 +70,28 @@ public sealed class RetroBoxSerialLineRouter
         var response = RetroBoxArduinoSerialProtocol.ParseResponse(line);
         if (response is NfcResponse.Unknown)
         {
+            // A follow-up's designed answer is an INSERT/EJECT event, which parses here rather
+            // than as a command reply, so it never reaches the orphan check below. A follow-up-
+            // armed window must still close on it — otherwise it rides out its full duration on
+            // the ordinary happy path, wide open to swallow an unrelated ERROR that arrives
+            // during that stretch.
+            bool mayCloseOnEvent;
+            lock (gate)
+            {
+                mayCloseOnEvent = orphanDeadline != 0 && orphanAbsorbsAnyReply;
+            }
+
+            if (mayCloseOnEvent && IsValidEvent(line))
+            {
+                lock (gate)
+                {
+                    if (orphanDeadline != 0 && orphanAbsorbsAnyReply)
+                    {
+                        ClearOrphanWindow();
+                    }
+                }
+            }
+
             return false;
         }
 
@@ -194,5 +216,18 @@ public sealed class RetroBoxSerialLineRouter
         var cleared = orphanCleared;
         orphanCleared = null;
         cleared?.TrySetResult(true);
+    }
+
+    private static bool IsValidEvent(string line)
+    {
+        try
+        {
+            RetroBoxArduinoSerialProtocol.ParseEvent(line);
+            return true;
+        }
+        catch (RetroBoxArduinoSerialProtocolException)
+        {
+            return false;
+        }
     }
 }
