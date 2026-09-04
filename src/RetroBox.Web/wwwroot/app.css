@@ -120,3 +120,17 @@ button[disabled] { opacity: 0.5; cursor: progress; }
 
 .badge.tagged { color: var(--accent); }
 .badge.untagged { color: var(--warn); }
+
+.drive { border-left: 3px solid var(--accent); }
+
+.drive .actions { margin-top: 0.75rem; }
+
+.drive select {
+  min-width: 14rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  background: var(--inset);
+  color: var(--text);
+  font: inherit;
+}

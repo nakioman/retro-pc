@@ -68,6 +68,22 @@ public sealed class RetroBoxStaticAssetsTests
         Assert.Equal(spanish, english);
     }
 
+    [Theory]
+    [InlineData("no-tag-present")]
+    [InlineData("tag-already-assigned")]
+    [InlineData("write-failed")]
+    [InlineData("write-unconfirmed")]
+    [InlineData("no-controller")]
+    public void Every_nfc_error_code_has_text_in_both_languages(string code)
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+        var occurrences = Regex.Matches(script, $"\"{code}\"\\s*:").Count;
+
+        Assert.Equal(2, occurrences);
+    }
+
     private static string[] ExtractKeys(string script, string language)
     {
         var block = Regex.Match(

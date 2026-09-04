@@ -12,7 +12,7 @@ const STRINGS = {
     catalogBroken: "El catalogo tiene un error y no se pudo cargar: {message}",
     tagged: "Grabado",
     untagged: "Sin NFC",
-    untaggedHelp: "Este disquete no se puede insertar hasta que se grabe una etiqueta NFC para el. Grabar etiquetas desde el panel llega mas adelante.",
+    untaggedHelp: "Este disquete no se puede insertar hasta que se grabe una etiqueta NFC para el. Ponelo en la disquetera y asignale un tag desde la seccion de arriba.",
     readOnly: "Solo lectura",
     readWrite: "Lectura y escritura",
     deleteAction: "Borrar",
@@ -33,7 +33,21 @@ const STRINGS = {
     "unknown-floppy": "Ese disquete no existe.",
     "invalid-patch": "El cambio no es valido.",
     "delete-incomplete": "Se quito del catalogo, pero el archivo quedo en disco.",
-    unexpected: "Error inesperado."
+    unexpected: "Error inesperado.",
+    driveTitle: "Disquetera",
+    driveUnavailable: "Sin controlador conectado",
+    driveEmpty: "No hay disco en la disquetera",
+    driveLoaded: "Disco puesto: {label}",
+    driveBlankTag: "Tag en blanco, listo para asignar ({uid})",
+    assignButton: "Grabar tag",
+    assignReassign: "Reasignar este tag",
+    assignDone: "Tag grabado",
+    confirmReassign: "Ese tag ya es de \"{owner}\". Reasignarlo a este disquete?",
+    "no-tag-present": "No hay ningun disco en la disquetera.",
+    "tag-already-assigned": "Ese tag ya esta asignado a otro disquete.",
+    "write-failed": "El controlador no pudo grabar el tag.",
+    "write-unconfirmed": "No se pudo confirmar si el tag quedo grabado. Fijate que dice la disquetera.",
+    "no-controller": "No hay controlador de disquetes conectado."
   },
   en: {
     subtitle: "Floppy library",
@@ -46,7 +60,7 @@ const STRINGS = {
     catalogBroken: "The catalog has an error and could not be loaded: {message}",
     tagged: "Tagged",
     untagged: "No NFC",
-    untaggedHelp: "This floppy cannot be inserted until an NFC tag is written for it. Writing tags from the panel comes later.",
+    untaggedHelp: "This floppy cannot be inserted until an NFC tag is written for it. Put it in the drive and assign it a tag from the section above.",
     readOnly: "Read-only",
     readWrite: "Read-write",
     deleteAction: "Delete",
@@ -67,7 +81,21 @@ const STRINGS = {
     "unknown-floppy": "That floppy does not exist.",
     "invalid-patch": "That change is not valid.",
     "delete-incomplete": "Removed from the catalog, but the file is still on disk.",
-    unexpected: "Unexpected error."
+    unexpected: "Unexpected error.",
+    driveTitle: "Drive",
+    driveUnavailable: "No controller connected",
+    driveEmpty: "No disk in the drive",
+    driveLoaded: "Disk in the drive: {label}",
+    driveBlankTag: "Blank tag, ready to assign ({uid})",
+    assignButton: "Write tag",
+    assignReassign: "Reassign this tag",
+    assignDone: "Tag written",
+    confirmReassign: "That tag already belongs to \"{owner}\". Reassign it to this floppy?",
+    "no-tag-present": "There is no disk in the drive.",
+    "tag-already-assigned": "That tag is already assigned to another floppy.",
+    "write-failed": "The controller could not write the tag.",
+    "write-unconfirmed": "Could not confirm whether the tag was written. Check the drive.",
+    "no-controller": "No floppy controller is connected."
   }
 };
 
@@ -104,10 +132,13 @@ function applyStaticText() {
   });
 }
 
+function describeError(body) {
+  return t(body.code) !== body.code ? t(body.code) : body.message || t("unexpected");
+}
+
 async function readError(response) {
   try {
-    const body = await response.json();
-    return t(body.code) !== body.code ? t(body.code) : body.message || t("unexpected");
+    return describeError(await response.json());
   } catch (error) {
     return t("unexpected");
   }
@@ -158,6 +189,8 @@ function render() {
   for (const floppy of visible) {
     list.appendChild(renderRow(floppy));
   }
+
+  renderDrive();
 }
 
 function renderRow(floppy) {
@@ -266,6 +299,118 @@ async function uploadFiles(files) {
   status.textContent = t("uploaded");
   await loadCatalog();
 }
+
+let drive = { state: "unavailable", floppyId: null, mode: null, tagUid: null };
+
+function renderDrive() {
+  const section = document.getElementById("drive");
+  const state = document.getElementById("drive-state");
+  const detail = document.getElementById("drive-detail");
+  const assign = document.getElementById("assign");
+  const target = document.getElementById("assign-target");
+
+  section.hidden = drive.state === "unavailable";
+  if (section.hidden) {
+    return;
+  }
+
+  if (drive.state === "loaded") {
+    const known = floppies.find((floppy) => floppy.id === drive.floppyId);
+    state.textContent = t("driveLoaded", { label: known ? known.label : drive.floppyId });
+    detail.textContent = t("assignReassign");
+  } else if (drive.state === "blankTag") {
+    state.textContent = t("driveBlankTag", { uid: drive.tagUid });
+    detail.textContent = "";
+  } else {
+    state.textContent = t("driveEmpty");
+    detail.textContent = "";
+  }
+
+  assign.hidden = drive.state === "empty";
+  if (assign.hidden) {
+    return;
+  }
+
+  const selected = target.value;
+  target.textContent = "";
+  for (const floppy of floppies) {
+    const option = document.createElement("option");
+    option.value = floppy.id;
+    option.textContent = floppy.label;
+    target.appendChild(option);
+  }
+
+  if (selected) {
+    target.value = selected;
+  }
+}
+
+function subscribeToDrive() {
+  const source = new EventSource("/api/drive/events");
+
+  source.addEventListener("message", (event) => {
+    drive = JSON.parse(event.data);
+    renderDrive();
+  });
+
+  // EventSource reconnects on its own; a failure only means the panel is momentarily blind.
+  source.addEventListener("error", () => {
+    drive = { state: "unavailable", floppyId: null, mode: null, tagUid: null };
+    renderDrive();
+  });
+}
+
+async function writeTag(confirm) {
+  const button = document.getElementById("assign-write");
+  const floppyId = document.getElementById("assign-target").value;
+
+  if (!floppyId) {
+    return;
+  }
+
+  button.disabled = true;
+
+  try {
+    const response = await fetch("/api/nfc/write", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ floppyId: floppyId, confirm: confirm })
+    });
+
+    if (response.ok) {
+      document.getElementById("drive-detail").textContent = t("assignDone");
+      await loadCatalog();
+      return;
+    }
+
+    const body = await response.json().catch(() => null);
+
+    // A blankTag reading is not proof the tag is free (see Ruling 27: right after a controller
+    // reconnect the tracker can briefly forget an already-cataloged disk is seated), so the
+    // first attempt always goes unconfirmed and this 409 is the real gate, not a shortcut.
+    if (body && body.code === "tag-already-assigned" && !confirm) {
+      const owner = floppies.find((floppy) => floppy.id === body.previousFloppyId);
+      if (window.confirm(t("confirmReassign", { owner: owner ? owner.label : body.previousFloppyId }))) {
+        button.disabled = false;
+        await writeTag(true);
+        return;
+      }
+
+      return;
+    }
+
+    // body was already consumed above (a Response body can only be read once), so the message
+    // is derived from it directly rather than through readError, which re-reads the response.
+    window.alert(body ? describeError(body) : t("unexpected"));
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.getElementById("assign-write").addEventListener("click", () => writeTag(false));
+subscribeToDrive();
 
 document.getElementById("pick").addEventListener("click", () => document.getElementById("file").click());
 document.getElementById("file").addEventListener("change", (event) => {
