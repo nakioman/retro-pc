@@ -1,6 +1,7 @@
 using System.Text;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using static RetroBox.Tests.RetroBoxSerialLineRouterTestHelpers;
 
 namespace RetroBox.Tests;
 
@@ -110,7 +111,7 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     {
         var router = new RetroBoxSerialLineRouter();
         var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(50));
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(300));
 
         await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
             async () => await channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
@@ -127,14 +128,82 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         Assert.Equal("04A13BFE", tagId.Uid);
     }
 
-    private static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
+    [Fact]
+    public async Task WriteTagAsync_asks_for_status_after_a_successful_write()
     {
-        for (var attempt = 0; attempt < 100 && !router.HasPendingCommand; attempt++)
-        {
-            await Task.Delay(10);
-        }
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
 
-        Assert.True(router.HasPendingCommand, "The command was never registered with the router.");
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("OK"));
+        await write;
+
+        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteTagAsync_does_not_ask_for_status_after_a_failed_write()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("ERROR not written"));
+        await write;
+
+        Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_waits_for_a_command_holding_the_gate()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        var read = channel.ReadTagIdAsync();
+        await WaitForPendingCommand(router);
+
+        var status = channel.SendStatusAsync();
+        await Task.Delay(50);
+
+        Assert.False(status.IsCompleted);
+        Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+
+        await AwaitWithinBound(read);
+        await AwaitWithinBound(status);
+
+        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_does_not_register_a_pending_command()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+
+        await channel.SendStatusAsync();
+
+        Assert.False(router.HasPendingCommand);
+    }
+
+    // A gate release is a chain of async continuations (SemaphoreSlim -> the write -> the
+    // finally block), so it does not necessarily land in the same synchronous step as the
+    // event that triggers it. Bound the wait instead of awaiting the task directly, so a lost
+    // release fails fast with a readable message instead of hanging for the full CI timeout.
+    private static async Task AwaitWithinBound(Task task)
+    {
+        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        await task;
     }
 
     private sealed class ThrowingTextWriter : TextWriter

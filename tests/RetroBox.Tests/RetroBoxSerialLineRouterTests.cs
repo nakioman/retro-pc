@@ -16,6 +16,7 @@ public sealed class RetroBoxSerialLineRouterTests
         var pending = router.BeginCommand();
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
 
+        Assert.True(pending.IsCompleted);
         var tagId = Assert.IsType<NfcResponse.TagId>(await pending);
         Assert.Equal("04A13BFE", tagId.Uid);
     }
@@ -54,6 +55,7 @@ public sealed class RetroBoxSerialLineRouterTests
         var next = router.BeginCommand();
         Assert.True(router.TryRoute("OK"));
 
+        Assert.True(next.IsCompleted);
         Assert.IsType<NfcResponse.Ok>(await next);
         await Assert.ThrowsAsync<TimeoutException>(async () => await timedOut);
     }

@@ -1,6 +1,8 @@
 using System.Text;
+using System.Threading.Channels;
 using RetroBox.Core;
 using RetroBox.Daemon;
+using static RetroBox.Tests.RetroBoxSerialLineRouterTestHelpers;
 
 namespace RetroBox.Tests;
 
@@ -263,11 +265,12 @@ public sealed class RetroBoxDaemonTests
     public async Task WatchSocketAsync_queries_status_once_per_down_to_up_transition()
     {
         var serialOutput = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(new RetroBoxSerialLineRouter(), serialOutput);
         using var cancellation = new CancellationTokenSource();
 
         var watch = RetroBoxDaemon.WatchSocketAsync(
             new ScriptedSocketProbe(false, true, true),
-            serialOutput,
+            channel,
             TimeSpan.FromMilliseconds(5),
             cancellation.Token);
         await Task.Delay(100);
@@ -281,11 +284,12 @@ public sealed class RetroBoxDaemonTests
     public async Task WatchSocketAsync_queries_status_again_after_socket_goes_down()
     {
         var serialOutput = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(new RetroBoxSerialLineRouter(), serialOutput);
         using var cancellation = new CancellationTokenSource();
 
         var watch = RetroBoxDaemon.WatchSocketAsync(
             new ScriptedSocketProbe(true, false, true, true),
-            serialOutput,
+            channel,
             TimeSpan.FromMilliseconds(5),
             cancellation.Token);
         await Task.Delay(100);
@@ -293,6 +297,35 @@ public sealed class RetroBoxDaemonTests
         await watch;
 
         Assert.Equal("STATUS\nSTATUS\n", serialOutput.ToString());
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_serializes_status_polls_behind_an_in_flight_command()
+    {
+        var serialOutput = new StringWriter();
+        var router = new RetroBoxSerialLineRouter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serialOutput);
+        using var cancellation = new CancellationTokenSource();
+
+        var read = channel.ReadTagIdAsync(cancellation.Token);
+        await WaitForPendingCommand(router);
+
+        var watch = RetroBoxDaemon.WatchSocketAsync(
+            new ScriptedSocketProbe(true),
+            channel,
+            TimeSpan.FromMilliseconds(5),
+            cancellation.Token);
+        await Task.Delay(50);
+
+        Assert.DoesNotContain("STATUS", serialOutput.ToString(), StringComparison.Ordinal);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        await read;
+        await WaitForStatusWrite(serialOutput);
+        cancellation.Cancel();
+        await watch;
+
+        Assert.Contains("STATUS", serialOutput.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -340,12 +373,116 @@ public sealed class RetroBoxDaemonTests
         Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
     }
 
+    [Fact]
+    public async Task RunAsync_tracks_the_drive_state_from_events()
+    {
+        var tracker = new RetroBoxDriveStateTracker();
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            new RecordingFloppyControlClient(),
+            new StringReader(
+                """
+                INSERT disk1,ro
+
+                """),
+            new StringWriter(),
+            driveState: tracker);
+
+        await daemon.RunAsync();
+
+        var loaded = Assert.IsType<RetroBoxDriveState.Loaded>(tracker.Current);
+        Assert.Equal("disk1", loaded.FloppyId);
+    }
+
+    [Fact]
+    public async Task RunAsync_writes_a_tag_through_an_injected_channel_and_mounts_the_reannounced_disk()
+    {
+        var client = new RecordingFloppyControlClient();
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial);
+        var input = new PipeTextReader();
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode),
+            client,
+            input,
+            new StringWriter(),
+            lineRouter: router,
+            nfcChannel: channel);
+
+        var run = daemon.RunAsync();
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+
+        Assert.Contains("WRITE disk1,ro", serial.ToString(), StringComparison.Ordinal);
+
+        // The reply travels through the daemon's own read loop, exactly like a real controller
+        // reply would -- not fed straight into the router, which would skip the seam under test.
+        input.WriteLine("OK");
+
+        Assert.IsType<NfcResponse.Ok>(await write);
+        Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
+
+        input.WriteLine("INSERT disk1,ro");
+        await WaitForCondition(() => client.Calls.Count > 0);
+
+        input.Complete();
+        var exitCode = await AwaitWithinBound(run);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
+    }
+
+    private static async Task WaitForStatusWrite(StringWriter serialOutput)
+    {
+        await WaitForCondition(() => serialOutput.ToString().Contains("STATUS", StringComparison.Ordinal));
+    }
+
+    private static async Task WaitForCondition(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 100 && !condition(); attempt++)
+        {
+            await Task.Delay(10);
+        }
+    }
+
+    private static async Task<T> AwaitWithinBound<T>(Task<T> task)
+    {
+        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        return await task;
+    }
+
     private sealed class BlockingTextReader : TextReader
     {
         public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return null;
+        }
+    }
+
+    /// <summary>Feeds lines to a daemon's read loop on demand, like a live serial port would.</summary>
+    private sealed class PipeTextReader : TextReader
+    {
+        private readonly Channel<string> channel = Channel.CreateUnbounded<string>();
+
+        public void WriteLine(string line) => channel.Writer.TryWrite(line);
+
+        public void Complete() => channel.Writer.TryComplete();
+
+        public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await channel.Reader.ReadAsync(cancellationToken);
+            }
+            catch (ChannelClosedException)
+            {
+                return null;
+            }
         }
     }
 

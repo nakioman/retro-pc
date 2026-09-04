@@ -2,12 +2,18 @@ using RetroBox.Core;
 
 namespace RetroBox.Daemon;
 
+/// <summary>Requests a STATUS re-announcement without registering a routed reply.</summary>
+public interface IRetroBoxStatusRequester
+{
+    Task SendStatusAsync(CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Serializes controller commands over the single serial line the daemon owns.
 /// One command at a time is not a limitation but the physical reality: there is
 /// one drive and one reader.
 /// </summary>
-public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
+public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel, IRetroBoxStatusRequester
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
@@ -36,10 +42,29 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
         string mode,
         CancellationToken cancellationToken = default)
     {
+        // The firmware answers a WRITE and then stays quiet, so the daemon would never learn
+        // the tag changed. STATUS makes it re-announce the seated tag as an INSERT event, which
+        // mounts the newly assigned image through the normal event path.
         return SendAsync(
             RetroBoxArduinoSerialProtocol.BuildWriteCommand(id, mode),
-            followUpOnOk: null,
+            followUpOnOk: RetroBoxArduinoSerialProtocol.BuildStatusCommand(),
             cancellationToken);
+    }
+
+    public async Task SendStatusAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            await serialOutput.WriteLineAsync(
+                RetroBoxArduinoSerialProtocol.BuildStatusCommand().AsMemory(),
+                cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private async Task<NfcResponse> SendAsync(
