@@ -246,6 +246,32 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     }
 
     [Fact]
+    public async Task A_status_poll_s_own_answer_is_not_handed_to_the_next_command()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5));
+
+        await channel.SendStatusAsync();
+
+        var next = channel.ReadTagIdAsync();
+
+        // The quarantine must hold the next command until the STATUS answer is accounted for.
+        Assert.False(router.HasPendingCommand);
+        Assert.DoesNotContain("TAGID", serial.ToString(), StringComparison.Ordinal);
+
+        // STATUS answers ERROR when the drive is empty -- the one reply shape TryRoute would
+        // otherwise hand to whatever command is pending, completing a TAGID as "empty" and
+        // dropping the real Tag ID line that follows.
+        Assert.True(router.TryRoute("ERROR no-tag-detected"));
+        Assert.False(next.IsCompleted);
+
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        Assert.IsType<NfcResponse.TagId>(await next);
+    }
+
+    [Fact]
     public async Task SendStatusAsync_does_not_register_a_pending_command()
     {
         var router = new RetroBoxSerialLineRouter();

@@ -60,6 +60,13 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             await serialOutput.WriteLineAsync(
                 RetroBoxArduinoSerialProtocol.BuildStatusCommand().AsMemory(),
                 cancellationToken);
+
+            // STATUS answers INSERT/EJECT with a disk seated, but ERROR with the drive empty --
+            // and an unprompted ERROR is handed to whatever command is pending. Without a window
+            // here, a TAGID that takes the gate right after this release completes as "empty"
+            // and the real Tag ID line is dropped with nothing pending. This is the same
+            // quarantine WriteTagAsync's follow-up arms, for the same reason.
+            router.ExpectOrphanedReply();
         }
         finally
         {
