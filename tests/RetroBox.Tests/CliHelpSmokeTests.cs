@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using RetroBox.Cli;
+using RetroBox.Daemon;
 
 namespace RetroBox.Tests;
 
@@ -405,9 +406,8 @@ public sealed class CliHelpSmokeTests
     {
         // The guard the unit change never had. The installer writes SERIAL_DEVICE=/dev/ttyUSB0
         // even when it detected no controller, so on a controller-less appliance ExecStart opens
-        // a device that is not there, and systemd hands the process /dev/null on stdin. Both must
-        // degrade to "no controller, panel still up": exiting either way (non-zero from the
-        // failed open, or zero at stdin EOF) leaves the appliance with no panel at all.
+        // a device that is not there. The supervisor must not exit over that: it keeps retrying
+        // the missing device on an interval, and the web panel keeps serving throughout.
         var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-noserial", Guid.NewGuid().ToString("N"));
         var missingDevice = $"/dev/retrobox-missing-{Guid.NewGuid():N}";
         var originalIn = Console.In;
@@ -450,12 +450,11 @@ public sealed class CliHelpSmokeTests
                 Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
 
                 // The panel can answer before the failed open is even attempted (the host starts
-                // first, on purpose), so both diagnostics are waited for rather than read once.
-                // The second one is also the ordering the assertions below need: once it appears
-                // the read loop has already ended on stdin EOF, so a daemon that is still running
-                // and still answering is proof that EOF did not take the panel down with it.
+                // first, on purpose). Once the "unavailable" diagnostic appears the supervisor is
+                // in its retry loop and keeps retrying indefinitely without exiting; a daemon that
+                // is still running and still answering here is proof the missing device does not
+                // take the panel down with it.
                 await WaitForStderr(stderr, "Floppy controller is unavailable", invokeTask);
-                await WaitForStderr(stderr, "the web panel keeps serving", invokeTask);
 
                 Assert.False(invokeTask.IsCompleted, $"The daemon exited while the panel was serving: {stderr}");
                 Assert.Contains("\"floppies\"", await client.GetStringAsync(url), StringComparison.Ordinal);
@@ -478,6 +477,71 @@ public sealed class CliHelpSmokeTests
                 Directory.Delete(missingRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task Daemon_recovers_the_serial_device_after_transient_open_failures()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-reopen", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var deviceReader = new PipeTextReader();
+        var deviceWriter = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                attempts++;
+                if (attempts <= 2)
+                {
+                    throw new RetroBoxSerialDeviceException($"attempt {attempts} failed");
+                }
+
+                deviceReader.WriteLine("INIT 1.0");
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), deviceReader, deviceWriter));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-reopen-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller connected", invocation);
+
+            // Reported once per outage, not once per failed attempt: two failed opens must leave
+            // exactly one "unavailable" diagnostic behind.
+            Assert.Equal(1, CountOccurrences(stderr.ToString(), "Floppy controller is unavailable"));
+
+            await WaitForStderr(stdout, "Floppy controller initialized (version 1.0)", invocation);
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        return (haystack.Length - haystack.Replace(needle, string.Empty, StringComparison.Ordinal).Length) / needle.Length;
     }
 
     private static int ReserveFreeTcpPort()
@@ -569,6 +633,8 @@ public sealed class CliHelpSmokeTests
             Channel.CreateUnbounded<string>();
 
         public void Complete() => channel.Writer.TryComplete();
+
+        public void WriteLine(string line) => channel.Writer.TryWrite(line);
 
         // Console.SetIn wraps whatever is assigned in a SyncTextReader, whose ReadLineAsync goes
         // through the synchronous ReadLine, not this type's ReadLineAsync(CancellationToken)

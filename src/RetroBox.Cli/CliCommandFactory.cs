@@ -33,12 +33,13 @@ public static class CliCommandFactory
         IRetroBoxBootHotkeyDetector? hotkeyDetector = null,
         IRetroBoxBootSelectorUi? selectorUi = null,
         Func<string, IRetroBoxNfcClient>? nfcClientFactory = null,
-        IBootSplash? bootSplash = null)
+        IBootSplash? bootSplash = null,
+        Func<RetroBoxSerialDeviceOptions, CancellationToken, Task<RetroBoxSerialDevice>>? serialDeviceOpener = null)
     {
         var rootCommand = new RootCommand("Retro PC appliance control tool.");
 
         rootCommand.Subcommands.Add(CreateBootCommand(bootRunner, hotkeyDetector, selectorUi, bootSplash));
-        rootCommand.Subcommands.Add(CreateDaemonCommand(daemonRunner));
+        rootCommand.Subcommands.Add(CreateDaemonCommand(daemonRunner, serialDeviceOpener));
         rootCommand.Subcommands.Add(CreateVmCommand());
         rootCommand.Subcommands.Add(CreatePlaceholderCommand(
             "floppy",
@@ -51,7 +52,11 @@ public static class CliCommandFactory
         return rootCommand;
     }
 
-    private static Command CreateDaemonCommand(Func<RetroBoxDaemonCommandRequest, int>? daemonRunner)
+    private static readonly TimeSpan SerialReopenInterval = TimeSpan.FromSeconds(5);
+
+    private static Command CreateDaemonCommand(
+        Func<RetroBoxDaemonCommandRequest, int>? daemonRunner,
+        Func<RetroBoxSerialDeviceOptions, CancellationToken, Task<RetroBoxSerialDevice>>? serialDeviceOpener)
     {
         var configRootOption = ConfigRootOption();
         var socketPathOption = new Option<string?>("--floppy-control-socket")
@@ -153,60 +158,18 @@ public static class CliCommandFactory
                     cancellation.Cancel();
                 };
 
-                // The panel is started before the controller is opened and torn down before it.
-                // Starting first is what keeps a controller-less appliance serving: the installer
-                // writes a --serial-port even when it detected no controller, so opening the
-                // device first would abort before the panel ever bound its port. Disposing first
-                // is the channel-lifetime contract: the host closes over the serial writer, so it
-                // must not outlive the device. `using` disposes in reverse declaration order and
-                // so cannot express "started first, disposed first"; hence the explicit finally.
-                // The catalog source is declared above both and outlives them, as before.
+                // The panel starts before the controller and is torn down after it. Starting
+                // first is what keeps a controller-less appliance serving: the installer writes a
+                // --serial-port even when it detected no controller, so opening the device first
+                // would abort before the panel ever bound its port.
                 var webHost = await TryStartWebHost(
                     request.WebPort, request.ConfigRoot, catalogSource, cancellation.Token);
-                var device = await TryOpenSerialDevice(serialOptions);
 
                 try
                 {
-                    var daemon = new RetroBoxDaemon(
-                        catalogSource,
-                        client,
-                        device?.Reader ?? Console.In,
-                        Console.Out,
-                        request.Echo,
-                        device?.Writer);
-
-                    var exitCode = 0;
-
-                    try
-                    {
-                        exitCode = await daemon.RunAsync(cancellation.Token);
-                    }
-                    catch (RetroBoxSerialDeviceException ex) when (webHost is not null)
-                    {
-                        // A controller unplugged mid-run must not take the panel down with it:
-                        // exiting non-zero hands the unit to Restart=on-failure, which reopens a
-                        // device that is no longer there and crash-loops. With no panel running
-                        // there is nothing left to serve, so that case still propagates and lets
-                        // systemd retry the device.
-                        Console.Error.WriteLine(
-                            $"Floppy controller is gone, continuing without it: {ex.Message}");
-                    }
-
-                    // Under systemd stdin is /dev/null, so without a controller the read loop
-                    // ends immediately. While the panel is up the process has to stay up and keep
-                    // serving it; shutdown comes from Ctrl+C or the invocation's token.
-                    if (webHost is not null)
-                    {
-                        if (!cancellation.IsCancellationRequested)
-                        {
-                            Console.Error.WriteLine(
-                                "Floppy event stream ended; the web panel keeps serving until the daemon is stopped.");
-                        }
-
-                        await WaitForCancellation(cancellation.Token);
-                    }
-
-                    return exitCode;
+                    return await SuperviseSerialDeviceAsync(
+                        catalogSource, client, request, serialOptions, webHost is not null,
+                        serialDeviceOpener ?? OpenSerialDeviceAsync, cancellation.Token);
                 }
                 finally
                 {
@@ -214,8 +177,6 @@ public static class CliCommandFactory
                     {
                         await webHost.DisposeAsync();
                     }
-
-                    device?.Dispose();
                 }
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or ArgumentException or IOException
@@ -242,27 +203,108 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static async Task<RetroBoxSerialDevice?> TryOpenSerialDevice(RetroBoxSerialDeviceOptions? options)
+    private static Task<RetroBoxSerialDevice> OpenSerialDeviceAsync(
+        RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
     {
-        if (options is null)
+        return new RetroBoxSerialDeviceRunner(options.Port, options.Baud).OpenAsync(cancellationToken);
+    }
+
+    private static async Task<int> SuperviseSerialDeviceAsync(
+        IRetroBoxCatalogSource catalogSource,
+        IRetroBoxFloppyControlClient client,
+        RetroBoxDaemonCommandRequest request,
+        RetroBoxSerialDeviceOptions? serialOptions,
+        bool panelIsRunning,
+        Func<RetroBoxSerialDeviceOptions, CancellationToken, Task<RetroBoxSerialDevice>> openDevice,
+        CancellationToken cancellationToken)
+    {
+        if (serialOptions is null)
         {
-            return null;
+            // No controller configured at all: read events from stdin, which is what --echo and
+            // piping events by hand rely on. Under systemd stdin is /dev/null, so this returns at
+            // once and the panel, if any, keeps the process alive below.
+            var exitCode = await new RetroBoxDaemon(
+                catalogSource, client, Console.In, Console.Out, request.Echo).RunAsync(cancellationToken);
+
+            if (panelIsRunning)
+            {
+                await WaitForCancellation(cancellationToken);
+            }
+
+            return exitCode;
         }
 
+        var reportedUnavailable = false;
+        var lastExitCode = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            RetroBoxSerialDevice device;
+
+            try
+            {
+                device = await openDevice(serialOptions, cancellationToken);
+            }
+            catch (RetroBoxSerialDeviceException ex)
+            {
+                // Reported once per outage, not once per attempt: the installer writes a
+                // --serial-port even with no controller detected, so an appliance that never had
+                // one would otherwise fill the journal.
+                if (!reportedUnavailable)
+                {
+                    reportedUnavailable = true;
+                    Console.Error.WriteLine(
+                        $"Floppy controller is unavailable, retrying every {SerialReopenInterval.TotalSeconds:0}s: {ex.Message}");
+                }
+
+                if (!await DelayAsync(SerialReopenInterval, cancellationToken))
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            reportedUnavailable = false;
+            Console.Error.WriteLine("Floppy controller connected.");
+
+            using (device)
+            {
+                try
+                {
+                    lastExitCode = await new RetroBoxDaemon(
+                        catalogSource,
+                        client,
+                        device.Reader,
+                        Console.Out,
+                        request.Echo,
+                        device.Writer).RunAsync(cancellationToken);
+                }
+                catch (RetroBoxSerialDeviceException ex)
+                {
+                    Console.Error.WriteLine($"Floppy controller went away: {ex.Message}");
+                }
+            }
+
+            if (!await DelayAsync(SerialReopenInterval, cancellationToken))
+            {
+                break;
+            }
+        }
+
+        return lastExitCode;
+    }
+
+    private static async Task<bool> DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
         try
         {
-            return await new RetroBoxSerialDeviceRunner(options.Port, options.Baud).OpenAsync();
+            await Task.Delay(delay, cancellationToken);
+            return true;
         }
-        catch (RetroBoxSerialDeviceException ex)
+        catch (OperationCanceledException)
         {
-            // The installer writes a serial device even when it detected no controller, so "that
-            // port is not there" is a normal appliance state, not an operator error. It degrades
-            // to "no controller" the same way a busy port degrades to "no panel" below: aborting
-            // would crash-loop the unit under Restart=on-failure, and with no hardware attached
-            // the panel is the whole remaining point of the process.
-            Console.Error.WriteLine(
-                $"Floppy controller is unavailable, continuing without it: {ex.Message}");
-            return null;
+            return false;
         }
     }
 
