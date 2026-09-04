@@ -90,13 +90,28 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
         }
     }
 
+    /// <summary>
+    /// Confirms the catalog can currently be loaded and validated, without mutating anything.
+    /// The upload endpoint calls this before handing off to RetroBoxFloppyImporter, whose own
+    /// store.Load()/store.Save() would otherwise surface an unrelated broken catalog entry as if
+    /// the uploaded file itself were invalid. Safe to call from inside RunExclusively: the
+    /// underlying Lock is reentrant on the same thread.
+    /// </summary>
+    public void EnsureCatalogIsLoadable()
+    {
+        lock (gate)
+        {
+            LoadOrThrow();
+        }
+    }
+
     private RetroBoxCatalogData LoadOrThrow()
     {
         try
         {
             return store.Load();
         }
-        catch (RetroBoxCatalogException ex)
+        catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
         {
             throw new RetroBoxCatalogUnavailableException($"The catalog could not be loaded: {ex.Message}", ex);
         }

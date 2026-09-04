@@ -76,21 +76,47 @@ public static class RetroBoxLibraryEndpoints
         }
 
         string? id = null;
-        RetroBoxCatalogException? importError = null;
+        UploadFailure? failure = null;
 
         library.RunExclusively(() =>
         {
-            var resolvedId = ResolveFreeId(slug, catalogSource);
-
-            // Both the scratch and the cataloged filename come from the resolved ID, not the
-            // uploaded name: RetroBoxFloppyImporter targets catalogedRoot/Path.GetFileName(source),
-            // so two uploads sharing an original filename would otherwise collide on that move
-            // even though ResolveFreeId correctly gave them different catalog IDs.
-            var finalScratchPath = Path.Combine(options.ScratchRoot, resolvedId + extension);
+            string? finalScratchPath = null;
+            var moved = false;
 
             try
             {
-                File.Move(stagingPath, finalScratchPath, overwrite: false);
+                // Checked explicitly, ahead of the import: RetroBoxFloppyImporter's own
+                // store.Load()/store.Save() throw the same plain RetroBoxCatalogException for an
+                // unrelated broken catalog entry as for a genuine problem with this upload, and it
+                // is not ours to change. Without this check first, a broken sibling entry would be
+                // reported to the uploader as "your file was bad."
+                library.EnsureCatalogIsLoadable();
+
+                var resolvedId = ResolveFreeId(slug, catalogSource);
+
+                // Both the scratch and the cataloged filename come from the resolved ID, not the
+                // uploaded name: RetroBoxFloppyImporter targets catalogedRoot/Path.GetFileName(source),
+                // so two uploads sharing an original filename would otherwise collide on that move
+                // even though ResolveFreeId correctly gave them different catalog IDs.
+                finalScratchPath = Path.Combine(options.ScratchRoot, resolvedId + extension);
+
+                try
+                {
+                    File.Move(stagingPath, finalScratchPath, overwrite: false);
+                    moved = true;
+                }
+                catch (IOException ex)
+                {
+                    // The scratch root is also reachable directly over the LAN (the Samba share
+                    // that is the documented way images reach the appliance), so a file with this
+                    // exact resolved name can already be sitting there. Report it and leave it
+                    // alone: it is not this request's file to delete.
+                    failure = new UploadFailure(
+                        StatusCodes.Status409Conflict,
+                        "scratch-name-taken",
+                        $"A file named '{resolvedId}{extension}' already exists in the scratch directory: {ex.Message}");
+                    return;
+                }
 
                 new RetroBoxFloppyImporter().Import(new RetroBoxFloppyImportRequest
                 {
@@ -105,9 +131,13 @@ public static class RetroBoxLibraryEndpoints
                 id = resolvedId;
                 catalogSource.TryReload();
             }
+            catch (RetroBoxCatalogUnavailableException ex)
+            {
+                failure = new UploadFailure(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
+            }
             catch (RetroBoxCatalogException ex)
             {
-                importError = ex;
+                failure = new UploadFailure(StatusCodes.Status400BadRequest, "import-failed", ex.Message);
             }
             finally
             {
@@ -115,18 +145,26 @@ public static class RetroBoxLibraryEndpoints
                 // exists is a no-op. This runs for every failure shape, not just
                 // RetroBoxCatalogException, so an UnauthorizedAccessException or a disk-full
                 // IOException from the importer does not leak the scratch copy either.
+                // finalScratchPath is only ever deleted when this request itself moved a file
+                // there (moved == true) — otherwise, on a scratch-name collision, it belongs to
+                // whoever staged it first and must not be touched.
                 SafeDelete(stagingPath);
-                SafeDelete(finalScratchPath);
+                if (moved && finalScratchPath is not null)
+                {
+                    SafeDelete(finalScratchPath);
+                }
             }
         });
 
-        if (importError is not null)
+        if (failure is not null)
         {
-            return Error(StatusCodes.Status400BadRequest, "import-failed", importError.Message);
+            return Error(failure.StatusCode, failure.Code, failure.Message);
         }
 
         return Results.Created($"/api/floppies/{id}", null);
     }
+
+    private sealed record UploadFailure(int StatusCode, string Code, string Message);
 
     private static IResult Delete(string id, RetroBoxFloppyLibrary library, IRetroBoxCatalogSource catalogSource)
     {

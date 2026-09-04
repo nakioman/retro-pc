@@ -112,6 +112,28 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Post_floppies_reports_a_scratch_name_collision_without_deleting_the_existing_file()
+    {
+        await using var context = await StartAsync();
+
+        // The scratch root is also reachable directly over the LAN (the Samba share that is the
+        // documented way images reach the appliance), so a file with the exact name this upload
+        // will resolve to can already be sitting there before the request ever arrives.
+        var preExisting = Path.Combine(root, "scratch", "disk.img");
+        var preExistingContent = new byte[] { 1, 2, 3, 4 };
+        File.WriteAllBytes(preExisting, preExistingContent);
+
+        using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("scratch-name-taken", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        // The assertion that actually matters: the file this request did not create is untouched.
+        Assert.True(File.Exists(preExisting));
+        Assert.Equal(preExistingContent, File.ReadAllBytes(preExisting));
+    }
+
+    [Fact]
     public async Task Delete_floppy_removes_it_from_the_catalog()
     {
         await using var context = await StartAsync();
@@ -204,6 +226,28 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         var body = await patch.Content.ReadAsStringAsync();
         Assert.Contains("catalog-unavailable", body, StringComparison.Ordinal);
         Assert.DoesNotContain("invalid-patch", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Post_floppies_does_not_misreport_a_load_failure_as_import_failed()
+    {
+        await using var context = await StartAsync();
+
+        // Break an entry directly on disk (bypassing the API) before uploading anything: its
+        // missing image fails RetroBoxConfigStore.Validate for the whole catalog.
+        // RetroBoxFloppyImporter's own store.Load()/store.Save() would surface this as the same
+        // plain RetroBoxCatalogException as a genuine "this upload was bad" failure.
+        var missingImage = Path.Combine(root, "cataloged", "missing.img");
+        File.WriteAllText(
+            Path.Combine(root, "floppies.yaml"),
+            $"floppies:\n  broken:\n    label: broken\n    image: {missingImage}\n    mode: ro\n    size: 1.44M\n");
+
+        using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img"));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("catalog-unavailable", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("import-failed", body, StringComparison.Ordinal);
     }
 
     private static MultipartFormDataContent BuildUpload(string fileName, int sizeBytes = 64)
