@@ -164,4 +164,53 @@ public sealed class RetroBoxSerialLineRouterTests
         Assert.True(pending.IsCompleted);
         Assert.IsType<NfcResponse.Ok>(await pending);
     }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_returns_at_once_when_no_orphan_is_outstanding()
+    {
+        var router = new RetroBoxSerialLineRouter();
+
+        await router.WaitForClearSlotAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_waits_out_an_orphan_window()
+    {
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromMilliseconds(200));
+        _ = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        var wait = router.WaitForClearSlotAsync(CancellationToken.None);
+
+        Assert.False(wait.IsCompleted);
+        await AwaitWithinBound(wait);
+    }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_returns_once_the_late_reply_is_absorbed()
+    {
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30));
+        _ = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        var wait = router.WaitForClearSlotAsync(CancellationToken.None);
+        Assert.False(wait.IsCompleted);
+
+        // The straggler arrives: the slot is clear immediately, without waiting out the window.
+        Assert.True(router.TryRoute("OK"));
+
+        await AwaitWithinBound(wait);
+    }
+
+    // A cleared orphan slot is signalled rather than merely timed out, so a caller waiting on
+    // it wakes up promptly instead of riding out the whole window. Bound the wait instead of
+    // awaiting the task directly, so a lost signal fails fast with a readable message instead
+    // of hanging for the full CI timeout.
+    private static async Task AwaitWithinBound(Task task)
+    {
+        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        await task;
+    }
 }

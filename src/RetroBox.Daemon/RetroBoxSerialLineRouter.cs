@@ -24,6 +24,17 @@ public sealed class RetroBoxSerialLineRouter
     // be swallowed forever.
     private long orphanDeadline;
 
+    // A window armed by a timeout must still let an unprompted ERROR (e.g. a background STATUS
+    // poll finding the drive empty) fall through as an event rather than being swallowed. A
+    // window armed by ExpectOrphanedReply is different: it exists specifically to catch a
+    // follow-up command's own answer, which is known to be coming and may itself be ERROR, so
+    // that window accepts whatever arrives.
+    private bool orphanAbsorbsAnyReply;
+
+    // Signalled whenever the orphan window closes, so WaitForClearSlotAsync can wake up the
+    // instant TryRoute absorbs the straggler instead of always riding out the full window.
+    private TaskCompletionSource<bool>? orphanCleared;
+
     public RetroBoxSerialLineRouter(TimeSpan? orphanWindow = null)
     {
         this.orphanWindow = orphanWindow ?? DefaultOrphanWindow;
@@ -68,13 +79,14 @@ public sealed class RetroBoxSerialLineRouter
         {
             // ERROR is the one reply the firmware also emits unprompted (e.g. answering a
             // background STATUS poll with the drive empty), so it can never be treated as an
-            // orphan or swallowed: with no command waiting, it is an event.
+            // orphan or swallowed on a timeout-armed window: with no command waiting, it is an
+            // event. A follow-up-armed window is exempt from this — see orphanAbsorbsAnyReply.
             var isUnambiguousReply = response is not NfcResponse.Error;
 
-            if (orphanDeadline != 0 && isUnambiguousReply)
+            if (orphanDeadline != 0 && (isUnambiguousReply || orphanAbsorbsAnyReply))
             {
                 var expired = Stopwatch.GetTimestamp() >= orphanDeadline;
-                orphanDeadline = 0;
+                ClearOrphanWindow();
 
                 if (!expired)
                 {
@@ -106,11 +118,81 @@ public sealed class RetroBoxSerialLineRouter
 
             if (completion is not null && expectLateReply)
             {
-                orphanDeadline = Stopwatch.GetTimestamp()
-                    + (long)(orphanWindow.TotalSeconds * Stopwatch.Frequency);
+                ArmOrphanWindow(absorbsAnyReply: false);
             }
         }
 
         completion?.TrySetException(error);
+    }
+
+    /// <summary>
+    /// Opens the orphan window without cancelling any pending command. Used after writing a
+    /// follow-up command whose own answer must be discarded rather than handed to whichever
+    /// command begins next: unlike a timeout-armed window, this one absorbs any reply —
+    /// including ERROR — because exactly one answer to the follow-up is guaranteed to arrive.
+    /// </summary>
+    public void ExpectOrphanedReply()
+    {
+        lock (gate)
+        {
+            ArmOrphanWindow(absorbsAnyReply: true);
+        }
+    }
+
+    /// <summary>
+    /// Waits until no orphaned reply is still expected. Callers must do this before beginning a
+    /// command: absorbing a late reply only works while nothing else is in flight, otherwise the
+    /// retry's own timely reply is eaten instead and the failure renews itself.
+    /// </summary>
+    public async Task WaitForClearSlotAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            TimeSpan remaining;
+            Task clearedSignal;
+
+            lock (gate)
+            {
+                if (orphanDeadline == 0)
+                {
+                    return;
+                }
+
+                var ticks = orphanDeadline - Stopwatch.GetTimestamp();
+                if (ticks <= 0)
+                {
+                    ClearOrphanWindow();
+                    return;
+                }
+
+                remaining = TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
+                clearedSignal = orphanCleared?.Task ?? Task.CompletedTask;
+            }
+
+            // Race the remaining window against TryRoute absorbing the straggler early. The
+            // loop re-checks afterwards rather than trusting either signal blindly, because the
+            // deadline may already have moved on by the time either one completes.
+            await Task.WhenAny(Task.Delay(remaining, cancellationToken), clearedSignal);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    // Must be called while holding gate.
+    private void ArmOrphanWindow(bool absorbsAnyReply)
+    {
+        orphanDeadline = Stopwatch.GetTimestamp() + (long)(orphanWindow.TotalSeconds * Stopwatch.Frequency);
+        orphanAbsorbsAnyReply = absorbsAnyReply;
+        orphanCleared = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    // Must be called while holding gate.
+    private void ClearOrphanWindow()
+    {
+        orphanDeadline = 0;
+        orphanAbsorbsAnyReply = false;
+
+        var cleared = orphanCleared;
+        orphanCleared = null;
+        cleared?.TrySetResult(true);
     }
 }
