@@ -5,6 +5,7 @@ using RetroBox.Cli;
 
 namespace RetroBox.Tests;
 
+[Collection(CliConsoleTestCollection.Name)]
 public sealed class CliHelpSmokeTests
 {
     public static TheoryData<string[]> HelpInvocations =>
@@ -247,36 +248,60 @@ public sealed class CliHelpSmokeTests
         var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-webport", Guid.NewGuid().ToString("N"));
         var originalIn = Console.In;
         var originalError = Console.Error;
-        var stderr = new StringWriter();
-        var input = new PipeTextReader();
-        var port = ReserveFreeTcpPort();
+
+        // ReserveFreeTcpPort() has an inherent gap between reading a free port and Kestrel
+        // binding it later: another process (or TIME_WAIT from an earlier test) can take the
+        // port in between. The CLI now degrades a lost race to "no panel" instead of throwing
+        // (see TryStartWebHost), so a lost race here surfaces as WaitForCatalogResponse never
+        // seeing the panel come up, not as an exception. Retrying the whole reserve-and-start
+        // cycle on that specific signal - and only that signal - keeps the test honest: a
+        // genuine host failure still fails loudly on the first attempt.
+        const int maxAttempts = 6;
 
         try
         {
-            Console.SetIn(input);
-            Console.SetError(stderr);
-
-            var command = CliCommandFactory.CreateRootCommand();
-            var invokeTask = Task.Run(() => command.Parse([
-                "daemon",
-                "--config-root",
-                missingRoot,
-                "--web-port",
-                port.ToString(),
-            ]).Invoke());
-
             using var client = new HttpClient();
-            var body = await WaitForCatalogResponse(client, $"http://127.0.0.1:{port}/api/catalog");
-            Assert.Contains("\"floppies\"", body, StringComparison.Ordinal);
 
-            input.Complete();
-            var exitCode = await AwaitWithinBound(invokeTask);
-            Assert.Equal(0, exitCode);
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                var input = new PipeTextReader();
+                Console.SetIn(input);
+                Console.SetError(stderr);
 
-            // The host must actually be gone, not merely idle: a fresh connection attempt has to
-            // fail once the daemon (and, with it, the web panel) has exited.
-            await Assert.ThrowsAsync<HttpRequestException>(
-                () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+                var port = ReserveFreeTcpPort();
+                var command = CliCommandFactory.CreateRootCommand();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    missingRoot,
+                    "--web-port",
+                    port.ToString(),
+                ]).Invoke());
+
+                var poll = await WaitForCatalogResponse(client, $"http://127.0.0.1:{port}/api/catalog", stderr);
+
+                if (poll.LostPortRace)
+                {
+                    input.Complete();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
+
+                input.Complete();
+                var exitCode = await AwaitWithinBound(invokeTask);
+                Assert.Equal(0, exitCode);
+
+                // The host must actually be gone, not merely idle: a fresh connection attempt has to
+                // fail once the daemon (and, with it, the web panel) has exited.
+                await Assert.ThrowsAsync<HttpRequestException>(
+                    () => client.GetStringAsync($"http://127.0.0.1:{port}/api/catalog"));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
         }
         finally
         {
@@ -299,15 +324,36 @@ public sealed class CliHelpSmokeTests
         return port;
     }
 
-    private static async Task<string> WaitForCatalogResponse(HttpClient client, string url)
+    private readonly record struct CatalogPollResult(bool LostPortRace, string Body);
+
+    // A generous ceiling, not a fixed sleep: a healthy run returns in milliseconds and pays
+    // nothing extra, but starting the CLI daemon action, bringing up Kestrel, and serving a
+    // request can legitimately take much longer than a couple of seconds on a contended
+    // machine (thread-pool pressure from the rest of the parallel test run, a busy host). The
+    // poll still fails - with a readable message - rather than hanging forever.
+    private static readonly TimeSpan CatalogPollBudget = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ExitBudget = TimeSpan.FromSeconds(30);
+
+    // Polls for either outcome of a --web-port attempt: the panel answering, or the CLI's own
+    // "continuing without it" diagnostic (see TryStartWebHost) showing this attempt lost the
+    // port race. Anything else after the polling budget is a genuine failure and throws, so a
+    // lost race is never confused with the host actually failing to serve.
+    private static async Task<CatalogPollResult> WaitForCatalogResponse(HttpClient client, string url, StringWriter stderr)
     {
         Exception? lastError = null;
+        var deadline = DateTime.UtcNow + CatalogPollBudget;
 
-        for (var attempt = 0; attempt < 100; attempt++)
+        while (DateTime.UtcNow < deadline)
         {
+            if (stderr.ToString().Contains("continuing without it", StringComparison.Ordinal))
+            {
+                return new CatalogPollResult(LostPortRace: true, Body: string.Empty);
+            }
+
             try
             {
-                return await client.GetStringAsync(url);
+                var body = await client.GetStringAsync(url);
+                return new CatalogPollResult(LostPortRace: false, Body: body);
             }
             catch (HttpRequestException ex)
             {
@@ -316,14 +362,15 @@ public sealed class CliHelpSmokeTests
             }
         }
 
-        throw new InvalidOperationException("The web panel never came up.", lastError);
+        throw new InvalidOperationException(
+            $"The web panel never came up within {CatalogPollBudget}. stderr so far: {stderr}", lastError);
     }
 
     private static async Task<T> AwaitWithinBound<T>(Task<T> task)
     {
-        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var completed = await Task.WhenAny(task, Task.Delay(ExitBudget));
 
-        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
+        Assert.True(ReferenceEquals(completed, task), $"The awaited task did not complete within {ExitBudget}.");
         return await task;
     }
 

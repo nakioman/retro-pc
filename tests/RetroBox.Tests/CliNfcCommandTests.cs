@@ -3,6 +3,7 @@ using RetroBox.Core;
 
 namespace RetroBox.Tests;
 
+[Collection(CliConsoleTestCollection.Name)]
 public sealed class CliNfcCommandTests
 {
     [Fact]
