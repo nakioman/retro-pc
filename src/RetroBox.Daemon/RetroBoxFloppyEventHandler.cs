@@ -17,7 +17,7 @@ public sealed record RetroBoxFloppyEventHandlerResult(
     RetroBoxFloppyStatus? Status);
 
 public sealed class RetroBoxFloppyEventHandler(
-    RetroBoxCatalogData catalog,
+    IRetroBoxCatalogSource catalogSource,
     IRetroBoxFloppyControlClient floppyControlClient)
 {
     private const int Drive = 0;
@@ -52,6 +52,8 @@ public sealed class RetroBoxFloppyEventHandler(
         RetroBoxArduinoInsertEvent insert,
         CancellationToken cancellationToken)
     {
+        var catalog = catalogSource.Current;
+
         if (!catalog.Floppies.TryGetValue(insert.Id, out var floppy))
         {
             return new RetroBoxFloppyEventHandlerResult(

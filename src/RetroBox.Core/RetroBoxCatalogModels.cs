@@ -3,7 +3,13 @@ namespace RetroBox.Core;
 public sealed record RetroBoxCatalogData(
     RetroBoxConfig Config,
     IReadOnlyDictionary<string, RetroBoxVm> Vms,
-    IReadOnlyDictionary<string, RetroBoxFloppy> Floppies);
+    IReadOnlyDictionary<string, RetroBoxFloppy> Floppies)
+{
+    public static RetroBoxCatalogData Empty { get; } = new(
+        new RetroBoxConfig(),
+        new Dictionary<string, RetroBoxVm>(StringComparer.Ordinal),
+        new Dictionary<string, RetroBoxFloppy>(StringComparer.Ordinal));
+}
 
 public sealed record RetroBoxConfig
 {

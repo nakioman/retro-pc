@@ -43,6 +43,17 @@ internal static class FloppyControlTestCatalogs
     }
 }
 
+internal sealed class MutableCatalogSource(RetroBoxCatalogData initial) : IRetroBoxCatalogSource
+{
+    private RetroBoxCatalogData current = initial;
+
+    public RetroBoxCatalogData Current => current;
+
+    public string? LastError => null;
+
+    public void Publish(RetroBoxCatalogData catalog) => current = catalog;
+}
+
 internal sealed class RecordingFloppyControlClient : IRetroBoxFloppyControlClient
 {
     public List<string> Calls { get; } = [];
