@@ -12,9 +12,13 @@ public sealed record RetroBoxFloppyPatch(string? Label, string? Mode);
 
 public sealed record RetroBoxDriveView(string State, string? FloppyId, string? Mode, string? TagUid);
 
-public sealed record RetroBoxNfcWriteRequest(string FloppyId, bool Confirm);
+/// <param name="TagUid">
+/// The tag the caller believes is seated, echoed back from a tag-already-assigned 409. Required
+/// on a confirmed request; optional otherwise.
+/// </param>
+public sealed record RetroBoxNfcWriteRequest(string FloppyId, bool Confirm, string? TagUid);
 
-public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId, string? Message);
+public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId, string? Message, string? TagUid);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]

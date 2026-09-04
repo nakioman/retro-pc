@@ -75,6 +75,11 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
         Assert.Contains("disk1", body, StringComparison.Ordinal);
 
+        // The uid has to travel on the 409: RetroBoxDriveEndpoints deliberately returns a null
+        // tagUid for the loaded state, so the panel has no other way to learn which tag the
+        // conflict was about and echo it back on the confirmed retry.
+        Assert.Contains("\"tagUid\":\"04A13BFE\"", body, StringComparison.Ordinal);
+
         // The refusal must be a pure read: nothing goes out over the wire, and disk2's catalog
         // entry does not move, since the request was never confirmed.
         Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
@@ -129,7 +134,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         }
 
-        using var second = await PostAsync(context, "disk2", confirm: true);
+        using var second = await PostAsync(context, "disk2", confirm: true, tagUid: "04A13BFE");
 
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
@@ -274,6 +279,49 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal(RetroBoxFloppyCatalogRules.ReadWriteMode, floppy.Mode);
     }
 
+    [Fact]
+    public async Task Write_refuses_a_confirmed_reassignment_once_the_tag_changed()
+    {
+        // The confirmation dialog is unbounded user thinking time, and the disk can be swapped
+        // during it. Without the uid the confirmed write would land on whatever is seated now,
+        // while the confirmation named a floppy no longer involved.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("0BADC0DE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: true, tagUid: "04A13BFE");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("tag-changed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
+        Assert.False(new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc);
+    }
+
+    [Fact]
+    public async Task Write_rejects_a_confirmed_request_that_carries_no_tag_uid()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: true);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid-request", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(channel.Calls);
+    }
+
+    [Fact]
+    public async Task Write_accepts_an_unconfirmed_request_whose_tag_uid_still_matches()
+    {
+        // An unconfirmed request may carry the uid too; it is only rejected when it disagrees.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: false, tagUid: "04A13BFE");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"confirm\":true}")]
@@ -323,9 +371,14 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal("04A13BFE", floppy.NfcUid);
     }
 
-    private static Task<HttpResponseMessage> PostAsync(NfcContext context, string floppyId, bool confirm)
+    private static Task<HttpResponseMessage> PostAsync(
+        NfcContext context,
+        string floppyId,
+        bool confirm,
+        string? tagUid = null)
     {
-        var body = $"{{\"floppyId\":\"{floppyId}\",\"confirm\":{(confirm ? "true" : "false")}}}";
+        var uid = tagUid is null ? "null" : $"\"{tagUid}\"";
+        var body = $"{{\"floppyId\":\"{floppyId}\",\"confirm\":{(confirm ? "true" : "false")},\"tagUid\":{uid}}}";
         return context.Client.PostAsync("/api/nfc/write", new StringContent(body, Encoding.UTF8, "application/json"));
     }
 

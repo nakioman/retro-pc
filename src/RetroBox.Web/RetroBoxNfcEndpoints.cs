@@ -34,6 +34,18 @@ public static class RetroBoxNfcEndpoints
             return Error(StatusCodes.Status400BadRequest, "invalid-request", "A floppy id is required.");
         }
 
+        // A confirmed request is exempt from the ownership check below -- the user already
+        // answered it -- so without a tag identity it is a blind write onto whatever happens to
+        // be seated now. The confirmation dialog is unbounded thinking time, so "now" and "when
+        // the 409 was raised" are not the same disk.
+        if (request.Confirm && string.IsNullOrEmpty(request.TagUid))
+        {
+            return Error(
+                StatusCodes.Status400BadRequest,
+                "invalid-request",
+                "A confirmed reassignment must carry the tag uid the conflict reported.");
+        }
+
         if (nfcChannel is null)
         {
             return Error(StatusCodes.Status503ServiceUnavailable, "no-controller", "No floppy controller is connected.");
@@ -60,6 +72,19 @@ public static class RetroBoxNfcEndpoints
 
             tagUid = tag.Uid;
 
+            // This narrows the window rather than closing it: what is left is the server's own
+            // TAGID-to-WRITE round trip, the same gap every unconfirmed first write already has.
+            // Closing it fully would need a firmware WRITE-if-uid-matches, which the protocol
+            // does not have.
+            if (!string.IsNullOrEmpty(request.TagUid)
+                && !string.Equals(request.TagUid, tagUid, StringComparison.Ordinal))
+            {
+                return Error(
+                    StatusCodes.Status409Conflict,
+                    "tag-changed",
+                    $"The tag in the drive is now '{tagUid}', not '{request.TagUid}'. Nothing was written.");
+            }
+
             // Re-read rather than reuse the snapshot taken before the round trip: that one can be
             // many seconds old by now (quarantine wait plus the five second command timeout), and
             // an assignment that landed in between would otherwise be invisible here. AssignTag
@@ -73,7 +98,8 @@ public static class RetroBoxNfcEndpoints
                     new RetroBoxNfcWriteResult(
                         "tag-already-assigned",
                         previousFloppyId,
-                        $"This tag is already assigned to '{previousFloppyId}'. Confirm to reassign it."),
+                        $"This tag is already assigned to '{previousFloppyId}'. Confirm to reassign it.",
+                        tagUid),
                     RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult,
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -128,7 +154,7 @@ public static class RetroBoxNfcEndpoints
         catalogSource.TryReload();
 
         return Results.Json(
-            new RetroBoxNfcWriteResult("written", null, null),
+            new RetroBoxNfcWriteResult("written", null, null, tagUid),
             RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult);
     }
 
