@@ -2519,7 +2519,15 @@ git commit -m "feat(appliance): serve the web panel from the daemon unit"
 
 - `mise run test` and `mise run format-check` pass; CI's AOT publish and `shellcheck` jobs pass.
 - With no floppy controller attached, `retrobox daemon --web-port 8080` serves a panel that lists, uploads, renames, re-modes and deletes floppies.
-- Uploading through the panel and then inserting that floppy mounts it **without restarting the daemon** — the behaviour Task 1 exists to deliver.
+- A catalog change made while the daemon runs is visible to the very next insert decision,
+  with no restart — the behaviour Task 1 exists to deliver.
+
+  This originally read "uploading through the panel and then inserting that floppy mounts it
+  without restarting the daemon", which **cannot be met in this phase and was a defect in this
+  plan**. An upload sets `nfc: false`, phase 1's mount guard refuses `nfc: false`, and nothing
+  in phase 2 can set it true — so the only route runs through `retrobox nfc write`, which needs
+  the daemon stopped and therefore contradicts the criterion's own wording. Task 1 delivers the
+  mechanism correctly; the user-visible outcome belongs to phase 3.
 - A malformed `floppies.yaml` written while the daemon runs leaves it serving the previous catalog instead of failing.
 - A malformed `floppies.yaml` present **at startup** still brings the panel up, showing the
   validation message, so the owner can fix it without the GRUB recovery entry. This is a
