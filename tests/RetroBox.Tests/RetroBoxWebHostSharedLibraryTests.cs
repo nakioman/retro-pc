@@ -6,95 +6,105 @@ using RetroBox.Web;
 namespace RetroBox.Tests;
 
 /// <summary>
-/// Pins the fix for the critical review finding on task 4: RetroBoxNfcEndpoints must not
-/// construct its own RetroBoxFloppyLibrary, because RetroBoxFloppyLibrary's lock is
-/// per-instance. A private instance there would let a tag write race an in-flight
-/// upload/delete/rename instead of serialising behind it -- reproduced in review as 37 of 40
-/// concurrent upload+write pairs landing with the HTTP response claiming success while the
-/// catalog disagreed.
+/// Pins the fix for the critical review finding on task 4: RetroBoxNfcEndpoints and
+/// RetroBoxLibraryEndpoints must share one RetroBoxFloppyLibrary instance, not each construct
+/// their own, because RetroBoxFloppyLibrary's lock is per-instance -- a private instance in
+/// either endpoint group would let a tag write race an in-flight upload/delete/rename instead of
+/// serialising behind it.
+///
+/// This is proven deterministically rather than by racing two requests: RetroBoxWebHost.StartAsync
+/// is given a RetroBoxFloppyLibrary backed by a *different* directory than options.ConfigRoot.
+/// Every ordinary, sequential request that mutates the catalog lands in that injected directory
+/// and leaves options.ConfigRoot's own catalog untouched. An endpoint group that instead built
+/// "new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot))" internally would
+/// provably write to the wrong place -- there is no interleaving or timing under which it could
+/// accidentally pass.
 /// </summary>
 public sealed class RetroBoxWebHostSharedLibraryTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(), $"retrobox-shared-library-{Guid.NewGuid():N}");
+    private readonly string optionsRoot = Path.Combine(Path.GetTempPath(), $"retrobox-options-root-{Guid.NewGuid():N}");
+    private readonly string injectedRoot = Path.Combine(Path.GetTempPath(), $"retrobox-injected-root-{Guid.NewGuid():N}");
 
     public RetroBoxWebHostSharedLibraryTests()
     {
-        Directory.CreateDirectory(root);
-        WriteCatalog("disk1");
+        Directory.CreateDirectory(optionsRoot);
+        Directory.CreateDirectory(injectedRoot);
     }
 
     public void Dispose()
     {
-        try
+        foreach (var directory in new[] { optionsRoot, injectedRoot })
         {
-            Directory.Delete(root, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
     [Fact]
-    public async Task Nfc_write_is_excluded_by_the_same_lock_as_the_library_endpoints()
+    public async Task Nfc_write_lands_in_the_injected_library_not_the_options_config_root()
     {
-        var configStore = new RetroBoxConfigStore(root);
-        var library = new RetroBoxFloppyLibrary(configStore);
+        WriteCatalog(optionsRoot, "disk1");
+        WriteCatalog(injectedRoot, "disk1");
 
+        var injectedLibrary = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(injectedRoot));
         var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
-        using var source = new RetroBoxWatchingCatalogSource(root, configStore.Load(), watchFileSystem: false);
+        using var source = new RetroBoxWatchingCatalogSource(
+            optionsRoot, new RetroBoxConfigStore(optionsRoot).Load(), watchFileSystem: false);
         await using var host = await RetroBoxWebHost.StartAsync(
-            new RetroBoxWebOptions { Port = 0, ConfigRoot = root },
+            new RetroBoxWebOptions { Port = 0, ConfigRoot = optionsRoot },
             source,
             nfcChannel: channel,
-            floppyLibrary: library);
+            floppyLibrary: injectedLibrary);
         using var client = new HttpClient { BaseAddress = host.BaseAddress };
 
-        var heldLock = new ManualResetEventSlim(false);
-        var releaseLock = new ManualResetEventSlim(false);
+        var body = "{\"floppyId\":\"disk1\",\"confirm\":false}";
+        using var response = await client.PostAsync("/api/nfc/write", new StringContent(body, Encoding.UTF8, "application/json"));
 
-        // RetroBoxLibraryEndpoints.UploadAsync's own exclusive section has exactly this shape --
-        // load near the top, save at the very end of a long critical section -- which is what let
-        // the review's reproduction land 37 of 40 concurrent upload+write pairs with the tag
-        // write answering 200 OK while the catalog said otherwise: AssignTag's load-then-save ran
-        // entirely inside the upload's window and the upload's own stale-snapshot save overwrote
-        // it. RunExclusively is the exact seam both RetroBoxLibraryEndpoints and this call go
-        // through, so driving it directly here reproduces that shape without needing to steer a
-        // real multipart upload through a matching delay.
-        var blockingSection = Task.Run(() => library.RunExclusively(() =>
-        {
-            var staleSnapshot = configStore.Load();
-            heldLock.Set();
-            releaseLock.Wait();
-            configStore.Save(staleSnapshot);
-        }));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        Assert.True(heldLock.Wait(TimeSpan.FromSeconds(5)), "the blocking section never started");
-
-        var writeBody = "{\"floppyId\":\"disk1\",\"confirm\":false}";
-        var writeTask = client.PostAsync("/api/nfc/write", new StringContent(writeBody, Encoding.UTF8, "application/json"));
-
-        // A generous window for an *unlocked* write to land on its own. It should not be able to
-        // -- AssignTag needs the same lock the blocking section above is holding -- but this
-        // gives a reintroduced private-library bug every real chance to finish before the
-        // blocking section's stale save, rather than leaving the outcome to whatever the
-        // scheduler happens to do with two independently-timed tasks.
-        await Task.WhenAny(writeTask, Task.Delay(TimeSpan.FromSeconds(2)));
-
-        releaseLock.Set();
-
-        using var writeResponse = await writeTask.WaitAsync(TimeSpan.FromSeconds(30));
-        await blockingSection.WaitAsync(TimeSpan.FromSeconds(30));
-
-        Assert.Equal(HttpStatusCode.OK, writeResponse.StatusCode);
-
-        var floppies = configStore.Load().Floppies;
         Assert.True(
-            floppies["disk1"].Nfc,
-            "the tag write was clobbered by the blocking section's later save -- RetroBoxNfcEndpoints " +
-            "and RetroBoxLibraryEndpoints must share one RetroBoxFloppyLibrary instance.");
+            new RetroBoxConfigStore(injectedRoot).Load().Floppies["disk1"].Nfc,
+            "the write never reached the injected library's catalog.");
+        Assert.False(
+            new RetroBoxConfigStore(optionsRoot).Load().Floppies["disk1"].Nfc,
+            "the write landed in options.ConfigRoot's catalog -- RetroBoxNfcEndpoints must be " +
+            "constructing its own RetroBoxFloppyLibrary instead of using the shared one.");
     }
 
-    private void WriteCatalog(params string[] floppyIds)
+    [Fact]
+    public async Task Delete_lands_in_the_injected_library_not_the_options_config_root()
+    {
+        WriteCatalog(optionsRoot, "disk2");
+        WriteCatalog(injectedRoot, "disk2");
+
+        var injectedLibrary = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(injectedRoot));
+        using var source = new RetroBoxWatchingCatalogSource(
+            optionsRoot, new RetroBoxConfigStore(optionsRoot).Load(), watchFileSystem: false);
+        await using var host = await RetroBoxWebHost.StartAsync(
+            new RetroBoxWebOptions { Port = 0, ConfigRoot = optionsRoot },
+            source,
+            floppyLibrary: injectedLibrary);
+        using var client = new HttpClient { BaseAddress = host.BaseAddress };
+
+        using var response = await client.DeleteAsync("/api/floppies/disk2");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        Assert.False(
+            new RetroBoxConfigStore(injectedRoot).Load().Floppies.ContainsKey("disk2"),
+            "the delete never reached the injected library's catalog.");
+        Assert.True(
+            new RetroBoxConfigStore(optionsRoot).Load().Floppies.ContainsKey("disk2"),
+            "disk2 disappeared from options.ConfigRoot's catalog -- RetroBoxLibraryEndpoints must " +
+            "be constructing its own RetroBoxFloppyLibrary instead of using the shared one.");
+    }
+
+    private static void WriteCatalog(string root, params string[] floppyIds)
     {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");
         File.WriteAllText(Path.Combine(root, "vms.yaml"), $"vms:\n  dos:\n    label: DOS\n    path: {root}\n");
