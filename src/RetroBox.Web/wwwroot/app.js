@@ -38,7 +38,7 @@ const STRINGS = {
     driveUnavailable: "Sin controlador conectado",
     driveEmpty: "No hay disco en la disquetera",
     driveLoaded: "Disco puesto: {label}",
-    driveBlankTag: "Tag en blanco, listo para asignar ({uid})",
+    driveBlankTag: "Tag sin reconocer ({uid}). Elegí a qué disquete asignarlo.",
     assignButton: "Grabar tag",
     assignReassign: "Reasignar este tag",
     assignDone: "Tag grabado",
@@ -91,7 +91,7 @@ const STRINGS = {
     driveUnavailable: "No controller connected",
     driveEmpty: "No disk in the drive",
     driveLoaded: "Disk in the drive: {label}",
-    driveBlankTag: "Blank tag, ready to assign ({uid})",
+    driveBlankTag: "Unrecognised tag ({uid}). Choose which floppy to assign it to.",
     assignButton: "Write tag",
     assignReassign: "Reassign this tag",
     assignDone: "Tag written",
@@ -357,8 +357,9 @@ function renderDrive() {
   target.textContent = "";
 
   // A disabled placeholder is the initial selection so writing a tag always takes a deliberate
-  // choice — nothing here proves a blankTag reading is actually free (Ruling 27), and unlike the
-  // reassignment case, a blank tag draws no 409 from the server to catch an accidental default.
+  // choice — nothing here proves a blankTag reading is actually free (Ruling 27), and in this
+  // state the tracker has no owner to report either, so unlike the reassignment case no 409 from
+  // the server is going to catch an accidental default.
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.disabled = true;

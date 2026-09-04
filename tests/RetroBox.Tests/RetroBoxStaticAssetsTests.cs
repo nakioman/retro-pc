@@ -70,6 +70,31 @@ public sealed class RetroBoxStaticAssetsTests
     }
 
     [Fact]
+    public void The_unrecognised_tag_label_does_not_claim_the_tag_is_blank()
+    {
+        // The blankTag state is raised whenever the tracker has not seen this tag's INSERT, which
+        // is the normal state right after a controller reconnect -- a written tag reads that way
+        // too. The API value stays "blankTag" because other code reads it; the user-visible text
+        // must not assert something the panel cannot verify.
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("blankTag", script, StringComparison.Ordinal);
+
+        var labels = Regex.Matches(script, "driveBlankTag: \"(?<text>[^\"]*)\"")
+            .Select(match => match.Groups["text"].Value)
+            .ToArray();
+
+        Assert.Equal(2, labels.Length);
+        foreach (var label in labels)
+        {
+            Assert.DoesNotContain("blank", label, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("en blanco", label, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Both_languages_define_exactly_the_same_keys()
     {
         Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
