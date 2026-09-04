@@ -76,6 +76,8 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
 
         try
         {
+            await router.WaitForClearSlotAsync(cancellationToken);
+
             var reply = router.BeginCommand();
 
             try
@@ -110,6 +112,12 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             if (response is NfcResponse.Ok && followUpOnOk is not null)
             {
                 await serialOutput.WriteLineAsync(followUpOnOk.AsMemory(), cancellationToken);
+
+                // The follow-up's answer is an event when it is INSERT/EJECT, but ERROR is
+                // ambiguous and would otherwise land on the next command. Arming the orphan
+                // window here makes the quarantine hold the next command until it has been
+                // accounted for, whatever shape it turns out to have.
+                router.ExpectOrphanedReply();
             }
 
             return response;
