@@ -14,11 +14,20 @@ public static class RetroBoxDriveEndpoints
 
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
-    public static void Map(WebApplication app, IRetroBoxDriveState? driveState, IRetroBoxNfcCommandChannel? nfcChannel)
+    public static void Map(
+        WebApplication app,
+        IRetroBoxDriveState? driveState,
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        Func<CancellationToken, Task>? waitForNextPoll = null)
     {
         app.MapGet("/api/drive", () => BuildViewAsync(driveState, nfcChannel));
-        app.MapGet("/api/drive/events", (HttpContext context) => StreamAsync(context, driveState, nfcChannel));
+        app.MapGet(
+            "/api/drive/events",
+            (HttpContext context) => StreamAsync(context, driveState, nfcChannel, waitForNextPoll ?? WaitForNextPollAsync));
     }
+
+    private static Task WaitForNextPollAsync(CancellationToken cancellationToken) =>
+        Task.Delay(PollInterval, cancellationToken);
 
     /// <summary>
     /// A blank tag never raises an INSERT — the firmware cannot read a payload from it — so the
@@ -66,7 +75,8 @@ public static class RetroBoxDriveEndpoints
     private static async Task StreamAsync(
         HttpContext context,
         IRetroBoxDriveState? driveState,
-        IRetroBoxNfcCommandChannel? nfcChannel)
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        Func<CancellationToken, Task> waitForNextPoll)
     {
         context.Response.Headers.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-cache";
@@ -76,8 +86,8 @@ public static class RetroBoxDriveEndpoints
         while (!context.RequestAborted.IsCancellationRequested)
         {
             // A client closing the tab can cancel either the up-to-5s TAGID wait inside
-            // BuildViewAsync or the poll delay below; both are the same event and must exit the
-            // same way, so the whole iteration is one try rather than wrapping the delay alone.
+            // BuildViewAsync or the poll wait below; both are the same event and must exit the
+            // same way, so the whole iteration is one try rather than wrapping the wait alone.
             try
             {
                 var view = await BuildViewAsync(driveState, nfcChannel, context.RequestAborted);
@@ -90,7 +100,7 @@ public static class RetroBoxDriveEndpoints
                     await context.Response.Body.FlushAsync(context.RequestAborted);
                 }
 
-                await Task.Delay(PollInterval, context.RequestAborted);
+                await waitForNextPoll(context.RequestAborted);
             }
             catch (OperationCanceledException)
             {

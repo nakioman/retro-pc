@@ -125,8 +125,9 @@ public sealed class RetroBoxDriveEndpointsTests
     {
         var tracker = new RetroBoxDriveStateTracker();
         var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.Error("no-tag-detected") };
+        var gate = new ManualPollGate();
 
-        await using var host = await StartAsync(tracker, channel);
+        await using var host = await StartAsync(tracker, channel, gate.WaitForNextPollAsync);
         using var client = new HttpClient { BaseAddress = host.BaseAddress };
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
@@ -139,10 +140,23 @@ public sealed class RetroBoxDriveEndpointsTests
         var first = await ReadNextDataLineAsync(reader, cancellation.Token);
         Assert.Contains("\"state\":\"empty\"", first, StringComparison.Ordinal);
 
-        tracker.Observe(new RetroBoxArduinoInsertEvent("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        // Release one tick with the tracker unchanged: a gated loop recomputes the same payload
+        // and writes nothing, while an ungated loop writes a deterministic duplicate of it. This
+        // is the tick a broken (ungated) implementation would fail on.
+        await gate.WaitUntilLoopIsWaitingAsync(cancellation.Token);
+        gate.ReleaseTick();
 
-        // Blocks on the stream until the next changed payload arrives, whenever the poll notices
-        // it - a bounded wait via the CancellationTokenSource above, not a fixed sleep.
+        // Wait for the loop to reach its next wait point (so the unchanged-state iteration above
+        // has already run to completion) before mutating the tracker and releasing the tick that
+        // carries the change.
+        await gate.WaitUntilLoopIsWaitingAsync(cancellation.Token);
+        tracker.Observe(new RetroBoxArduinoInsertEvent("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        gate.ReleaseTick();
+
+        // A gated loop's next frame on the wire is the changed state; an ungated loop's next
+        // frame is the duplicate written on the tick released above, so this assertion fails
+        // deterministically under the bug this test exists to catch - no sleep, no real-time
+        // budget, the test decides when every tick happens.
         var second = await ReadNextDataLineAsync(reader, cancellation.Token);
         Assert.Contains("\"state\":\"loaded\"", second, StringComparison.Ordinal);
         Assert.Contains("\"floppyId\":\"disk1\"", second, StringComparison.Ordinal);
@@ -164,12 +178,67 @@ public sealed class RetroBoxDriveEndpointsTests
 
     private static Task<RetroBoxWebHost> StartAsync(
         IRetroBoxDriveState? driveState,
-        IRetroBoxNfcCommandChannel? nfcChannel)
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        Func<CancellationToken, Task>? waitForNextPoll = null)
     {
         var source = new RetroBoxStaticCatalogSource(
             FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode));
 
         return RetroBoxWebHost.StartAsync(
-            new RetroBoxWebOptions { Port = 0 }, source, driveState: driveState, nfcChannel: nfcChannel);
+            new RetroBoxWebOptions { Port = 0 },
+            source,
+            driveState: driveState,
+            nfcChannel: nfcChannel,
+            driveEventsWaitForNextPoll: waitForNextPoll);
+    }
+
+    /// <summary>
+    /// Gives a test full control over when the SSE loop's poll wait resolves. Each call to
+    /// <see cref="WaitForNextPollAsync"/> (made by the production loop) signals whichever caller
+    /// is blocked in <see cref="WaitUntilLoopIsWaitingAsync"/> and then blocks itself until the
+    /// test calls <see cref="ReleaseTick"/> - one tick, deterministically, with no timing budget.
+    /// </summary>
+    private sealed class ManualPollGate
+    {
+        private readonly Lock sync = new();
+        private TaskCompletionSource waitingSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource releaseSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WaitForNextPollAsync(CancellationToken cancellationToken)
+        {
+            TaskCompletionSource waiting;
+            Task releaseTask;
+
+            lock (sync)
+            {
+                waiting = waitingSignal;
+                releaseTask = releaseSignal.Task;
+            }
+
+            waiting.TrySetResult();
+            return releaseTask.WaitAsync(cancellationToken);
+        }
+
+        public Task WaitUntilLoopIsWaitingAsync(CancellationToken cancellationToken)
+        {
+            Task waitingTask;
+
+            lock (sync)
+            {
+                waitingTask = waitingSignal.Task;
+            }
+
+            return waitingTask.WaitAsync(cancellationToken);
+        }
+
+        public void ReleaseTick()
+        {
+            lock (sync)
+            {
+                releaseSignal.TrySetResult();
+                waitingSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                releaseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
     }
 }
