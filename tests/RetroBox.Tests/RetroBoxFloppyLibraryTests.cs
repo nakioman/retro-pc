@@ -176,7 +176,7 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
         // tag whose payload the catalog no longer matches.
         library.UpdateLabelAndMode("disk1", null, RetroBoxFloppyCatalogRules.ReadWriteMode);
 
-        Assert.Throws<RetroBoxCatalogException>(
+        Assert.Throws<RetroBoxFloppyModeChangedException>(
             () => library.AssignTag("disk1", "04A13BFE", RetroBoxFloppyCatalogRules.ReadOnlyMode));
 
         var floppy = store.Load().Floppies["disk1"];

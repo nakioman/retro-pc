@@ -97,7 +97,7 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
 
             if (expectedMode is not null && !string.Equals(floppy.Mode, expectedMode, StringComparison.Ordinal))
             {
-                throw new RetroBoxCatalogException(
+                throw new RetroBoxFloppyModeChangedException(
                     $"Floppy '{id}' mode changed to '{floppy.Mode}' before the tag write could be recorded.");
             }
 

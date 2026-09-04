@@ -112,12 +112,13 @@ public static class RetroBoxNfcEndpoints
         {
             return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
-        catch (RetroBoxCatalogException ex)
+        catch (RetroBoxFloppyModeChangedException ex)
         {
-            // Covers AssignTag's own mode re-check: a concurrent PATCH that changed the mode
-            // already cleared this floppy's tag deliberately (mode is baked into the tag's
-            // payload), so committing this write now would silently undo that and leave the
-            // catalog claiming a tag whose payload no longer matches.
+            // A concurrent PATCH changed the mode while the write was in flight, and
+            // UpdateLabelAndMode already cleared this floppy's tag deliberately for exactly this
+            // reason (mode is baked into the tag's payload) — committing this write now would
+            // silently undo that. Caught by its own type, not the base RetroBoxCatalogException,
+            // so an unrelated validation failure from store.Save is never mislabelled as this.
             return Error(StatusCodes.Status409Conflict, "mode-changed", ex.Message);
         }
 
