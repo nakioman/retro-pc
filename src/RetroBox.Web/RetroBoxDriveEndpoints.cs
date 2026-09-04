@@ -49,11 +49,16 @@ public static class RetroBoxDriveEndpoints
             };
         }
         catch (Exception ex) when (ex is RetroBoxNfcCommandTimeoutException or RetroBoxNfcCommandUnavailableException
-            or IOException)
+            or IOException or InvalidOperationException or UnauthorizedAccessException)
         {
             // A controller that stops answering, or a channel with nothing behind it right now
             // (RetroBoxNfcChannelHolder between connections), is reported as unavailable rather
             // than as an empty drive: "no disk" is a claim, and this code no longer knows.
+            // SerialDeviceWriter does not wrap the writer's failures the way the reader does, so a
+            // yanked or disposed port surfaces raw ObjectDisposedException/InvalidOperationException
+            // (SerialPort.BaseStream throws InvalidOperationException once the port is closed) or
+            // UnauthorizedAccessException — the same set RetroBoxSerialDeviceRunner already treats
+            // as "device went away" elsewhere.
             return new RetroBoxDriveView(Unavailable, null, null, null);
         }
     }
@@ -70,18 +75,21 @@ public static class RetroBoxDriveEndpoints
 
         while (!context.RequestAborted.IsCancellationRequested)
         {
-            var view = await BuildViewAsync(driveState, nfcChannel, context.RequestAborted);
-            var payload = JsonSerializer.Serialize(view, RetroBoxWebJsonContext.Default.RetroBoxDriveView);
-
-            if (payload != lastPayload)
-            {
-                lastPayload = payload;
-                await context.Response.WriteAsync($"data: {payload}\n\n", context.RequestAborted);
-                await context.Response.Body.FlushAsync(context.RequestAborted);
-            }
-
+            // A client closing the tab can cancel either the up-to-5s TAGID wait inside
+            // BuildViewAsync or the poll delay below; both are the same event and must exit the
+            // same way, so the whole iteration is one try rather than wrapping the delay alone.
             try
             {
+                var view = await BuildViewAsync(driveState, nfcChannel, context.RequestAborted);
+                var payload = JsonSerializer.Serialize(view, RetroBoxWebJsonContext.Default.RetroBoxDriveView);
+
+                if (payload != lastPayload)
+                {
+                    lastPayload = payload;
+                    await context.Response.WriteAsync($"data: {payload}\n\n", context.RequestAborted);
+                    await context.Response.Body.FlushAsync(context.RequestAborted);
+                }
+
                 await Task.Delay(PollInterval, context.RequestAborted);
             }
             catch (OperationCanceledException)
