@@ -99,16 +99,40 @@ public sealed class CliHelpSmokeTests
     [Fact]
     public void Daemon_starts_with_an_empty_catalog_when_the_catalog_root_is_missing()
     {
-        var command = CliCommandFactory.CreateRootCommand();
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-missing", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
 
-        // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
-        // the command starts with an empty catalog and reports why instead of refusing to run.
-        var exitCode = command.Parse([
-            "daemon",
-            "--config-root",
-            Path.Combine(Path.GetTempPath(), "retrobox-missing", Guid.NewGuid().ToString("N")),
-        ]).Invoke();
+        try
+        {
+            // The real daemon action reads Console.In and writes Console.Error; redirect both so
+            // the test never blocks on the host's real stdin and so the diagnostic can be checked.
+            Console.SetIn(TextReader.Null);
+            Console.SetError(stderr);
 
-        Assert.Equal(0, exitCode);
+            var command = CliCommandFactory.CreateRootCommand();
+
+            // A missing catalog must not cost the owner the daemon (and, with it, the web panel):
+            // the command starts with an empty catalog and reports why instead of refusing to run.
+            var exitCode = command.Parse([
+                "daemon",
+                "--config-root",
+                missingRoot,
+            ]).Invoke();
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("starting with an empty catalog", stderr.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
     }
 }

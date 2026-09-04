@@ -14,8 +14,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private readonly TimeSpan debounce;
     private readonly FileSystemWatcher? watcher;
     private readonly Lock gate = new();
-    private volatile RetroBoxCatalogData current;
-    private volatile string? lastError;
+    private volatile CatalogSnapshot snapshot;
     private CancellationTokenSource? pendingReload;
     private bool disposed;
 
@@ -28,8 +27,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         string? initialError = null)
     {
         store = new RetroBoxConfigStore(rootPath);
-        current = initial;
-        lastError = initialError;
+        snapshot = new CatalogSnapshot(initial, initialError);
         this.onReloadFailed = onReloadFailed;
         this.debounce = debounce ?? DefaultDebounce;
 
@@ -39,8 +37,18 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         }
 
         // FileSystemWatcher throws when the directory is missing, and a first boot can reach
-        // here before anything has written the catalog.
-        Directory.CreateDirectory(rootPath);
+        // here before anything has written the catalog. A root that cannot be created must not
+        // take down the daemon either: it starts without a watcher and reports why.
+        try
+        {
+            Directory.CreateDirectory(rootPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            onReloadFailed?.Invoke(
+                $"Could not create catalog root '{rootPath}', catalog changes will not be picked up automatically: {ex.Message}");
+            return;
+        }
 
         watcher = new FileSystemWatcher(rootPath, "*.yaml")
         {
@@ -53,27 +61,40 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         watcher.EnableRaisingEvents = true;
     }
 
-    public RetroBoxCatalogData Current => current;
+    public RetroBoxCatalogData Current => snapshot.Catalog;
 
-    public string? LastError => lastError;
+    public string? LastError => snapshot.Error;
 
     public bool TryReload() => Reload();
 
     /// <summary>Reloads now. Returns false and keeps the previous catalog when the YAML is unusable.</summary>
     public bool Reload()
     {
-        try
+        string? failure = null;
+
+        // Serialized against itself: two overlapping loads could otherwise finish out of order
+        // and leave the older snapshot published. Readers use the volatile field and never take
+        // this lock.
+        lock (gate)
         {
-            current = store.Load();
-            lastError = null;
-            return true;
+            try
+            {
+                snapshot = new CatalogSnapshot(store.Load(), null);
+            }
+            catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+            {
+                failure = $"Catalog reload failed, keeping the previous catalog: {ex.Message}";
+                snapshot = snapshot with { Error = ex.Message };
+            }
         }
-        catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+
+        if (failure is not null)
         {
-            lastError = ex.Message;
-            onReloadFailed?.Invoke($"Catalog reload failed, keeping the previous catalog: {ex.Message}");
+            onReloadFailed?.Invoke(failure);
             return false;
         }
+
+        return true;
     }
 
     public void Dispose()
@@ -122,13 +143,34 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     {
         try
         {
-            await Task.Delay(debounce, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+            try
+            {
+                await Task.Delay(debounce, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
 
-        Reload();
+            lock (gate)
+            {
+                if (disposed)
+                {
+                    return;
+                }
+            }
+
+            Reload();
+        }
+        catch (Exception ex)
+        {
+            // An unobserved exception here would fault the fire-and-forget task silently,
+            // leaving the daemon stuck on a stale catalog with no diagnostic at all -- the
+            // original bug this type exists to fix, just made invisible.
+            onReloadFailed?.Invoke(
+                $"Catalog watcher failed unexpectedly, catalog changes will not be picked up automatically: {ex.Message}");
+        }
     }
+
+    private sealed record CatalogSnapshot(RetroBoxCatalogData Catalog, string? Error);
 }

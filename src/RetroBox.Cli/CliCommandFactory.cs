@@ -98,11 +98,11 @@ public static class CliCommandFactory
                 {
                     initial = store.Load();
                 }
-                catch (RetroBoxCatalogException ex)
+                catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
                 {
-                    // A malformed catalog must not cost the owner the panel as well. Without it
-                    // the only way back into the appliance is the GRUB recovery entry, so the
-                    // daemon starts with an empty catalog and reports why.
+                    // A malformed or unreadable catalog must not cost the owner the panel as
+                    // well. Without it the only way back into the appliance is the GRUB recovery
+                    // entry, so the daemon starts with an empty catalog and reports why.
                     initial = RetroBoxCatalogData.Empty;
                     startupError = ex.Message;
                     Console.Error.WriteLine($"Catalog is invalid; starting with an empty catalog: {ex.Message}");
