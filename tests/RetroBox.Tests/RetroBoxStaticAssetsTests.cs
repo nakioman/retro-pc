@@ -42,6 +42,20 @@ public sealed class RetroBoxStaticAssetsTests
     }
 
     [Fact]
+    public void The_no_NFC_badge_carries_its_explanation()
+    {
+        // An uploaded floppy always lands with nfc: false and cannot be inserted until a tag is
+        // written for it, which the panel cannot do yet. The badge is the only place the panel
+        // says so, so both the help string and the attribute that surfaces it are pinned here.
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("untaggedHelp", script, StringComparison.Ordinal);
+        Assert.Contains("badge.title = t(\"untaggedHelp\")", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Both_languages_define_exactly_the_same_keys()
     {
         Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));

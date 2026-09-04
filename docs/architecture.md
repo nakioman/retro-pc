@@ -109,6 +109,13 @@ and TLS are explicitly out of scope, consistent with the appliance's existing
 guest-writable Samba share and the principle that the appliance is a LAN-trusted
 device.
 
+Uploads always land untagged (`nfc: false`), and the daemon refuses to mount an
+untagged floppy, so a floppy uploaded through the panel is listed but cannot be
+inserted until a tag is written for it. The panel marks those with a "No NFC"
+badge carrying that explanation; assigning tags from the panel is a later phase,
+and until then it means stopping the daemon service (it holds the serial port)
+and running `retrobox nfc write`.
+
 The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
 the daemon: edits from the panel, from `retrobox import` on the host, or over
 SSH are picked up without restarting. A malformed `floppies.yaml` at startup no

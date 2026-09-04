@@ -12,6 +12,7 @@ const STRINGS = {
     catalogBroken: "El catalogo tiene un error y no se pudo cargar: {message}",
     tagged: "Grabado",
     untagged: "Sin NFC",
+    untaggedHelp: "Este disquete no se puede insertar hasta que se grabe una etiqueta NFC para el. Grabar etiquetas desde el panel llega mas adelante.",
     readOnly: "Solo lectura",
     readWrite: "Lectura y escritura",
     deleteAction: "Borrar",
@@ -45,6 +46,7 @@ const STRINGS = {
     catalogBroken: "The catalog has an error and could not be loaded: {message}",
     tagged: "Tagged",
     untagged: "No NFC",
+    untaggedHelp: "This floppy cannot be inserted until an NFC tag is written for it. Writing tags from the panel comes later.",
     readOnly: "Read-only",
     readWrite: "Read-write",
     deleteAction: "Delete",
@@ -175,6 +177,11 @@ function renderRow(floppy) {
   const badge = document.createElement("span");
   badge.className = "badge " + (floppy.nfc ? "tagged" : "untagged");
   badge.textContent = floppy.nfc ? t("tagged") : t("untagged");
+  // An uploaded floppy is listed but inert until a tag is written for it, and the panel cannot
+  // write one yet. Without this the badge is an unexplained amber label with no action.
+  if (!floppy.nfc) {
+    badge.title = t("untaggedHelp");
+  }
 
   const mode = document.createElement("button");
   mode.textContent = floppy.mode === "rw" ? t("readWrite") : t("readOnly");

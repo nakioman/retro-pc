@@ -136,6 +136,11 @@ public sealed class RetroBoxFloppyEventHandlerTests
 
         Assert.Equal(RetroBoxFloppyEventHandlerAction.Failed, result.Action);
         Assert.Contains("has no assigned tag", result.Message, StringComparison.Ordinal);
+
+        // The advice has to be executable on the appliance: this daemon owns the serial port
+        // exclusively, so 'retrobox nfc write' can only run with the service stopped, and the
+        // message has to say so instead of handing the operator a command that cannot work.
+        Assert.Contains("stop retrobox-daemon.service", result.Message, StringComparison.Ordinal);
         Assert.Contains("--port", result.Message, StringComparison.Ordinal);
         Assert.Empty(client.Calls);
     }
