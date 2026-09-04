@@ -1968,7 +1968,7 @@ git commit -m "feat(web): assign tags from the panel"
 - A floppy uploaded through the panel can be assigned a tag from the panel and then **mounts when inserted** — the gap this phase exists to close, and the one the phase 2 plan wrongly claimed phase 2 would close.
 - A controller absent at boot, or unplugged and re-plugged, is picked up without restarting the service.
 - A tag already belonging to another floppy is refused until confirmed, and confirming takes the tag from the previous owner so the mount guard cannot accept a stale one.
-- With no controller attached, the panel hides the drive section and everything else still works.
+- With no controller attached, the panel disables its NFC affordances — it hides the assign control and says why, per the spec — and everything else still works.
 - Still out of scope, by design: games grouping, cover art, the scraper settings screen, and authentication.
 
 ## Carried into phase 4
