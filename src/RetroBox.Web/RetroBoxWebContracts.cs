@@ -14,7 +14,7 @@ public sealed record RetroBoxDriveView(string State, string? FloppyId, string? M
 
 public sealed record RetroBoxNfcWriteRequest(string FloppyId, bool Confirm);
 
-public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId);
+public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId, string? Message);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]

@@ -6,14 +6,17 @@ namespace RetroBox.Web;
 
 public static class RetroBoxNfcEndpoints
 {
+    // library is the same RetroBoxFloppyLibrary instance RetroBoxWebHost.StartAsync gives to
+    // RetroBoxLibraryEndpoints.Map: a private instance here would carry its own private lock,
+    // and this endpoint's catalog commit would then race an in-flight upload/delete/rename
+    // instead of serialising behind it.
     public static void Map(
         WebApplication app,
         RetroBoxWebOptions options,
         IRetroBoxCatalogSource catalogSource,
-        IRetroBoxNfcCommandChannel? nfcChannel)
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        RetroBoxFloppyLibrary library)
     {
-        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
-
         app.MapPost("/api/nfc/write", (RetroBoxNfcWriteRequest request, CancellationToken cancellationToken) =>
             WriteAsync(request, library, catalogSource, nfcChannel, cancellationToken));
     }
@@ -25,6 +28,11 @@ public static class RetroBoxNfcEndpoints
         IRetroBoxNfcCommandChannel? nfcChannel,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(request.FloppyId))
+        {
+            return Error(StatusCodes.Status400BadRequest, "invalid-request", "A floppy id is required.");
+        }
+
         if (nfcChannel is null)
         {
             return Error(StatusCodes.Status503ServiceUnavailable, "no-controller", "No floppy controller is connected.");
@@ -59,7 +67,10 @@ public static class RetroBoxNfcEndpoints
             if (currentOwner.Key is not null && !request.Confirm)
             {
                 return Results.Json(
-                    new RetroBoxNfcWriteResult("tag-already-assigned", currentOwner.Key),
+                    new RetroBoxNfcWriteResult(
+                        "tag-already-assigned",
+                        currentOwner.Key,
+                        $"This tag is already assigned to '{currentOwner.Key}'. Confirm to reassign it."),
                     RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult,
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -79,14 +90,19 @@ public static class RetroBoxNfcEndpoints
             // couple of seconds and shows what is actually on the tag.
             return Error(StatusCodes.Status504GatewayTimeout, "write-unconfirmed", ex.Message);
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is RetroBoxNfcCommandUnavailableException or IOException
+            or InvalidOperationException or UnauthorizedAccessException)
         {
+            // RetroBoxNfcCommandUnavailableException is exactly what RetroBoxNfcChannelHolder
+            // throws once its channel is null (device unplugged) — the production shape of "no
+            // controller," distinct from the defensive nfcChannel-is-null branch above, which a
+            // real appliance never actually takes.
             return Error(StatusCodes.Status503ServiceUnavailable, "no-controller", ex.Message);
         }
 
         try
         {
-            library.AssignTag(request.FloppyId, tagUid);
+            library.AssignTag(request.FloppyId, tagUid, floppy.Mode);
         }
         catch (RetroBoxUnknownFloppyException ex)
         {
@@ -96,11 +112,19 @@ public static class RetroBoxNfcEndpoints
         {
             return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
+        catch (RetroBoxCatalogException ex)
+        {
+            // Covers AssignTag's own mode re-check: a concurrent PATCH that changed the mode
+            // already cleared this floppy's tag deliberately (mode is baked into the tag's
+            // payload), so committing this write now would silently undo that and leave the
+            // catalog claiming a tag whose payload no longer matches.
+            return Error(StatusCodes.Status409Conflict, "mode-changed", ex.Message);
+        }
 
         catalogSource.TryReload();
 
         return Results.Json(
-            new RetroBoxNfcWriteResult("written", null),
+            new RetroBoxNfcWriteResult("written", null, null),
             RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult);
     }
 

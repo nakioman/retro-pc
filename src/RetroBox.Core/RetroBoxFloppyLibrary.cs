@@ -80,12 +80,26 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
     /// object, so once it is reassigned the old entry genuinely has no tag, and leaving it
     /// claiming one would let the mount guard accept a stale tag.
     /// </summary>
-    public void AssignTag(string id, string tagUid)
+    /// <param name="expectedMode">
+    /// The mode that was actually written onto the tag's payload, re-checked here against the
+    /// current catalog entry. A concurrent UpdateLabelAndMode call between the write and this
+    /// commit changes the mode and deliberately clears Nfc/NfcUid for exactly this reason — the
+    /// tag's payload is `&lt;id&gt;,&lt;mode&gt;`, so committing this assignment over a since-changed
+    /// mode would silently resurrect a tag whose payload the catalog no longer matches. Null skips
+    /// the check for callers that have not written a mode-bearing payload.
+    /// </param>
+    public void AssignTag(string id, string tagUid, string? expectedMode = null)
     {
         RunExclusively(() =>
         {
             var data = LoadOrThrow();
             var floppy = RequireFloppy(data, id);
+
+            if (expectedMode is not null && !string.Equals(floppy.Mode, expectedMode, StringComparison.Ordinal))
+            {
+                throw new RetroBoxCatalogException(
+                    $"Floppy '{id}' mode changed to '{floppy.Mode}' before the tag write could be recorded.");
+            }
 
             var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal);
 
