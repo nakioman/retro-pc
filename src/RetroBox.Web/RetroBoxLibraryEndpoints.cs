@@ -10,16 +10,25 @@ public static class RetroBoxLibraryEndpoints
 
     public const long MaxUploadBytes = 4 * 1024 * 1024;
 
+    // Kestrel's cap has to cover the multipart envelope (boundary markers, part headers) around
+    // the file, not just the file itself. A cap equal to MaxUploadBytes made Kestrel abort inside
+    // ReadFormAsync with a bodyless 413 before the handler's own file.Length check below could
+    // ever run, so the "file-too-large" {code, message} response was dead code.
+    public const long MaxRequestBodyBytes = MaxUploadBytes + 64 * 1024;
+
     public static void Map(WebApplication app, RetroBoxWebOptions options, IRetroBoxCatalogSource catalogSource)
     {
-        app.MapPost("/api/floppies", (HttpRequest request) => UploadAsync(request, options, catalogSource));
-        app.MapDelete("/api/floppies/{id}", (string id) => Delete(id, options, catalogSource));
-        app.MapPatch("/api/floppies/{id}", (string id, RetroBoxFloppyPatch patch) => Patch(id, patch, options, catalogSource));
+        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
+
+        app.MapPost("/api/floppies", (HttpRequest request) => UploadAsync(request, options, library, catalogSource));
+        app.MapDelete("/api/floppies/{id}", (string id) => Delete(id, library, catalogSource));
+        app.MapPatch("/api/floppies/{id}", (string id, RetroBoxFloppyPatch patch) => Patch(id, patch, library, catalogSource));
     }
 
     private static async Task<IResult> UploadAsync(
         HttpRequest request,
         RetroBoxWebOptions options,
+        RetroBoxFloppyLibrary library,
         IRetroBoxCatalogSource catalogSource)
     {
         if (!request.HasFormContentType)
@@ -55,47 +64,83 @@ public static class RetroBoxLibraryEndpoints
             return Error(StatusCodes.Status400BadRequest, "unusable-name", "The filename yields no usable catalog ID.");
         }
 
-        var id = ResolveFreeId(slug, catalogSource);
-
         Directory.CreateDirectory(options.ScratchRoot);
-        var scratchPath = Path.Combine(options.ScratchRoot, fileName);
 
-        await using (var scratch = File.Create(scratchPath))
+        // Staged under a name nothing can collide on: the ID this upload will get is not known
+        // until the exclusive section below resolves it against the live catalog.
+        var stagingPath = Path.Combine(options.ScratchRoot, $"upload-{Guid.NewGuid():N}{extension}");
+
+        await using (var scratch = File.Create(stagingPath))
         {
             await file.CopyToAsync(scratch);
         }
 
-        try
+        string? id = null;
+        RetroBoxCatalogException? importError = null;
+
+        library.RunExclusively(() =>
         {
-            new RetroBoxFloppyImporter().Import(new RetroBoxFloppyImportRequest
+            var resolvedId = ResolveFreeId(slug, catalogSource);
+
+            // Both the scratch and the cataloged filename come from the resolved ID, not the
+            // uploaded name: RetroBoxFloppyImporter targets catalogedRoot/Path.GetFileName(source),
+            // so two uploads sharing an original filename would otherwise collide on that move
+            // even though ResolveFreeId correctly gave them different catalog IDs.
+            var finalScratchPath = Path.Combine(options.ScratchRoot, resolvedId + extension);
+
+            try
             {
-                Id = id,
-                Label = Path.GetFileNameWithoutExtension(fileName),
-                ImagePath = scratchPath,
-                ConfigRoot = options.ConfigRoot,
-                ScratchRoot = options.ScratchRoot,
-                CatalogedRoot = options.CatalogedRoot,
-            });
-        }
-        catch (RetroBoxCatalogException ex)
+                File.Move(stagingPath, finalScratchPath, overwrite: false);
+
+                new RetroBoxFloppyImporter().Import(new RetroBoxFloppyImportRequest
+                {
+                    Id = resolvedId,
+                    Label = Path.GetFileNameWithoutExtension(fileName),
+                    ImagePath = finalScratchPath,
+                    ConfigRoot = options.ConfigRoot,
+                    ScratchRoot = options.ScratchRoot,
+                    CatalogedRoot = options.CatalogedRoot,
+                });
+
+                id = resolvedId;
+                catalogSource.TryReload();
+            }
+            catch (RetroBoxCatalogException ex)
+            {
+                importError = ex;
+            }
+            finally
+            {
+                // Harmless once Import has moved the file: File.Delete on a path that no longer
+                // exists is a no-op. This runs for every failure shape, not just
+                // RetroBoxCatalogException, so an UnauthorizedAccessException or a disk-full
+                // IOException from the importer does not leak the scratch copy either.
+                SafeDelete(stagingPath);
+                SafeDelete(finalScratchPath);
+            }
+        });
+
+        if (importError is not null)
         {
-            SafeDelete(scratchPath);
-            return Error(StatusCodes.Status400BadRequest, "import-failed", ex.Message);
+            return Error(StatusCodes.Status400BadRequest, "import-failed", importError.Message);
         }
 
-        Refresh(catalogSource);
         return Results.Created($"/api/floppies/{id}", null);
     }
 
-    private static IResult Delete(string id, RetroBoxWebOptions options, IRetroBoxCatalogSource catalogSource)
+    private static IResult Delete(string id, RetroBoxFloppyLibrary library, IRetroBoxCatalogSource catalogSource)
     {
         try
         {
-            new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot)).Delete(id);
+            library.Delete(id);
         }
-        catch (RetroBoxCatalogException ex) when (ex.Message.StartsWith("Unknown floppy", StringComparison.Ordinal))
+        catch (RetroBoxUnknownFloppyException ex)
         {
             return Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
+        }
+        catch (RetroBoxCatalogUnavailableException ex)
+        {
+            return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
         catch (RetroBoxCatalogException ex)
         {
@@ -110,17 +155,20 @@ public static class RetroBoxLibraryEndpoints
     private static IResult Patch(
         string id,
         RetroBoxFloppyPatch patch,
-        RetroBoxWebOptions options,
+        RetroBoxFloppyLibrary library,
         IRetroBoxCatalogSource catalogSource)
     {
         try
         {
-            new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot))
-                .UpdateLabelAndMode(id, patch.Label, patch.Mode);
+            library.UpdateLabelAndMode(id, patch.Label, patch.Mode);
         }
-        catch (RetroBoxCatalogException ex) when (ex.Message.StartsWith("Unknown floppy", StringComparison.Ordinal))
+        catch (RetroBoxUnknownFloppyException ex)
         {
             return Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
+        }
+        catch (RetroBoxCatalogUnavailableException ex)
+        {
+            return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
         catch (RetroBoxCatalogException ex)
         {

@@ -41,7 +41,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         // a phone on the LAN.
         builder.WebHost.UseUrls($"http://0.0.0.0:{options.Port}");
         builder.WebHost.ConfigureKestrel(kestrel =>
-            kestrel.Limits.MaxRequestBodySize = RetroBoxLibraryEndpoints.MaxUploadBytes);
+            kestrel.Limits.MaxRequestBodySize = RetroBoxLibraryEndpoints.MaxRequestBodyBytes);
         builder.Services.ConfigureHttpJsonOptions(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, RetroBoxWebJsonContext.Default));
 

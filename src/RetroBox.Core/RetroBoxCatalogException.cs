@@ -1,6 +1,6 @@
 namespace RetroBox.Core;
 
-public sealed class RetroBoxCatalogException : Exception
+public class RetroBoxCatalogException : Exception
 {
     public RetroBoxCatalogException(string message)
         : base(message)

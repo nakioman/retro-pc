@@ -37,22 +37,18 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
     [Fact]
     public void Delete_leaves_a_loadable_catalog_when_the_image_cannot_be_removed()
     {
-        var image = WriteCatalog("disk1");
-        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
+        WriteCatalog("disk1");
+        var library = new RetroBoxFloppyLibrary(
+            new RetroBoxConfigStore(root),
+            deleteFile: _ => throw new IOException("simulated failure removing the image"));
 
-        using (File.Open(image, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-            try
-            {
-                library.Delete("disk1");
-            }
-            catch (IOException)
-            {
-            }
-        }
+        Assert.Throws<RetroBoxCatalogException>(() => library.Delete("disk1"));
 
         // Whatever happened to the file, the catalog must still load: the daemon and
-        // `retrobox boot` both call Load() and an orphaned entry would stop the appliance.
+        // `retrobox boot` both call Load() and an orphaned entry would stop the appliance. The
+        // delete is injected so this failure is deterministic on every platform: holding the
+        // image open with FileShare.None only maps to an advisory flock on Unix, and unlink(2)
+        // ignores advisory locks, so a real File.Delete never actually throws there.
         Assert.Empty(new RetroBoxConfigStore(root).Load().Floppies);
     }
 
@@ -62,7 +58,7 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
         WriteCatalog("disk1");
         var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
 
-        Assert.Throws<RetroBoxCatalogException>(() => library.Delete("nope"));
+        Assert.Throws<RetroBoxUnknownFloppyException>(() => library.Delete("nope"));
     }
 
     [Fact]
@@ -110,6 +106,31 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
         var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
 
         Assert.Throws<RetroBoxCatalogException>(() => library.UpdateLabelAndMode("disk1", null, "rx"));
+    }
+
+    [Fact]
+    public void UpdateLabelAndMode_rejects_an_unknown_id()
+    {
+        WriteCatalog("disk1");
+        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
+
+        Assert.Throws<RetroBoxUnknownFloppyException>(() => library.UpdateLabelAndMode("nope", "x", null));
+    }
+
+    [Fact]
+    public void UpdateLabelAndMode_throws_a_distinct_exception_when_the_catalog_fails_to_load()
+    {
+        WriteCatalog("disk1");
+        File.AppendAllText(
+            Path.Combine(root, "floppies.yaml"),
+            $"  broken:\n    label: broken\n    image: {Path.Combine(root, "missing.img")}\n    mode: ro\n    size: 1.44M\n");
+        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
+
+        // A sibling entry's missing image fails Load()/Validate() for the whole catalog, before
+        // "disk1" is even looked up. This must not be confused with either "disk1 doesn't exist"
+        // (RetroBoxUnknownFloppyException) or "the mode was invalid" (a plain
+        // RetroBoxCatalogException) — both of those are the client's fault; this is not.
+        Assert.Throws<RetroBoxCatalogUnavailableException>(() => library.UpdateLabelAndMode("disk1", "Renamed", null));
     }
 
     private string WriteCatalog(string id)
