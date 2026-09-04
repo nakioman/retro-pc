@@ -216,7 +216,10 @@ public static class CliCommandFactory
         return new RetroBoxSerialDeviceRunner(options.Port, options.Baud).OpenAsync(cancellationToken);
     }
 
-    private static async Task<int> SuperviseSerialDeviceAsync(
+    // Internal and driven directly by a test: the drive tracker and the channel holder are
+    // process-lifetime objects this loop is the sole owner of, and a full daemon invocation
+    // offers no handle on either.
+    internal static async Task<int> SuperviseSerialDeviceAsync(
         IRetroBoxCatalogSource catalogSource,
         IRetroBoxFloppyControlClient client,
         RetroBoxDaemonCommandRequest request,
@@ -324,9 +327,14 @@ public static class CliCommandFactory
             }
             finally
             {
-                // Clearing the holder here, before the device is even disposed, is what makes the
-                // drive endpoints report unavailable the moment a controller goes away, rather
-                // than timing out against a dead writer.
+                // Both are cleared here, before the device is even disposed, so the drive
+                // endpoints report unavailable the moment a controller goes away rather than
+                // timing out against a dead writer. The tracker has to be reset alongside the
+                // holder, not instead of it: RetroBoxDriveEndpoints answers a Loaded tracker
+                // without ever touching the channel, so a disk that was seated at unplug time
+                // would otherwise keep /api/drive reporting "loaded" for the whole outage. Only
+                // INIT resets the tracker otherwise, and a controller that is gone sends none.
+                driveState.Reset();
                 channelHolder.Set(null);
 
                 try

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using RetroBox.Cli;
+using RetroBox.Core;
 using RetroBox.Daemon;
 
 namespace RetroBox.Tests;
@@ -706,6 +707,78 @@ public sealed class CliHelpSmokeTests
 
             cancellation.Cancel();
             await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public async Task A_controller_that_goes_away_clears_the_drive_tracker_as_well_as_the_channel()
+    {
+        // RetroBoxDriveEndpoints short-circuits on a Loaded tracker before it ever touches the
+        // channel, so clearing the holder alone does not make /api/drive report unavailable while
+        // a disk was seated at unplug time -- the panel would keep offering "Reassign this tag"
+        // against nothing for the whole outage. Only INIT ever reset the tracker, and a
+        // disconnected controller never sends one.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-tracker-reset", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var driveState = new RetroBoxDriveStateTracker();
+        var channelHolder = new RetroBoxNfcChannelHolder();
+        var deviceReader = new PipeTextReader();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                // The first connection seats a disk and stays open until the test ends it; every
+                // later attempt fails, so nothing re-seats the disk behind the assertions below.
+                if (Interlocked.Increment(ref attempts) > 1)
+                {
+                    throw new RetroBoxSerialDeviceException("the controller is gone");
+                }
+
+                deviceReader.WriteLine("INSERT disk1,ro");
+                return Task.FromResult(new RetroBoxSerialDevice(
+                    new MemoryStream(),
+                    deviceReader,
+                    TextWriter.Null));
+            }
+
+            using var cancellation = new CancellationTokenSource();
+            var supervision = Task.Run(() => CliCommandFactory.SuperviseSerialDeviceAsync(
+                new MutableCatalogSource(
+                    FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", "ro")),
+                new RecordingFloppyControlClient(),
+                new RetroBoxDaemonCommandRequest(missingRoot, null, "/dev/retrobox-tracker-reset-test", null, false, 0),
+                new RetroBoxSerialDeviceOptions("/dev/retrobox-tracker-reset-test", 115200),
+                panelIsRunning: true,
+                driveState,
+                channelHolder,
+                Opener,
+                cancellation.Token));
+
+            await WaitForCondition(() => driveState.Current is RetroBoxDriveState.Loaded, supervision);
+
+            // The controller goes away: the reader hits EOF, which is what ends the connection
+            // and runs the loop's cleanup.
+            deviceReader.Complete();
+
+            await WaitForCondition(
+                () => driveState.Current is RetroBoxDriveState.Unknown, supervision);
+            await Assert.ThrowsAsync<RetroBoxNfcCommandUnavailableException>(
+                () => channelHolder.ReadTagIdAsync(CancellationToken.None));
+
+            cancellation.Cancel();
+            await AwaitWithinBound(supervision);
         }
         finally
         {
