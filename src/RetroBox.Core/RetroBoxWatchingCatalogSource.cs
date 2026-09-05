@@ -14,7 +14,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private readonly TimeSpan debounce;
     private readonly FileSystemWatcher? watcher;
     private readonly Lock gate = new();
-    private volatile CatalogSnapshot snapshot;
+    private volatile RetroBoxCatalogSnapshot snapshot;
     private volatile string? watcherFailureMessage;
     private CancellationTokenSource? pendingReload;
     private bool disposed;
@@ -28,7 +28,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         string? initialError = null)
     {
         store = new RetroBoxConfigStore(rootPath);
-        snapshot = new CatalogSnapshot(initial, initialError);
+        snapshot = new RetroBoxCatalogSnapshot(initial, initialError);
         this.onReloadFailed = onReloadFailed;
         this.debounce = debounce ?? DefaultDebounce;
 
@@ -63,16 +63,30 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         watcher.EnableRaisingEvents = true;
     }
 
-    public RetroBoxCatalogData Current => snapshot.Catalog;
-
     // The watcher's death is sticky and independent of the catalog snapshot: once inotify stops
     // delivering events, a later successful reload (the panel's own writes still call Reload
     // directly) must not make the outage look resolved when nothing fixed the watcher itself.
-    public string? LastError => watcherFailureMessage is null
-        ? snapshot.Error
-        : snapshot.Error is null
-            ? watcherFailureMessage
-            : $"{watcherFailureMessage} {snapshot.Error}";
+    // Both volatile fields are read into locals exactly once here, and the pair is composed from
+    // those locals: reading either field twice (once for the catalog, again for the error) would
+    // let a Reload() landing in between pair one snapshot's catalog with another's error.
+    public RetroBoxCatalogSnapshot Snapshot
+    {
+        get
+        {
+            var current = snapshot;
+            var watcherFailure = watcherFailureMessage;
+            return current with { Error = Compose(watcherFailure, current.Error) };
+        }
+    }
+
+    public RetroBoxCatalogData Current => Snapshot.Catalog;
+
+    public string? LastError => Snapshot.Error;
+
+    private static string? Compose(string? watcherFailure, string? snapshotError) =>
+        watcherFailure is null ? snapshotError
+        : snapshotError is null ? watcherFailure
+        : $"{watcherFailure} {snapshotError}";
 
     public bool TryReload() => Reload();
 
@@ -88,7 +102,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         {
             try
             {
-                snapshot = new CatalogSnapshot(store.Load(), null);
+                snapshot = new RetroBoxCatalogSnapshot(store.Load(), null);
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
             {
@@ -198,6 +212,4 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
                 $"Catalog watcher failed unexpectedly, catalog changes will not be picked up automatically: {ex.Message}");
         }
     }
-
-    private sealed record CatalogSnapshot(RetroBoxCatalogData Catalog, string? Error);
 }

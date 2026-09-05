@@ -3,6 +3,39 @@ using RetroBox.Daemon;
 
 namespace RetroBox.Tests;
 
+internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
+{
+    public List<string> Calls { get; } = [];
+
+    public NfcResponse TagIdResponse { get; init; } = new NfcResponse.Error("no-tag-detected");
+
+    public NfcResponse WriteResponse { get; init; } = new NfcResponse.Ok();
+
+    public Exception? ThrowOnCall { get; init; }
+
+    public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add("TAGID");
+        return Task.FromResult(TagIdResponse);
+    }
+
+    public Task<NfcResponse> WriteTagAsync(string id, string mode, CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add($"WRITE:{id}:{mode}");
+        return Task.FromResult(WriteResponse);
+    }
+}
+
 internal static class RetroBoxSerialLineRouterTestHelpers
 {
     public static async Task WaitForPendingCommand(RetroBoxSerialLineRouter router)
@@ -47,9 +80,7 @@ internal sealed class MutableCatalogSource(RetroBoxCatalogData initial) : IRetro
 {
     private RetroBoxCatalogData current = initial;
 
-    public RetroBoxCatalogData Current => current;
-
-    public string? LastError => null;
+    public RetroBoxCatalogSnapshot Snapshot => new(current, null);
 
     public void Publish(RetroBoxCatalogData catalog) => current = catalog;
 }

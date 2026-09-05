@@ -158,18 +158,25 @@ public static class CliCommandFactory
                     cancellation.Cancel();
                 };
 
+                // The tracker is built once and lives for the whole process, outlying any single
+                // serial connection; the holder is the stable indirection the panel is handed
+                // instead of a channel bound to a device that may be unplugged.
+                var driveState = new RetroBoxDriveStateTracker();
+                var channelHolder = new RetroBoxNfcChannelHolder();
+
                 // The panel starts before the controller and is torn down after it. Starting
                 // first is what keeps a controller-less appliance serving: the installer writes a
                 // --serial-port even when it detected no controller, so opening the device first
                 // would abort before the panel ever bound its port.
                 var webHost = await TryStartWebHost(
-                    request.WebPort, request.ConfigRoot, catalogSource, cancellation.Token);
+                    request.WebPort, request.ConfigRoot, catalogSource, driveState, channelHolder,
+                    cancellation.Token);
 
                 try
                 {
                     return await SuperviseSerialDeviceAsync(
-                        catalogSource, client, request, serialOptions, webHost is not null,
-                        serialDeviceOpener ?? OpenSerialDeviceAsync, cancellation.Token);
+                        catalogSource, client, request, serialOptions, webHost is not null, driveState,
+                        channelHolder, serialDeviceOpener ?? OpenSerialDeviceAsync, cancellation.Token);
                 }
                 finally
                 {
@@ -215,6 +222,8 @@ public static class CliCommandFactory
         RetroBoxDaemonCommandRequest request,
         RetroBoxSerialDeviceOptions? serialOptions,
         bool panelIsRunning,
+        RetroBoxDriveStateTracker driveState,
+        RetroBoxNfcChannelHolder channelHolder,
         Func<RetroBoxSerialDeviceOptions, CancellationToken, Task<RetroBoxSerialDevice>> openDevice,
         CancellationToken cancellationToken)
     {
@@ -224,7 +233,8 @@ public static class CliCommandFactory
             // piping events by hand rely on. Under systemd stdin is /dev/null, so this returns at
             // once and the panel, if any, keeps the process alive below.
             var exitCode = await new RetroBoxDaemon(
-                catalogSource, client, Console.In, Console.Out, request.Echo).RunAsync(cancellationToken);
+                catalogSource, client, Console.In, Console.Out, request.Echo, driveState: driveState)
+                .RunAsync(cancellationToken);
 
             if (panelIsRunning)
             {
@@ -284,6 +294,12 @@ public static class CliCommandFactory
                 Console.Error.WriteLine("Floppy controller connected.");
             }
 
+            // A channel holds the writer of one open device, so router and channel are rebuilt
+            // per connection while driveState, the single tracker built before the loop, is not.
+            var router = new RetroBoxSerialLineRouter();
+            var channel = new RetroBoxSerialNfcCommandChannel(router, device.Writer);
+            channelHolder.Set(channel);
+
             try
             {
                 try
@@ -294,7 +310,11 @@ public static class CliCommandFactory
                         device.Reader,
                         Console.Out,
                         request.Echo,
-                        device.Writer).RunAsync(cancellationToken);
+                        device.Writer,
+                        socketProbe: null,
+                        lineRouter: router,
+                        driveState: driveState,
+                        nfcChannel: channel).RunAsync(cancellationToken);
                 }
                 catch (Exception ex) when (ex is RetroBoxSerialDeviceException or IOException)
                 {
@@ -304,6 +324,11 @@ public static class CliCommandFactory
             }
             finally
             {
+                // Clearing the holder here, before the device is even disposed, is what makes the
+                // drive endpoints report unavailable the moment a controller goes away, rather
+                // than timing out against a dead writer.
+                channelHolder.Set(null);
+
                 try
                 {
                     device.Dispose();
@@ -349,7 +374,12 @@ public static class CliCommandFactory
     }
 
     private static async Task<RetroBoxWebHost?> TryStartWebHost(
-        int port, string configRoot, IRetroBoxCatalogSource catalogSource, CancellationToken cancellationToken)
+        int port,
+        string configRoot,
+        IRetroBoxCatalogSource catalogSource,
+        IRetroBoxDriveState driveState,
+        IRetroBoxNfcCommandChannel nfcChannel,
+        CancellationToken cancellationToken)
     {
         if (port == 0)
         {
@@ -361,7 +391,9 @@ public static class CliCommandFactory
             return await RetroBoxWebHost.StartAsync(
                 new RetroBoxWebOptions { Port = port, ConfigRoot = configRoot },
                 catalogSource,
-                cancellationToken);
+                cancellationToken,
+                driveState,
+                nfcChannel);
         }
         catch (Exception ex) when (IsRecoverableWebHostBindFailure(ex))
         {

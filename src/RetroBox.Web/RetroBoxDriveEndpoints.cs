@@ -1,0 +1,111 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using RetroBox.Core;
+
+namespace RetroBox.Web;
+
+public static class RetroBoxDriveEndpoints
+{
+    public const string Unavailable = "unavailable";
+    public const string Empty = "empty";
+    public const string Loaded = "loaded";
+    public const string BlankTag = "blankTag";
+
+    public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
+
+    public static void Map(
+        WebApplication app,
+        IRetroBoxDriveState? driveState,
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        Func<CancellationToken, Task>? waitForNextPoll = null)
+    {
+        app.MapGet("/api/drive", () => BuildViewAsync(driveState, nfcChannel));
+        app.MapGet(
+            "/api/drive/events",
+            (HttpContext context) => StreamAsync(context, driveState, nfcChannel, waitForNextPoll ?? WaitForNextPollAsync));
+    }
+
+    private static Task WaitForNextPollAsync(CancellationToken cancellationToken) =>
+        Task.Delay(PollInterval, cancellationToken);
+
+    /// <summary>
+    /// A blank tag never raises an INSERT — the firmware cannot read a payload from it — so the
+    /// event stream alone can never tell "no disk" from "a new disk waiting to be assigned".
+    /// TAGID is the only way to ask.
+    /// </summary>
+    public static async Task<RetroBoxDriveView> BuildViewAsync(
+        IRetroBoxDriveState? driveState,
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        CancellationToken cancellationToken = default)
+    {
+        if (driveState is null || nfcChannel is null)
+        {
+            return new RetroBoxDriveView(Unavailable, null, null, null);
+        }
+
+        if (driveState.Current is RetroBoxDriveState.Loaded loaded)
+        {
+            return new RetroBoxDriveView(Loaded, loaded.FloppyId, loaded.Mode, null);
+        }
+
+        try
+        {
+            return await nfcChannel.ReadTagIdAsync(cancellationToken) switch
+            {
+                NfcResponse.TagId tag => new RetroBoxDriveView(BlankTag, null, null, tag.Uid),
+                _ => new RetroBoxDriveView(Empty, null, null, null),
+            };
+        }
+        catch (Exception ex) when (ex is RetroBoxNfcCommandTimeoutException or RetroBoxNfcCommandUnavailableException
+            or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            // A controller that stops answering, or a channel with nothing behind it right now
+            // (RetroBoxNfcChannelHolder between connections), is reported as unavailable rather
+            // than as an empty drive: "no disk" is a claim, and this code no longer knows.
+            // SerialDeviceWriter does not wrap the writer's failures the way the reader does, so a
+            // yanked or disposed port surfaces raw ObjectDisposedException/InvalidOperationException
+            // (SerialPort.BaseStream throws InvalidOperationException once the port is closed) or
+            // UnauthorizedAccessException — the same set RetroBoxSerialDeviceRunner already treats
+            // as "device went away" elsewhere.
+            return new RetroBoxDriveView(Unavailable, null, null, null);
+        }
+    }
+
+    private static async Task StreamAsync(
+        HttpContext context,
+        IRetroBoxDriveState? driveState,
+        IRetroBoxNfcCommandChannel? nfcChannel,
+        Func<CancellationToken, Task> waitForNextPoll)
+    {
+        context.Response.Headers.ContentType = "text/event-stream";
+        context.Response.Headers.CacheControl = "no-cache";
+
+        string? lastPayload = null;
+
+        while (!context.RequestAborted.IsCancellationRequested)
+        {
+            // A client closing the tab can cancel either the up-to-5s TAGID wait inside
+            // BuildViewAsync or the poll wait below; both are the same event and must exit the
+            // same way, so the whole iteration is one try rather than wrapping the wait alone.
+            try
+            {
+                var view = await BuildViewAsync(driveState, nfcChannel, context.RequestAborted);
+                var payload = JsonSerializer.Serialize(view, RetroBoxWebJsonContext.Default.RetroBoxDriveView);
+
+                if (payload != lastPayload)
+                {
+                    lastPayload = payload;
+                    await context.Response.WriteAsync($"data: {payload}\n\n", context.RequestAborted);
+                    await context.Response.Body.FlushAsync(context.RequestAborted);
+                }
+
+                await waitForNextPoll(context.RequestAborted);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+}

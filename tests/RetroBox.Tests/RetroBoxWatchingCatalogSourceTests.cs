@@ -158,6 +158,25 @@ public sealed class RetroBoxWatchingCatalogSourceTests : IDisposable
         Assert.Contains("watcher", source.LastError, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Snapshot_pairs_the_catalog_with_its_error_atomically()
+    {
+        WriteCatalog("disk1");
+        var initial = new RetroBoxConfigStore(root).Load();
+        using var source = new RetroBoxWatchingCatalogSource(root, initial, watchFileSystem: false);
+
+        var healthy = source.Snapshot;
+        Assert.Equal(["disk1"], healthy.Catalog.Floppies.Keys);
+        Assert.Null(healthy.Error);
+
+        File.WriteAllText(Path.Combine(root, "floppies.yaml"), "floppies: [ not a mapping");
+        Assert.False(source.Reload());
+
+        var broken = source.Snapshot;
+        Assert.Equal(["disk1"], broken.Catalog.Floppies.Keys);
+        Assert.NotNull(broken.Error);
+    }
+
     private void WriteCatalog(params string[] floppyIds)
     {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");
