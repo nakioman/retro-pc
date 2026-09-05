@@ -48,11 +48,20 @@
   <section class="card">
     <div class="card-head">
       <h2 data-i18n="libraryTitle"></h2>
-      <span id="stats" class="hint"></span>
+      <div class="actions">
+        <span id="stats" class="hint"></span>
+        <button id="game-create-toggle" data-i18n="gameCreate"></button>
+      </div>
     </div>
+    <form id="game-create" class="game-create" hidden>
+      <p class="hint" data-i18n="gameCreatePrompt"></p>
+      <label><span data-i18n="gameId"></span><input id="game-id" name="id" required></label>
+      <label><span data-i18n="gameLabel"></span><input id="game-label" name="label" required></label>
+      <button class="primary" type="submit" data-i18n="gameCreate"></button>
+    </form>
     <p id="catalog-error" class="error" role="alert" hidden></p>
     <p id="library-error" class="error" role="alert" hidden></p>
-    <ul id="library" class="library"></ul>
+    <div id="library" class="library"></div>
     <p id="empty" class="hint" data-i18n="empty" hidden></p>
   </section>
 </main>

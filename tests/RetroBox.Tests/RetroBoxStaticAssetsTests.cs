@@ -108,6 +108,29 @@ public sealed class RetroBoxStaticAssetsTests
     }
 
     [Theory]
+    [InlineData("gameCreate")]
+    [InlineData("gameCreatePrompt")]
+    [InlineData("gameEdit")]
+    [InlineData("gameMembership")]
+    [InlineData("gameSave")]
+    [InlineData("gameCancel")]
+    [InlineData("gameDelete")]
+    [InlineData("confirmGameDelete")]
+    [InlineData("gamesHeading")]
+    [InlineData("ungroupedHeading")]
+    [InlineData("unknown-game")]
+    [InlineData("duplicate-membership")]
+    public void Both_languages_define_the_game_panel_strings(string key)
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains(key, ExtractKeys(script, "es"));
+        Assert.Contains(key, ExtractKeys(script, "en"));
+    }
+
+    [Theory]
     [InlineData("no-tag-present")]
     [InlineData("tag-already-assigned")]
     [InlineData("write-failed")]

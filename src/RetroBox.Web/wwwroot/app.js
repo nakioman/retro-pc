@@ -8,6 +8,18 @@ const STRINGS = {
     uploadHint: "Imágenes .img, .ima o .dsk",
     uploadButton: "Seleccionar archivos",
     libraryTitle: "Biblioteca",
+    gameCreate: "Crear grupo",
+    gameCreatePrompt: "Creá un grupo con un ID único y un nombre visible.",
+    gameId: "ID",
+    gameLabel: "Nombre",
+    gameEdit: "Editar",
+    gameMembership: "Disquetes del grupo",
+    gameSave: "Guardar",
+    gameCancel: "Cancelar",
+    gameDelete: "Eliminar grupo",
+    confirmGameDelete: "¿Eliminar este grupo? Los disquetes quedarán sin agrupar.",
+    gamesHeading: "Juegos",
+    ungroupedHeading: "Sin agrupar",
     empty: "Todavía no hay disquetes en el catálogo.",
     catalogBroken: "El catálogo tiene un error y no se pudo cargar: {message}",
     tagged: "Grabado",
@@ -31,6 +43,8 @@ const STRINGS = {
     "import-failed": "No se pudo importar la imagen.",
     "catalog-unavailable": "No se pudo leer el catálogo en disco; la operación se rechazó.",
     "unknown-floppy": "Ese disquete no existe.",
+    "unknown-game": "Ese grupo no existe.",
+    "duplicate-membership": "Un disquete solo puede pertenecer a un grupo.",
     "invalid-patch": "El cambio no es válido.",
     "delete-incomplete": "Se quitó del catálogo, pero el archivo quedó en disco.",
     unexpected: "Error inesperado.",
@@ -61,6 +75,18 @@ const STRINGS = {
     uploadHint: ".img, .ima or .dsk images",
     uploadButton: "Choose files",
     libraryTitle: "Library",
+    gameCreate: "Create group",
+    gameCreatePrompt: "Create a group with a unique ID and visible name.",
+    gameId: "ID",
+    gameLabel: "Name",
+    gameEdit: "Edit",
+    gameMembership: "Group floppies",
+    gameSave: "Save",
+    gameCancel: "Cancel",
+    gameDelete: "Delete group",
+    confirmGameDelete: "Delete this group? Its floppies will remain ungrouped.",
+    gamesHeading: "Games",
+    ungroupedHeading: "Ungrouped",
     empty: "No floppies in the catalog yet.",
     catalogBroken: "The catalog has an error and could not be loaded: {message}",
     tagged: "Tagged",
@@ -84,6 +110,8 @@ const STRINGS = {
     "import-failed": "The image could not be imported.",
     "catalog-unavailable": "The catalog on disk could not be read; the operation was refused.",
     "unknown-floppy": "That floppy does not exist.",
+    "unknown-game": "That group does not exist.",
+    "duplicate-membership": "A floppy can only belong to one group.",
     "invalid-patch": "That change is not valid.",
     "delete-incomplete": "Removed from the catalog, but the file is still on disk.",
     unexpected: "Unexpected error.",
@@ -111,6 +139,9 @@ const STRINGS = {
 
 let language = pickLanguage();
 let floppies = [];
+let games = [];
+let ungroupedFloppies = [];
+let editingGameId = null;
 
 function pickLanguage() {
   const stored = window.localStorage.getItem("retrobox.lang");
@@ -163,7 +194,9 @@ async function loadCatalog() {
     }
 
     const payload = await response.json();
-    floppies = payload.floppies;
+    games = payload.games || [];
+    ungroupedFloppies = payload.ungroupedFloppies || [];
+    floppies = games.flatMap((game) => game.floppies).concat(ungroupedFloppies);
     problem.hidden = true;
 
     const broken = document.getElementById("catalog-error");
@@ -177,6 +210,8 @@ async function loadCatalog() {
     problem.textContent = t("loadFailed");
     problem.hidden = false;
     floppies = [];
+    games = [];
+    ungroupedFloppies = [];
   }
 
   render();
@@ -185,10 +220,6 @@ async function loadCatalog() {
 function render() {
   const list = document.getElementById("library");
   const term = document.getElementById("search").value.trim().toLowerCase();
-  const visible = floppies.filter(
-    (floppy) => floppy.id.toLowerCase().includes(term) || floppy.label.toLowerCase().includes(term)
-  );
-
   list.textContent = "";
   document.getElementById("empty").hidden = floppies.length > 0;
   document.getElementById("stats").textContent = t("stats", {
@@ -196,11 +227,135 @@ function render() {
     tagged: floppies.filter((floppy) => floppy.nfc).length
   });
 
-  for (const floppy of visible) {
-    list.appendChild(renderRow(floppy));
+  if (games.length > 0) {
+    const heading = document.createElement("h3");
+    heading.textContent = t("gamesHeading");
+    list.appendChild(heading);
+
+    for (const game of games) {
+      const gameMatches = game.id.toLowerCase().includes(term) || game.label.toLowerCase().includes(term);
+      const visibleFloppies = gameMatches ? game.floppies : filterFloppies(game.floppies, term);
+      if (gameMatches || visibleFloppies.length > 0) {
+        list.appendChild(renderGame(game, visibleFloppies));
+      }
+    }
+  }
+
+  const visibleUngrouped = filterFloppies(ungroupedFloppies, term);
+  if (ungroupedFloppies.length > 0 && visibleUngrouped.length > 0) {
+    const heading = document.createElement("h3");
+    heading.textContent = t("ungroupedHeading");
+    list.appendChild(heading);
+
+    const group = document.createElement("section");
+    group.className = "game-group";
+    const rows = document.createElement("ul");
+    rows.className = "floppy-list";
+    for (const floppy of visibleUngrouped) {
+      rows.appendChild(renderRow(floppy));
+    }
+    group.appendChild(rows);
+    list.appendChild(group);
   }
 
   renderDrive();
+}
+
+function filterFloppies(items, term) {
+  return items.filter(
+    (floppy) => floppy.id.toLowerCase().includes(term) || floppy.label.toLowerCase().includes(term)
+  );
+}
+
+function renderGame(game, visibleFloppies) {
+  const section = document.createElement("section");
+  section.className = "game-group";
+
+  const head = document.createElement("div");
+  head.className = "game-head";
+  const title = document.createElement("h4");
+  title.textContent = game.label;
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const edit = document.createElement("button");
+  edit.textContent = t("gameEdit");
+  edit.addEventListener("click", () => {
+    editingGameId = editingGameId === game.id ? null : game.id;
+    render();
+  });
+  const remove = document.createElement("button");
+  remove.className = "danger";
+  remove.textContent = t("gameDelete");
+  remove.addEventListener("click", () => deleteGame(game.id, remove));
+  actions.append(edit, remove);
+  head.append(title, actions);
+  section.appendChild(head);
+
+  if (editingGameId === game.id) {
+    section.appendChild(renderGameEditor(game));
+  }
+
+  const rows = document.createElement("ul");
+  rows.className = "floppy-list";
+  for (const floppy of visibleFloppies) {
+    rows.appendChild(renderRow(floppy));
+  }
+  section.appendChild(rows);
+  return section;
+}
+
+function renderGameEditor(game) {
+  const form = document.createElement("form");
+  form.className = "game-editor";
+  const label = document.createElement("label");
+  const labelText = document.createElement("span");
+  labelText.textContent = t("gameLabel");
+  const input = document.createElement("input");
+  input.name = "label";
+  input.required = true;
+  input.value = game.label;
+  label.append(labelText, input);
+
+  const membership = document.createElement("fieldset");
+  const legend = document.createElement("legend");
+  legend.textContent = t("gameMembership");
+  membership.appendChild(legend);
+  const selected = new Set(game.floppies.map((floppy) => floppy.id));
+  const assignedElsewhere = new Set(
+    games.filter((candidate) => candidate.id !== game.id).flatMap((candidate) => candidate.floppies.map((floppy) => floppy.id))
+  );
+  for (const floppy of floppies) {
+    const option = document.createElement("label");
+    option.className = "membership-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = "floppyIds";
+    checkbox.value = floppy.id;
+    checkbox.checked = selected.has(floppy.id);
+    checkbox.disabled = assignedElsewhere.has(floppy.id);
+    const text = document.createElement("span");
+    text.textContent = floppy.label;
+    option.append(checkbox, text);
+    membership.appendChild(option);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const save = document.createElement("button");
+  save.className = "primary";
+  save.type = "submit";
+  save.textContent = t("gameSave");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = t("gameCancel");
+  cancel.addEventListener("click", () => {
+    editingGameId = null;
+    render();
+  });
+  actions.append(save, cancel);
+  form.append(label, membership, actions);
+  form.addEventListener("submit", (event) => saveGame(event, game.id, form, save));
+  return form;
 }
 
 function renderRow(floppy) {
@@ -279,6 +434,78 @@ async function deleteFloppy(id, button) {
   }
 
   await loadCatalog();
+}
+
+async function createGame(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/games", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: form.elements.id.value, label: form.elements.label.value })
+    });
+    if (!response.ok) {
+      window.alert(await readError(response));
+      return;
+    }
+
+    form.reset();
+    form.hidden = true;
+    await loadCatalog();
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function saveGame(event, id, form, button) {
+  event.preventDefault();
+  button.disabled = true;
+  try {
+    const floppyIds = Array.from(form.querySelectorAll("input[name=floppyIds]:checked")).map((input) => input.value);
+    const response = await fetch("/api/games/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: form.elements.label.value, floppyIds: floppyIds })
+    });
+    if (!response.ok) {
+      window.alert(await readError(response));
+      return;
+    }
+
+    editingGameId = null;
+    await loadCatalog();
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteGame(id, button) {
+  if (!window.confirm(t("confirmGameDelete"))) {
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/games/" + encodeURIComponent(id), { method: "DELETE" });
+    if (!response.ok) {
+      window.alert(await readError(response));
+      return;
+    }
+
+    editingGameId = null;
+    await loadCatalog();
+  } catch (error) {
+    window.alert(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function uploadFiles(files) {
@@ -462,6 +689,14 @@ document.getElementById("file").addEventListener("change", (event) => {
   uploadFiles(files);
 });
 document.getElementById("search").addEventListener("input", render);
+document.getElementById("game-create-toggle").addEventListener("click", () => {
+  const form = document.getElementById("game-create");
+  form.hidden = !form.hidden;
+  if (!form.hidden) {
+    document.getElementById("game-id").focus();
+  }
+});
+document.getElementById("game-create").addEventListener("submit", createGame);
 document.getElementById("language").addEventListener("change", (event) => {
   language = event.target.value;
   window.localStorage.setItem("retrobox.lang", language);
