@@ -15,6 +15,44 @@ public sealed class RetroBoxCoverCache(
         return Path.Combine(coversRoot, $".upload-{Guid.NewGuid():N}{extension}");
     }
 
+    public bool TryGetCachedCover(string cover, out string path, out string contentType)
+    {
+        path = string.Empty;
+        contentType = "application/octet-stream";
+        if (string.IsNullOrWhiteSpace(cover)
+            || cover != Path.GetFileName(cover)
+            || cover.Contains('\\')
+            || Path.IsPathRooted(cover))
+        {
+            return false;
+        }
+
+        contentType = Path.GetExtension(cover).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream",
+        };
+        if (contentType == "application/octet-stream")
+        {
+            return false;
+        }
+
+        var root = Path.GetFullPath(coversRoot);
+        var candidate = Path.GetFullPath(Path.Combine(root, cover));
+        var prefix = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        if (!candidate.StartsWith(prefix, StringComparison.Ordinal) || !File.Exists(candidate))
+        {
+            return false;
+        }
+
+        path = candidate;
+        return true;
+    }
+
     public async Task<RetroBoxCoverView?> ReplaceAsync(
         string gameId,
         int screenScraperId,

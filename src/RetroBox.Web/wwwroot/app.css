@@ -117,6 +117,7 @@ button[disabled] { opacity: 0.5; cursor: progress; }
 
 .game-group { padding: 0.75rem; border: 1px solid var(--line); border-radius: 0.375rem; background: var(--panel); }
 .game-head { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+.game-cover { width: 3rem; max-height: 4rem; object-fit: contain; border: 1px solid var(--line); border-radius: 0.25rem; }
 .floppy-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 
 .floppy-list li {

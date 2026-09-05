@@ -13,12 +13,13 @@ public static class RetroBoxCoverEndpoints
         WebApplication app,
         RetroBoxScraperSettingsStore settingsStore,
         Func<IRetroBoxCoverSource> coverSourceFactory,
-        RetroBoxCoverCache coverCache)
+        RetroBoxCoverCache coverCache,
+        IRetroBoxCatalogSource catalogSource)
     {
         app.MapPost("/api/games/{id}/cover", (string id, RetroBoxCoverRequest request, CancellationToken cancellationToken) =>
-            ReplaceAsync(id, request, settingsStore, coverSourceFactory, coverCache, cancellationToken));
+            ReplaceAsync(id, request, settingsStore, coverSourceFactory, coverCache, catalogSource, cancellationToken));
         app.MapPost("/api/games/{id}/cover/upload", (string id, HttpRequest request, CancellationToken cancellationToken) =>
-            UploadAsync(id, request, coverCache, cancellationToken));
+            UploadAsync(id, request, coverCache, catalogSource, cancellationToken));
     }
 
     private static async Task<IResult> ReplaceAsync(
@@ -27,6 +28,7 @@ public static class RetroBoxCoverEndpoints
         RetroBoxScraperSettingsStore settingsStore,
         Func<IRetroBoxCoverSource> coverSourceFactory,
         RetroBoxCoverCache coverCache,
+        IRetroBoxCatalogSource catalogSource,
         CancellationToken cancellationToken)
     {
         if (!settingsStore.Load().IsConfigured)
@@ -57,6 +59,7 @@ public static class RetroBoxCoverEndpoints
                 return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-game", $"Unknown game '{id}'.");
             }
 
+            catalogSource.TryReload();
             return Results.Json(cover, RetroBoxWebJsonContext.Default.RetroBoxCoverView);
         }
         catch (RetroBoxUnknownGameException ex)
@@ -77,6 +80,7 @@ public static class RetroBoxCoverEndpoints
         string id,
         HttpRequest request,
         RetroBoxCoverCache coverCache,
+        IRetroBoxCatalogSource catalogSource,
         CancellationToken cancellationToken)
     {
         if (!RetroBoxCatalogRules.IsValidId(id))
@@ -136,6 +140,7 @@ public static class RetroBoxCoverEndpoints
                 return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-game", $"Unknown game '{id}'.");
             }
 
+            catalogSource.TryReload();
             return Results.Json(cover, RetroBoxWebJsonContext.Default.RetroBoxCoverView);
         }
         catch (InvalidDataException)
@@ -172,6 +177,8 @@ public static class RetroBoxCoverEndpoints
         }
 
         var hasDimensions = false;
+        var hasScan = false;
+        var hasScanData = false;
         for (var offset = 2; offset + 1 < bytes.Length;)
         {
             if (bytes[offset++] != 0xff)
@@ -192,7 +199,7 @@ public static class RetroBoxCoverEndpoints
             var marker = bytes[offset++];
             if (marker == 0xd9)
             {
-                return hasDimensions && offset == bytes.Length;
+                return hasDimensions && hasScan && hasScanData && offset == bytes.Length;
             }
 
             if (marker is 0xd8 or 0x01 or >= 0xd0 and <= 0xd7 || offset + 1 >= bytes.Length)
@@ -204,6 +211,52 @@ public static class RetroBoxCoverEndpoints
             if (length < 2 || offset + length > bytes.Length)
             {
                 return false;
+            }
+
+            if (marker == 0xda)
+            {
+                if (!hasDimensions || length < 8)
+                {
+                    return false;
+                }
+
+                hasScan = true;
+                offset += length;
+                while (offset < bytes.Length)
+                {
+                    if (bytes[offset++] != 0xff)
+                    {
+                        hasScanData = true;
+                        continue;
+                    }
+
+                    while (offset < bytes.Length && bytes[offset] == 0xff)
+                    {
+                        offset++;
+                    }
+
+                    if (offset >= bytes.Length)
+                    {
+                        return false;
+                    }
+
+                    var scanMarker = bytes[offset++];
+                    if (scanMarker == 0x00)
+                    {
+                        hasScanData = true;
+                    }
+                    else if (scanMarker == 0xd9)
+                    {
+                        return hasScanData && offset == bytes.Length;
+                    }
+                    else if (scanMarker is not (>= 0xd0 and <= 0xd7))
+                    {
+                        offset -= 2;
+                        break;
+                    }
+                }
+
+                continue;
             }
 
             if (marker is >= 0xc0 and <= 0xc3 or >= 0xc5 and <= 0xc7 or >= 0xc9 and <= 0xcb or >= 0xcd and <= 0xcf)
@@ -227,6 +280,7 @@ public static class RetroBoxCoverEndpoints
         }
 
         var sawHeader = false;
+        var sawImageData = false;
         for (var offset = 8; offset + 12 <= bytes.Length;)
         {
             var length = BinaryPrimitives.ReadUInt32BigEndian(bytes[offset..]);
@@ -248,21 +302,96 @@ public static class RetroBoxCoverEndpoints
                 sawHeader = true;
             }
 
+            if (type.SequenceEqual("IDAT"u8))
+            {
+                sawImageData |= length > 0;
+            }
+
             offset += checked((int)length + 12);
             if (type.SequenceEqual("IEND"u8))
             {
-                return sawHeader && length == 0 && offset == bytes.Length;
+                return sawHeader && sawImageData && length == 0 && offset == bytes.Length;
             }
         }
 
         return false;
     }
 
-    private static bool IsValidWebp(ReadOnlySpan<byte> bytes) =>
-        bytes.Length >= 30
-        && bytes[..4].SequenceEqual("RIFF"u8)
-        && BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == bytes.Length - 8
-        && bytes.Slice(8, 4).SequenceEqual("WEBP"u8)
-        && bytes.Slice(12, 4).SequenceEqual("VP8X"u8)
-        && BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..]) == 10;
+    private static bool IsValidWebp(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 20
+            || !bytes[..4].SequenceEqual("RIFF"u8)
+            || BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) != bytes.Length - 8
+            || !bytes.Slice(8, 4).SequenceEqual("WEBP"u8))
+        {
+            return false;
+        }
+
+        var hasImage = false;
+        var offset = 12;
+        while (offset + 8 <= bytes.Length)
+        {
+            var type = bytes.Slice(offset, 4);
+            var length = BinaryPrimitives.ReadUInt32LittleEndian(bytes[(offset + 4)..]);
+            if (length > int.MaxValue || offset + 8L + length + (length & 1) > bytes.Length)
+            {
+                return false;
+            }
+
+            var payload = bytes.Slice(offset + 8, (int)length);
+            if (type.SequenceEqual("VP8 "u8))
+            {
+                hasImage |= IsValidVp8(payload);
+            }
+            else if (type.SequenceEqual("VP8L"u8))
+            {
+                hasImage |= IsValidVp8L(payload);
+            }
+            else if (type.SequenceEqual("VP8X"u8))
+            {
+                if (offset != 12 || !IsValidVp8X(payload))
+                {
+                    return false;
+                }
+
+            }
+            else if (type.SequenceEqual("ANMF"u8))
+            {
+                hasImage |= IsValidAnimationFrame(payload);
+            }
+
+            offset += checked(8 + (int)length + ((int)length & 1));
+        }
+
+        return hasImage && offset == bytes.Length;
+    }
+
+    private static bool IsValidVp8(ReadOnlySpan<byte> payload) =>
+        payload.Length > 10
+        && payload.Slice(3, 3).SequenceEqual(new byte[] { 0x9d, 0x01, 0x2a })
+        && (BinaryPrimitives.ReadUInt16LittleEndian(payload[6..]) & 0x3fff) > 0
+        && (BinaryPrimitives.ReadUInt16LittleEndian(payload[8..]) & 0x3fff) > 0;
+
+    private static bool IsValidVp8L(ReadOnlySpan<byte> payload) =>
+        payload.Length > 5
+        && payload[0] == 0x2f
+        && (BinaryPrimitives.ReadUInt32LittleEndian(payload[1..]) & 0x3fff) < 0x3fff
+        && ((BinaryPrimitives.ReadUInt32LittleEndian(payload[1..]) >> 14) & 0x3fff) < 0x3fff;
+
+    private static bool IsValidVp8X(ReadOnlySpan<byte> payload) => payload.Length == 10;
+
+    private static bool IsValidAnimationFrame(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length <= 24)
+        {
+            return false;
+        }
+
+        var type = payload.Slice(16, 4);
+        var length = BinaryPrimitives.ReadUInt32LittleEndian(payload[20..]);
+        return length <= int.MaxValue
+            && 24L + length + (length & 1) == payload.Length
+            && (type.SequenceEqual("VP8 "u8) && IsValidVp8(payload.Slice(24, (int)length))
+                || type.SequenceEqual("VP8L"u8) && IsValidVp8L(payload.Slice(24, (int)length)));
+    }
 }

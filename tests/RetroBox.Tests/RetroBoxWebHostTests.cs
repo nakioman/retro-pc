@@ -107,13 +107,32 @@ public sealed class RetroBoxWebHostTests : IDisposable
     [Fact]
     public async Task Get_catalog_returns_games_with_their_floppies_and_ungrouped_floppies()
     {
-        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    floppyIds: [disk1]\n");
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    cover: game.png\n    screenScraperId: 42\n    floppyIds: [disk1]\n");
         await using var context = await StartGamesAsync();
 
         var body = await context.Client.GetStringAsync("/api/catalog");
 
-        Assert.Contains("\"games\":[{\"id\":\"game\",\"label\":\"Game\",\"floppies\":[{\"id\":\"disk1\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"games\":[{\"id\":\"game\",\"label\":\"Game\",\"cover\":\"game.png\",\"screenScraperId\":42,\"floppies\":[{\"id\":\"disk1\"", body, StringComparison.Ordinal);
         Assert.Contains("\"ungroupedFloppies\":[{\"id\":\"disk2\"", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Get_cached_cover_serves_a_cataloged_cover_without_leaving_the_cache_directory()
+    {
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    cover: game.png\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        var cover = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAAB3YoTpAAAAAd0SU1FB+oJBRUcEdfvHDMAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjYtMDktMDVUMjE6Mjg6MTcrMDA6MDCkOaa0AAAAJXRFWHRkYXRlOm1vZGlmeQAyMDI2LTA5LTA1VDIxOjI4OjE3KzAwOjAw1WQeCAAAACh0RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyNi0wOS0wNVQyMToyODoxNyswMDowMIJxP9cAAAAKSURBVAjXY2AAAAACAAHiIbwzAAAAAElFTkSuQmCC");
+        File.WriteAllBytes(Path.Combine(root, "covers", "game.png"), cover);
+        await using var context = await StartGamesAsync();
+
+        using var response = await context.Client.GetAsync("/api/covers/game.png");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(cover, await response.Content.ReadAsByteArrayAsync());
+
+        using var traversal = await context.Client.GetAsync("/api/covers/../games.yaml");
+        Assert.Equal(HttpStatusCode.NotFound, traversal.StatusCode);
     }
 
     [Fact]
