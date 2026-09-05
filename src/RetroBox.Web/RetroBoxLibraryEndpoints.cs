@@ -39,26 +39,26 @@ public static class RetroBoxLibraryEndpoints
     {
         if (!request.HasFormContentType)
         {
-            return Error(StatusCodes.Status400BadRequest, "expected-multipart", "Expected a multipart form upload.");
+            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "expected-multipart", "Expected a multipart form upload.");
         }
 
         var form = await request.ReadFormAsync();
         var file = form.Files["file"];
         if (file is null || file.Length == 0)
         {
-            return Error(StatusCodes.Status400BadRequest, "missing-file", "No file was uploaded.");
+            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "missing-file", "No file was uploaded.");
         }
 
         if (file.Length > MaxUploadBytes)
         {
-            return Error(StatusCodes.Status413PayloadTooLarge, "file-too-large", "The image exceeds the upload limit.");
+            return RetroBoxWebResults.Error(StatusCodes.Status413PayloadTooLarge, "file-too-large", "The image exceeds the upload limit.");
         }
 
         var fileName = Path.GetFileName(file.FileName);
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         if (!AllowedExtensions.Contains(extension))
         {
-            return Error(
+            return RetroBoxWebResults.Error(
                 StatusCodes.Status400BadRequest,
                 "unsupported-extension",
                 "Only .img, .ima and .dsk images can be imported.");
@@ -67,7 +67,7 @@ public static class RetroBoxLibraryEndpoints
         var slug = RetroBoxCatalogRules.Slugify(Path.GetFileNameWithoutExtension(fileName));
         if (slug.Length == 0)
         {
-            return Error(StatusCodes.Status400BadRequest, "unusable-name", "The filename yields no usable catalog ID.");
+            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "unusable-name", "The filename yields no usable catalog ID.");
         }
 
         Directory.CreateDirectory(options.ScratchRoot);
@@ -164,7 +164,7 @@ public static class RetroBoxLibraryEndpoints
 
         if (failure is not null)
         {
-            return Error(failure.StatusCode, failure.Code, failure.Message);
+            return RetroBoxWebResults.Error(failure.StatusCode, failure.Code, failure.Message);
         }
 
         return Results.Created($"/api/floppies/{id}", null);
@@ -180,16 +180,16 @@ public static class RetroBoxLibraryEndpoints
         }
         catch (RetroBoxUnknownFloppyException ex)
         {
-            return Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
         }
         catch (RetroBoxCatalogUnavailableException ex)
         {
-            return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
         catch (RetroBoxCatalogException ex)
         {
             Refresh(catalogSource);
-            return Error(StatusCodes.Status500InternalServerError, "delete-incomplete", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status500InternalServerError, "delete-incomplete", ex.Message);
         }
 
         Refresh(catalogSource);
@@ -208,15 +208,15 @@ public static class RetroBoxLibraryEndpoints
         }
         catch (RetroBoxUnknownFloppyException ex)
         {
-            return Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-floppy", ex.Message);
         }
         catch (RetroBoxCatalogUnavailableException ex)
         {
-            return Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status500InternalServerError, "catalog-unavailable", ex.Message);
         }
         catch (RetroBoxCatalogException ex)
         {
-            return Error(StatusCodes.Status400BadRequest, "invalid-patch", ex.Message);
+            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "invalid-patch", ex.Message);
         }
 
         Refresh(catalogSource);
@@ -257,17 +257,5 @@ public static class RetroBoxLibraryEndpoints
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
-    }
-
-    private static IResult Error(int statusCode, string code, string message)
-    {
-        // Pass the source-generated JsonTypeInfo directly: the JsonSerializerOptions overload of
-        // Results.Json is annotated RequiresUnreferencedCode/RequiresDynamicCode because it cannot
-        // statically prove the options carry a source-generated resolver, which is exactly the
-        // AOT warning the RequestDelegateGenerator is meant to keep this project free of.
-        return Results.Json(
-            new RetroBoxErrorView(code, message),
-            RetroBoxWebJsonContext.Default.RetroBoxErrorView,
-            statusCode: statusCode);
     }
 }

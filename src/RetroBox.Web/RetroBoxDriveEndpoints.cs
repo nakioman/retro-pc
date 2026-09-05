@@ -10,6 +10,10 @@ public static class RetroBoxDriveEndpoints
     public const string Unavailable = "unavailable";
     public const string Empty = "empty";
     public const string Loaded = "loaded";
+    // Kept as the wire value because other code reads it, but it means "the tracker has not seen
+    // this tag's INSERT" -- the normal state right after a controller reconnect -- not "this tag
+    // is blank". Nothing here can tell those apart, which is why the panel's own wording for it
+    // says "unrecognised" instead.
     public const string BlankTag = "blankTag";
 
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);

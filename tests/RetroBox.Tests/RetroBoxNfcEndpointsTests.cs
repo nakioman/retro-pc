@@ -49,7 +49,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         using var response = await PostAsync(context, "disk1", confirm: false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("WRITE:disk1:ro", channel.Calls.Last());
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
 
         var catalog = await context.Client.GetStringAsync("/api/catalog");
         Assert.Contains("\"id\":\"disk1\"", catalog, StringComparison.Ordinal);
@@ -75,10 +75,52 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
         Assert.Contains("disk1", body, StringComparison.Ordinal);
 
+        // The uid has to travel on the 409: RetroBoxDriveEndpoints deliberately returns a null
+        // tagUid for the loaded state, so the panel has no other way to learn which tag the
+        // conflict was about and echo it back on the confirmed retry.
+        Assert.Contains("\"tagUid\":\"04A13BFE\"", body, StringComparison.Ordinal);
+
         // The refusal must be a pure read: nothing goes out over the wire, and disk2's catalog
         // entry does not move, since the request was never confirmed.
         Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
         Assert.False(new RetroBoxConfigStore(root).Load().Floppies["disk2"].Nfc);
+    }
+
+    [Fact]
+    public async Task Write_refuses_a_tag_the_tracker_says_belongs_to_another_floppy()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        // A tag written before this phase existed: AssignTag is the only writer of NfcUid, so on
+        // an appliance upgraded into this phase every already-tagged floppy has Nfc: true and
+        // NfcUid: null and the catalog-only check can never match. The firmware still knows the
+        // owner and announces it through INSERT, which is what must catch this.
+        context.DriveState.Observe(new RetroBoxArduinoInsertEvent("disk1", "ro"));
+
+        using var response = await PostAsync(context, "disk2", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
+        Assert.Contains("disk1", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Write_rewrites_the_tag_of_the_floppy_the_tracker_already_reports_loaded()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        // Same floppy: the tracker's owner is the request's own target, so there is nothing to
+        // warn about and the write must go straight through without a confirmation round trip.
+        context.DriveState.Observe(new RetroBoxArduinoInsertEvent("disk1", "ro"));
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
     }
 
     [Fact]
@@ -92,13 +134,38 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         }
 
-        using var second = await PostAsync(context, "disk2", confirm: true);
+        using var second = await PostAsync(context, "disk2", confirm: true, tagUid: "04A13BFE");
 
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
         var floppies = new RetroBoxConfigStore(root).Load().Floppies;
         Assert.True(floppies["disk2"].Nfc);
         Assert.False(floppies["disk1"].Nfc);
+    }
+
+    [Fact]
+    public async Task Write_sees_an_assignment_that_landed_while_its_tagid_was_in_flight()
+    {
+        // The serial round trip is the slow part of this request -- quarantine wait plus a five
+        // second command timeout -- so a snapshot taken before it can be many seconds stale by
+        // the time the ownership check runs. AssignTag re-reads under its own lock, so the
+        // catalog stays consistent either way; what a stale snapshot loses is the warning.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        channel.BeforeTagIdResponse = () =>
+        {
+            new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root)).AssignTag("disk2", "04A13BFE", "ro");
+            context.Source.TryReload();
+        };
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
+        Assert.Contains("disk2", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,6 +183,10 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Contains("write-failed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         Assert.False(new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc);
+
+        // The re-announce belongs to the caller now, so nothing must ask the firmware to
+        // re-report a floppy whose tag was never written.
+        Assert.DoesNotContain("STATUS", channel.Calls);
     }
 
     [Fact]
@@ -212,6 +283,49 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal(RetroBoxFloppyCatalogRules.ReadWriteMode, floppy.Mode);
     }
 
+    [Fact]
+    public async Task Write_refuses_a_confirmed_reassignment_once_the_tag_changed()
+    {
+        // The confirmation dialog is unbounded user thinking time, and the disk can be swapped
+        // during it. Without the uid the confirmed write would land on whatever is seated now,
+        // while the confirmation named a floppy no longer involved.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("0BADC0DE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: true, tagUid: "04A13BFE");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("tag-changed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("WRITE", string.Join(",", channel.Calls), StringComparison.Ordinal);
+        Assert.False(new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc);
+    }
+
+    [Fact]
+    public async Task Write_rejects_a_confirmed_request_that_carries_no_tag_uid()
+    {
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: true);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid-request", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(channel.Calls);
+    }
+
+    [Fact]
+    public async Task Write_accepts_an_unconfirmed_request_whose_tag_uid_still_matches()
+    {
+        // An unconfirmed request may carry the uid too; it is only rejected when it disagrees.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: false, tagUid: "04A13BFE");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("WRITE:disk1:ro", channel.Calls);
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"confirm\":true}")]
@@ -261,9 +375,59 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal("04A13BFE", floppy.NfcUid);
     }
 
-    private static Task<HttpResponseMessage> PostAsync(NfcContext context, string floppyId, bool confirm)
+    [Fact]
+    public async Task The_re_announce_goes_out_only_after_the_catalog_commit()
     {
-        var body = $"{{\"floppyId\":\"{floppyId}\",\"confirm\":{(confirm ? "true" : "false")}}}";
+        // The firmware's STATUS answer comes back as an INSERT, which the daemon's read loop
+        // handles against whatever the catalog says at that instant. Sent from inside
+        // WriteTagAsync it raced the YAML save and the reload: the mount guard would see
+        // Nfc: false and refuse the very floppy just assigned, logging "has no assigned tag"
+        // while the panel showed a green badge. Recovery was a manual eject and reinsert.
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        bool? committedOnDisk = null;
+        bool? visibleToTheDaemon = null;
+        channel.OnSendStatus = () =>
+        {
+            committedOnDisk = new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc;
+            visibleToTheDaemon = context.Source.Snapshot.Catalog.Floppies["disk1"].Nfc;
+        };
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["TAGID", "WRITE:disk1:ro", "STATUS"], channel.Calls);
+        Assert.True(committedOnDisk, "The re-announce went out before the catalog was saved.");
+        Assert.True(visibleToTheDaemon, "The re-announce went out before the daemon could see the assignment.");
+    }
+
+    [Fact]
+    public async Task No_re_announce_goes_out_when_the_commit_is_refused()
+    {
+        var channel = new StubNfcCommandChannel
+        {
+            TagIdResponse = new NfcResponse.TagId("04A13BFE"),
+            BeforeWriteResponse = () =>
+                new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root))
+                    .UpdateLabelAndMode("disk1", null, RetroBoxFloppyCatalogRules.ReadWriteMode),
+        };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, "disk1", confirm: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain("STATUS", channel.Calls);
+    }
+
+    private static Task<HttpResponseMessage> PostAsync(
+        NfcContext context,
+        string floppyId,
+        bool confirm,
+        string? tagUid = null)
+    {
+        var uid = tagUid is null ? "null" : $"\"{tagUid}\"";
+        var body = $"{{\"floppyId\":\"{floppyId}\",\"confirm\":{(confirm ? "true" : "false")},\"tagUid\":{uid}}}";
         return context.Client.PostAsync("/api/nfc/write", new StringContent(body, Encoding.UTF8, "application/json"));
     }
 

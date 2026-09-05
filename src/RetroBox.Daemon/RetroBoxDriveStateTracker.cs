@@ -8,6 +8,12 @@ public sealed class RetroBoxDriveStateTracker : IRetroBoxDriveState
 
     public RetroBoxDriveState Current => current;
 
+    /// <summary>
+    /// Forgets whatever the drive last reported. Called when the controller goes away: only INIT
+    /// resets this otherwise, and a disconnected controller never sends one.
+    /// </summary>
+    public void Reset() => current = new RetroBoxDriveState.Unknown();
+
     public void Observe(RetroBoxArduinoSerialEvent serialEvent)
     {
         current = serialEvent switch

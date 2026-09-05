@@ -28,6 +28,13 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
     /// </summary>
     public Action? BeforeWriteResponse { get; init; }
 
+    /// <summary>
+    /// Runs just before ReadTagIdAsync returns its response, letting a test simulate a
+    /// concurrent assignment landing while this request's TAGID round trip is still in flight --
+    /// the window the endpoint's ownership check has to be read inside of.
+    /// </summary>
+    public Action? BeforeTagIdResponse { get; set; }
+
     public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
     {
         if (ThrowOnCall is not null)
@@ -36,6 +43,7 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
         }
 
         Calls.Add("TAGID");
+        BeforeTagIdResponse?.Invoke();
         return Task.FromResult(TagIdResponse);
     }
 
@@ -54,6 +62,24 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
         Calls.Add($"WRITE:{id}:{mode}");
         BeforeWriteResponse?.Invoke();
         return Task.FromResult(WriteResponse);
+    }
+
+    /// <summary>
+    /// Runs when SendStatusAsync is called, letting a test observe the world exactly as the
+    /// firmware's re-announce would find it.
+    /// </summary>
+    public Action? OnSendStatus { get; set; }
+
+    public Task SendStatusAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        Calls.Add("STATUS");
+        OnSendStatus?.Invoke();
+        return Task.CompletedTask;
     }
 }
 
@@ -89,6 +115,23 @@ internal sealed class RetroBoxFakeTimeProvider : TimeProvider
         lock (gate)
         {
             return ticks;
+        }
+    }
+
+    /// <summary>
+    /// True once something has registered a timer against this clock. Tests poll for this before
+    /// advancing: a timer's due time is computed when it is created, so advancing before the code
+    /// under test has registered its timer simply moves the due time along with the clock and
+    /// nothing fires.
+    /// </summary>
+    public bool HasPendingTimers
+    {
+        get
+        {
+            lock (gate)
+            {
+                return pendingTimers.Count > 0;
+            }
         }
     }
 

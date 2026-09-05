@@ -38,7 +38,7 @@ const STRINGS = {
     driveUnavailable: "Sin controlador conectado",
     driveEmpty: "No hay disco en la disquetera",
     driveLoaded: "Disco puesto: {label}",
-    driveBlankTag: "Tag en blanco, listo para asignar ({uid})",
+    driveBlankTag: "Tag sin reconocer ({uid}). Elegí a qué disquete asignarlo.",
     assignButton: "Grabar tag",
     assignReassign: "Reasignar este tag",
     assignDone: "Tag grabado",
@@ -51,6 +51,7 @@ const STRINGS = {
     "write-unconfirmed": "No se pudo confirmar si el tag quedó grabado. Fijate qué dice la disquetera.",
     "no-controller": "No hay controlador de disquetes conectado.",
     "mode-changed": "El modo del disquete cambió mientras se grababa el tag.",
+    "tag-changed": "El tag de la disquetera cambió mientras confirmabas. No se grabó nada; probá de nuevo.",
     "invalid-request": "La solicitud no es válida."
   },
   en: {
@@ -90,7 +91,7 @@ const STRINGS = {
     driveUnavailable: "No controller connected",
     driveEmpty: "No disk in the drive",
     driveLoaded: "Disk in the drive: {label}",
-    driveBlankTag: "Blank tag, ready to assign ({uid})",
+    driveBlankTag: "Unrecognised tag ({uid}). Choose which floppy to assign it to.",
     assignButton: "Write tag",
     assignReassign: "Reassign this tag",
     assignDone: "Tag written",
@@ -103,6 +104,7 @@ const STRINGS = {
     "write-unconfirmed": "Could not confirm whether the tag was written. Check the drive.",
     "no-controller": "No floppy controller is connected.",
     "mode-changed": "The floppy's mode changed while the tag was being written.",
+    "tag-changed": "The tag in the drive changed while you were confirming. Nothing was written; try again.",
     "invalid-request": "That request is not valid."
   }
 };
@@ -355,8 +357,9 @@ function renderDrive() {
   target.textContent = "";
 
   // A disabled placeholder is the initial selection so writing a tag always takes a deliberate
-  // choice — nothing here proves a blankTag reading is actually free (Ruling 27), and unlike the
-  // reassignment case, a blank tag draws no 409 from the server to catch an accidental default.
+  // choice — nothing here proves a blankTag reading is actually free (Ruling 27), and in this
+  // state the tracker has no owner to report either, so unlike the reassignment case no 409 from
+  // the server is going to catch an accidental default.
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.disabled = true;
@@ -390,7 +393,10 @@ function subscribeToDrive() {
   });
 }
 
-async function writeTag(confirm) {
+// confirmTagUid is null on a first attempt and, on a confirmed retry, the uid the 409 named.
+// It cannot come from the drive view instead: RetroBoxDriveEndpoints returns a null tagUid for
+// the loaded state, so the 409 is the only place the panel ever learns which tag it is acting on.
+async function writeTag(confirmTagUid) {
   const button = document.getElementById("assign-write");
   const floppyId = document.getElementById("assign-target").value;
 
@@ -408,7 +414,11 @@ async function writeTag(confirm) {
     const response = await fetch("/api/nfc/write", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ floppyId: floppyId, confirm: confirm })
+      body: JSON.stringify({
+        floppyId: floppyId,
+        confirm: confirmTagUid !== null,
+        tagUid: confirmTagUid
+      })
     });
 
     if (response.ok) {
@@ -422,11 +432,13 @@ async function writeTag(confirm) {
     // A blankTag reading is not proof the tag is free (see Ruling 27: right after a controller
     // reconnect the tracker can briefly forget an already-cataloged disk is seated), so the
     // first attempt always goes unconfirmed and this 409 is the real gate, not a shortcut.
-    if (body && body.code === "tag-already-assigned" && !confirm) {
+    if (body && body.code === "tag-already-assigned" && confirmTagUid === null) {
       const owner = floppies.find((floppy) => floppy.id === body.previousFloppyId);
       if (window.confirm(t("confirmReassign", { owner: owner ? owner.label : body.previousFloppyId }))) {
         button.disabled = false;
-        await writeTag(true);
+        // The dialog above took an unbounded amount of time, so the retry names the tag the
+        // conflict was about; the server refuses it with tag-changed if the disk was swapped.
+        await writeTag(body.tagUid);
         return;
       }
 
@@ -458,7 +470,7 @@ document.getElementById("language").addEventListener("change", (event) => {
 });
 // Wired last: if #assign-write were ever missing from the markup, a TypeError here must not
 // take the listeners above (upload, search, language) down with it.
-document.getElementById("assign-write").addEventListener("click", () => writeTag(false));
+document.getElementById("assign-write").addEventListener("click", () => writeTag(null));
 
 document.getElementById("language").value = language;
 applyStaticText();

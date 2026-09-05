@@ -56,6 +56,45 @@ public sealed class RetroBoxStaticAssetsTests
     }
 
     [Fact]
+    public void The_confirmed_retry_echoes_the_tag_uid_the_conflict_reported()
+    {
+        // GET /api/drive returns a null tagUid for the loaded state, so the 409 body is the only
+        // place the panel ever learns which tag it is acting on. If the retry stopped sending it
+        // back, the server would have nothing to compare and the swap window would reopen.
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("await writeTag(body.tagUid)", script, StringComparison.Ordinal);
+        Assert.Contains("tagUid: confirmTagUid", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_unrecognised_tag_label_does_not_claim_the_tag_is_blank()
+    {
+        // The blankTag state is raised whenever the tracker has not seen this tag's INSERT, which
+        // is the normal state right after a controller reconnect -- a written tag reads that way
+        // too. The API value stays "blankTag" because other code reads it; the user-visible text
+        // must not assert something the panel cannot verify.
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("blankTag", script, StringComparison.Ordinal);
+
+        var labels = Regex.Matches(script, "driveBlankTag: \"(?<text>[^\"]*)\"")
+            .Select(match => match.Groups["text"].Value)
+            .ToArray();
+
+        Assert.Equal(2, labels.Length);
+        foreach (var label in labels)
+        {
+            Assert.DoesNotContain("blank", label, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("en blanco", label, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Both_languages_define_exactly_the_same_keys()
     {
         Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
@@ -75,6 +114,7 @@ public sealed class RetroBoxStaticAssetsTests
     [InlineData("write-unconfirmed")]
     [InlineData("no-controller")]
     [InlineData("mode-changed")]
+    [InlineData("tag-changed")]
     [InlineData("invalid-request")]
     public void Every_nfc_error_code_has_text_in_both_languages(string code)
     {

@@ -2,53 +2,55 @@ using RetroBox.Core;
 
 namespace RetroBox.Daemon;
 
-/// <summary>Requests a STATUS re-announcement without registering a routed reply.</summary>
-public interface IRetroBoxStatusRequester
-{
-    Task SendStatusAsync(CancellationToken cancellationToken = default);
-}
-
 /// <summary>
 /// Serializes controller commands over the single serial line the daemon owns.
 /// One command at a time is not a limitation but the physical reality: there is
 /// one drive and one reader.
 /// </summary>
-public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel, IRetroBoxStatusRequester
+public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
     private readonly RetroBoxSerialLineRouter router;
     private readonly TextWriter serialOutput;
     private readonly TimeSpan timeout;
+    private readonly TimeProvider timeProvider;
     private readonly SemaphoreSlim gate = new(1, 1);
 
+    /// <param name="timeProvider">
+    /// Drives the reply timeout. Injectable for the same reason RetroBoxSerialLineRouter takes
+    /// one: a test that has to reach the timeout must advance a clock, not wait out a real
+    /// duration and race it.
+    /// </param>
     public RetroBoxSerialNfcCommandChannel(
         RetroBoxSerialLineRouter router,
         TextWriter serialOutput,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        TimeProvider? timeProvider = null)
     {
         this.router = router;
         this.serialOutput = serialOutput;
         this.timeout = timeout ?? DefaultTimeout;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync(RetroBoxArduinoSerialProtocol.BuildTagIdCommand(), followUpOnOk: null, cancellationToken);
+        return SendAsync(RetroBoxArduinoSerialProtocol.BuildTagIdCommand(), cancellationToken);
     }
 
+    /// <summary>
+    /// Writes the tag and nothing else. The firmware answers a WRITE and then stays quiet, so
+    /// something has to ask it to re-announce the seated tag -- but that re-announce arrives as
+    /// an INSERT the daemon handles against the catalog as it stands at that instant, so it
+    /// belongs to whoever commits the assignment, after the commit, not to this method.
+    /// </summary>
     public Task<NfcResponse> WriteTagAsync(
         string id,
         string mode,
         CancellationToken cancellationToken = default)
     {
-        // The firmware answers a WRITE and then stays quiet, so the daemon would never learn
-        // the tag changed. STATUS makes it re-announce the seated tag as an INSERT event, which
-        // mounts the newly assigned image through the normal event path.
-        return SendAsync(
-            RetroBoxArduinoSerialProtocol.BuildWriteCommand(id, mode),
-            followUpOnOk: RetroBoxArduinoSerialProtocol.BuildStatusCommand(),
-            cancellationToken);
+        return SendAsync(RetroBoxArduinoSerialProtocol.BuildWriteCommand(id, mode), cancellationToken);
     }
 
     public async Task SendStatusAsync(CancellationToken cancellationToken = default)
@@ -60,6 +62,13 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             await serialOutput.WriteLineAsync(
                 RetroBoxArduinoSerialProtocol.BuildStatusCommand().AsMemory(),
                 cancellationToken);
+
+            // STATUS answers INSERT/EJECT with a disk seated, but ERROR with the drive empty --
+            // and an unprompted ERROR is handed to whatever command is pending. Without a window
+            // here, a TAGID that takes the gate right after this release completes as "empty"
+            // and the real Tag ID line is dropped with nothing pending. This is the same
+            // quarantine WriteTagAsync's follow-up arms, for the same reason.
+            router.ExpectOrphanedReply();
         }
         finally
         {
@@ -69,7 +78,6 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
 
     private async Task<NfcResponse> SendAsync(
         string command,
-        string? followUpOnOk,
         CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -77,14 +85,14 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
         try
         {
             // Deliberately inside the gate, not before it. A window is armed by the outgoing
-            // gate holder's own timeout or follow-up, which happens while that holder still
+            // gate holder's own timeout or STATUS write, which happens while that holder still
             // holds the gate — so a caller that checked the slot before queuing for the gate
             // could still have a window armed underneath it by the time it gets in. Waiting in
             // here means the window, if any, is already fully armed before this ever looks at
             // it. SendStatusAsync never calls this at all, so it is affected only indirectly,
-            // through the shared gate it contends for; now that the window closes on the
-            // follow-up's own event answer (not just its full timeout), that indirect delay is
-            // no longer for the window's full duration.
+            // through the shared gate it contends for; now that the window closes on STATUS's
+            // own event answer (not just its full timeout), that indirect delay is no longer
+            // for the window's full duration.
             await router.WaitForClearSlotAsync(cancellationToken);
 
             var reply = router.BeginCommand();
@@ -103,7 +111,7 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             NfcResponse response;
             try
             {
-                response = await reply.WaitAsync(timeout, cancellationToken);
+                response = await reply.WaitAsync(timeout, timeProvider, cancellationToken);
             }
             catch (TimeoutException)
             {
@@ -116,17 +124,6 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             {
                 router.CancelCommand(new OperationCanceledException(cancellationToken));
                 throw;
-            }
-
-            if (response is NfcResponse.Ok && followUpOnOk is not null)
-            {
-                await serialOutput.WriteLineAsync(followUpOnOk.AsMemory(), cancellationToken);
-
-                // The follow-up's answer is an event when it is INSERT/EJECT, but ERROR is
-                // ambiguous and would otherwise land on the next command. Arming the orphan
-                // window here makes the quarantine hold the next command until it has been
-                // accounted for, whatever shape it turns out to have.
-                router.ExpectOrphanedReply();
             }
 
             return response;

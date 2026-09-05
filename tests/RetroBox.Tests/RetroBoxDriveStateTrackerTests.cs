@@ -46,6 +46,17 @@ public sealed class RetroBoxDriveStateTrackerTests
     }
 
     [Fact]
+    public void Reset_forgets_a_seated_disk()
+    {
+        var tracker = new RetroBoxDriveStateTracker();
+        tracker.Observe(new RetroBoxArduinoInsertEvent("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+
+        tracker.Reset();
+
+        Assert.IsType<RetroBoxDriveState.Unknown>(tracker.Current);
+    }
+
+    [Fact]
     public void Observe_resets_to_unknown_on_controller_init()
     {
         var tracker = new RetroBoxDriveStateTracker();
