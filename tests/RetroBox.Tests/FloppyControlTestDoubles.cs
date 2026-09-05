@@ -49,6 +49,93 @@ internal static class RetroBoxSerialLineRouterTestHelpers
     }
 }
 
+/// <summary>
+/// A manually-advanced <see cref="TimeProvider"/> so time-dependent router tests can drive the
+/// clock explicitly instead of waiting out real windows. Only <see cref="GetTimestamp"/> and
+/// <see cref="CreateTimer"/> need overriding: those are the only members <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/>
+/// and the router's own deadline arithmetic touch.
+/// </summary>
+internal sealed class RetroBoxFakeTimeProvider : TimeProvider
+{
+    private readonly Lock gate = new();
+    private readonly List<FakeTimer> pendingTimers = [];
+    private long ticks;
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp()
+    {
+        lock (gate)
+        {
+            return ticks;
+        }
+    }
+
+    public void Advance(TimeSpan amount)
+    {
+        List<FakeTimer> due;
+
+        lock (gate)
+        {
+            ticks += amount.Ticks;
+            due = pendingTimers.Where(timer => timer.DueTicks <= ticks).ToList();
+            pendingTimers.RemoveAll(timer => timer.DueTicks <= ticks);
+        }
+
+        // Fire outside the lock: the callback re-enters router code that takes its own lock.
+        foreach (var timer in due)
+        {
+            timer.Callback(timer.State);
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new FakeTimer(this, callback, state);
+
+        lock (gate)
+        {
+            timer.DueTicks = ticks + (dueTime > TimeSpan.Zero ? dueTime.Ticks : 0);
+            pendingTimers.Add(timer);
+        }
+
+        return timer;
+    }
+
+    private sealed class FakeTimer(RetroBoxFakeTimeProvider owner, TimerCallback callback, object? state) : ITimer
+    {
+        public TimerCallback Callback { get; } = callback;
+
+        public object? State { get; } = state;
+
+        public long DueTicks { get; set; }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            lock (owner.gate)
+            {
+                DueTicks = owner.ticks + (dueTime > TimeSpan.Zero ? dueTime.Ticks : 0);
+            }
+
+            return true;
+        }
+
+        public void Dispose()
+        {
+            lock (owner.gate)
+            {
+                owner.pendingTimers.Remove(this);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+}
+
 internal static class FloppyControlTestCatalogs
 {
     public static RetroBoxCatalogData CreateCatalog(

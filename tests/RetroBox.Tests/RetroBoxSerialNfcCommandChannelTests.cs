@@ -107,25 +107,88 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     }
 
     [Fact]
-    public async Task SendAsync_absorbs_a_late_reply_to_a_timed_out_write_so_the_retry_gets_its_own_reply()
+    public async Task A_retry_after_a_timeout_is_not_answered_by_the_previous_command_s_late_reply()
     {
-        var router = new RetroBoxSerialLineRouter();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30));
         var serial = new StringWriter();
-        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(300));
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromMilliseconds(50));
 
         await Assert.ThrowsAsync<RetroBoxNfcCommandTimeoutException>(
             async () => await channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode));
 
         var retry = channel.ReadTagIdAsync();
-        await WaitForPendingCommand(router);
 
-        // The controller's late OK now arrives, answering the timed-out WRITE, not the retry.
-        Assert.True(router.TryRoute("OK"));
+        // The retry must not even be on the wire yet: the quarantine holds it until the straggler
+        // is accounted for. (These two are the ones that actually fail if the quarantine wait is
+        // removed — IsCompleted alone stays false either way, since the retry still has to wait
+        // for its own reply.)
+        Assert.False(router.HasPendingCommand);
+        Assert.DoesNotContain("TAGID", serial.ToString(), StringComparison.Ordinal);
         Assert.False(retry.IsCompleted);
+        Assert.True(router.TryRoute("OK"));
 
+        await WaitForPendingCommand(router);
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+
         var tagId = Assert.IsType<NfcResponse.TagId>(await retry);
         Assert.Equal("04A13BFE", tagId.Uid);
+    }
+
+    [Fact]
+    public async Task A_follow_up_answer_is_not_handed_to_the_next_command()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5));
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("OK"));
+        await write;
+
+        var next = channel.ReadTagIdAsync();
+
+        // The next command must not even be on the wire yet: the quarantine holds it until the
+        // follow-up's own answer has been accounted for. (These two are the ones that actually
+        // fail if the quarantine wait is removed.)
+        Assert.False(router.HasPendingCommand);
+        Assert.DoesNotContain("TAGID", serial.ToString(), StringComparison.Ordinal);
+
+        // The follow-up STATUS's own answer is still in flight; it must not complete the next
+        // command.
+        Assert.True(router.TryRoute("ERROR no-tag-detected"));
+        Assert.False(next.IsCompleted);
+
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        Assert.IsType<NfcResponse.TagId>(await next);
+    }
+
+    [Fact]
+    public async Task A_follow_up_s_designed_insert_event_closes_the_hold_immediately()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var serial = new StringWriter();
+        var channel = new RetroBoxSerialNfcCommandChannel(router, serial, TimeSpan.FromSeconds(5));
+
+        var write = channel.WriteTagAsync("disk1", RetroBoxFloppyCatalogRules.ReadOnlyMode);
+        await WaitForPendingCommand(router);
+        Assert.True(router.TryRoute("OK"));
+        await write;
+
+        // The ordinary happy path: the follow-up STATUS's answer arrives as the INSERT event it
+        // was designed to produce, not as ERROR. That must close the hold immediately rather than
+        // riding out the whole window — otherwise every command right after a write stalls for
+        // the window's full duration.
+        Assert.False(router.TryRoute("INSERT disk1,ro"));
+
+        var next = channel.ReadTagIdAsync();
+        await WaitForPendingCommand(router);
+
+        Assert.Contains("TAGID", serial.ToString(), StringComparison.Ordinal);
+
+        Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
+        Assert.IsType<NfcResponse.TagId>(await next);
     }
 
     [Fact]

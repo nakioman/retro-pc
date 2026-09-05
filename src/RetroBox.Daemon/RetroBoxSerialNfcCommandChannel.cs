@@ -76,6 +76,17 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
 
         try
         {
+            // Deliberately inside the gate, not before it. A window is armed by the outgoing
+            // gate holder's own timeout or follow-up, which happens while that holder still
+            // holds the gate — so a caller that checked the slot before queuing for the gate
+            // could still have a window armed underneath it by the time it gets in. Waiting in
+            // here means the window, if any, is already fully armed before this ever looks at
+            // it. SendStatusAsync never calls this at all, so it is affected only indirectly,
+            // through the shared gate it contends for; now that the window closes on the
+            // follow-up's own event answer (not just its full timeout), that indirect delay is
+            // no longer for the window's full duration.
+            await router.WaitForClearSlotAsync(cancellationToken);
+
             var reply = router.BeginCommand();
 
             try
@@ -110,6 +121,12 @@ public sealed class RetroBoxSerialNfcCommandChannel : IRetroBoxNfcCommandChannel
             if (response is NfcResponse.Ok && followUpOnOk is not null)
             {
                 await serialOutput.WriteLineAsync(followUpOnOk.AsMemory(), cancellationToken);
+
+                // The follow-up's answer is an event when it is INSERT/EJECT, but ERROR is
+                // ambiguous and would otherwise land on the next command. Arming the orphan
+                // window here makes the quarantine hold the next command until it has been
+                // accounted for, whatever shape it turns out to have.
+                router.ExpectOrphanedReply();
             }
 
             return response;

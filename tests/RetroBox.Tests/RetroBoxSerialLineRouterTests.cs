@@ -164,4 +164,103 @@ public sealed class RetroBoxSerialLineRouterTests
         Assert.True(pending.IsCompleted);
         Assert.IsType<NfcResponse.Ok>(await pending);
     }
+
+    [Theory]
+    [InlineData("INSERT disk1,ro")]
+    [InlineData("EJECT")]
+    public void TryRoute_closes_a_follow_up_armed_window_on_its_designed_event_answer(string eventLine)
+    {
+        var router = new RetroBoxSerialLineRouter();
+        router.ExpectOrphanedReply();
+
+        // The follow-up's designed answer is an event, not a reply, so it never reaches the
+        // orphan-absorb check by the usual route — it must still close the window.
+        Assert.False(router.TryRoute(eventLine));
+
+        // With the window closed, an unrelated ERROR arriving afterward is not swallowed as
+        // the straggler: it falls through as its own unprompted event, same as always.
+        Assert.False(router.TryRoute("ERROR no-tag-detected"));
+    }
+
+    [Fact]
+    public void TryRoute_does_not_close_a_timeout_armed_window_on_an_event()
+    {
+        var router = new RetroBoxSerialLineRouter();
+        var timedOut = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        // A timeout-armed window has nothing to do with events; it must stay open so it can
+        // still absorb the late OK.
+        Assert.False(router.TryRoute("INSERT disk1,ro"));
+
+        var next = router.BeginCommand();
+        Assert.True(router.TryRoute("OK"));
+        Assert.False(next.IsCompleted);
+    }
+
+    [Theory]
+    [InlineData("GARBAGE")]
+    [InlineData("INSERT BAD_ID,ro")]
+    public void TryRoute_does_not_close_a_follow_up_armed_window_on_a_line_that_is_not_a_valid_event(string line)
+    {
+        var router = new RetroBoxSerialLineRouter();
+        router.ExpectOrphanedReply();
+
+        // Neither a reply nor a valid event: it must not be mistaken for the follow-up's
+        // designed answer, so the window stays open.
+        Assert.False(router.TryRoute(line));
+
+        // With the window still open, the follow-up's real answer -- an unrelated-looking ERROR
+        // as far as the router can tell -- is still absorbed rather than treated as an event.
+        Assert.True(router.TryRoute("ERROR no-tag-detected"));
+    }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_returns_at_once_when_no_orphan_is_outstanding()
+    {
+        var router = new RetroBoxSerialLineRouter();
+
+        await router.WaitForClearSlotAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_waits_out_an_orphan_window()
+    {
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(1), timeProvider: time);
+        _ = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        var wait = router.WaitForClearSlotAsync(CancellationToken.None);
+        Assert.False(wait.IsCompleted);
+
+        // Drive the window's expiry explicitly rather than waiting it out in real time.
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        await WithFailureDeadline(wait);
+    }
+
+    [Fact]
+    public async Task WaitForClearSlotAsync_returns_once_the_late_reply_is_absorbed()
+    {
+        var time = new RetroBoxFakeTimeProvider();
+        var router = new RetroBoxSerialLineRouter(orphanWindow: TimeSpan.FromSeconds(30), timeProvider: time);
+        _ = router.BeginCommand();
+        router.CancelCommand(new TimeoutException("no reply"));
+
+        var wait = router.WaitForClearSlotAsync(CancellationToken.None);
+        Assert.False(wait.IsCompleted);
+
+        // The straggler arrives: the slot is clear immediately, without waiting out the window
+        // — the fake clock is never advanced, so nothing but the absorb signal can release this.
+        Assert.True(router.TryRoute("OK"));
+
+        await WithFailureDeadline(wait);
+    }
+
+    // Not a timing budget: nothing here is expected to take anywhere near this long. It exists
+    // so that a regression which stops the wait from ever completing (e.g. broken deadline
+    // arithmetic, or a lost cleared-signal) fails this test with a readable message instead of
+    // hanging the test host indefinitely.
+    private static Task WithFailureDeadline(Task task) => task.WaitAsync(TimeSpan.FromSeconds(30));
 }
