@@ -105,7 +105,7 @@ public static class RetroBoxCoverEndpoints
             return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "missing-file", "No file was uploaded.");
         }
 
-        var fileName = Path.GetFileName(HeaderUtilities.RemoveQuotes(disposition.FileName).Value);
+        var fileName = Path.GetFileName(HeaderUtilities.RemoveQuotes(disposition.FileName).Value ?? string.Empty);
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         if (extension is not ".jpg" and not ".jpeg" and not ".png" and not ".webp")
         {
