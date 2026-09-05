@@ -58,6 +58,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
 
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
         RetroBoxLibraryEndpoints.Map(app, options, catalogSource, library);
+        RetroBoxGameEndpoints.Map(app, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
         RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library, driveState);
         app.MapGet("/", () => ServeAsset("index.html"));
