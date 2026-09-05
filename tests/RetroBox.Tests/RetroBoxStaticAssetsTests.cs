@@ -45,8 +45,8 @@ public sealed class RetroBoxStaticAssetsTests
     public void The_no_NFC_badge_carries_its_explanation()
     {
         // An uploaded floppy always lands with nfc: false and cannot be inserted until a tag is
-        // written for it, which the panel cannot do yet. The badge is the only place the panel
-        // says so, so both the help string and the attribute that surfaces it are pinned here.
+        // written for it. The badge is the only place the panel says so, so both the help string
+        // and the attribute that surfaces it are pinned here.
         Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
 
         var script = Encoding.UTF8.GetString(js);
@@ -66,6 +66,24 @@ public sealed class RetroBoxStaticAssetsTests
 
         Assert.NotEmpty(spanish);
         Assert.Equal(spanish, english);
+    }
+
+    [Theory]
+    [InlineData("no-tag-present")]
+    [InlineData("tag-already-assigned")]
+    [InlineData("write-failed")]
+    [InlineData("write-unconfirmed")]
+    [InlineData("no-controller")]
+    [InlineData("mode-changed")]
+    [InlineData("invalid-request")]
+    public void Every_nfc_error_code_has_text_in_both_languages(string code)
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+        var occurrences = Regex.Matches(script, $"\"{code}\"\\s*:").Count;
+
+        Assert.Equal(2, occurrences);
     }
 
     private static string[] ExtractKeys(string script, string language)
