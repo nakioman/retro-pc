@@ -130,6 +130,17 @@ public sealed class RetroBoxStaticAssetsTests
         Assert.Contains(key, ExtractKeys(script, "en"));
     }
 
+    [Fact]
+    public void The_game_delete_confirmation_warns_that_floppies_and_images_are_deleted()
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("¿Eliminar este grupo y sus disquetes? Sus imágenes también se borrarán.", script, StringComparison.Ordinal);
+        Assert.Contains("Delete this group and its floppies? Their images will also be deleted.", script, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("no-tag-present")]
     [InlineData("tag-already-assigned")]

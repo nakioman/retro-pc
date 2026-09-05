@@ -199,14 +199,15 @@ games:
 contains display metadata and an ordered list of floppy IDs. Each referenced
 floppy must exist and may belong to only one game; floppies may remain
 ungrouped. Covers and ScreenScraper IDs are metadata only in this phase and are
-not served or validated. Deleting a game removes only its grouping metadata,
-leaving its floppy entries and image files intact.
+not served or validated. Deleting a game also removes its floppy entries and then attempts to
+remove their image files. The catalog is saved first, so an image-cleanup failure leaves only an
+orphaned file and does not fail the delete.
 
 The panel exposes `GET /api/catalog`, which returns each game with its floppy
 views and a separate `ungroupedFloppies` list. `POST /api/games` creates a game
 from `{ id, label }`; `PATCH /api/games/{id}` replaces its label and/or complete
 floppy membership with `{ label, floppyIds }`; `DELETE /api/games/{id}` removes
-only the group. Game mutations save the catalog atomically and reload the
+the group and its floppies. Game mutations save the catalog atomically and reload the
 watching source before the next catalog response.
 
 The `nfc` field tracks whether a physical NFC tag has been assigned to this floppy. When `true`, the daemon accepts inserts for this floppy ID. When `false`, the daemon refuses any insert attempt (without touching the 86Box socket) because no tag has been written for this catalog entry yet. Assign one by putting the floppy in the drive and using the web panel's drive section, which writes the tag over serial.

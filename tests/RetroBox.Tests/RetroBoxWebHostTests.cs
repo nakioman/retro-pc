@@ -172,7 +172,7 @@ public sealed class RetroBoxWebHostTests : IDisposable
     }
 
     [Fact]
-    public async Task Delete_games_removes_only_the_group()
+    public async Task Delete_games_removes_the_group_its_floppies_and_their_images()
     {
         File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    floppyIds: [disk1]\n");
         await using var context = await StartGamesAsync();
@@ -182,7 +182,28 @@ public sealed class RetroBoxWebHostTests : IDisposable
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var catalog = new RetroBoxConfigStore(root).Load();
         Assert.Empty(catalog.Games);
-        Assert.Contains("disk1", catalog.Floppies.Keys);
+        Assert.DoesNotContain("disk1", catalog.Floppies.Keys);
+        Assert.False(File.Exists(Path.Combine(root, "disk1.img")));
+        Assert.Contains("disk2", catalog.Floppies.Keys);
+        Assert.True(File.Exists(Path.Combine(root, "disk2.img")));
+    }
+
+    [Fact]
+    public async Task Delete_games_succeeds_when_an_image_cannot_be_removed()
+    {
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    floppyIds: [disk1]\n");
+        var library = new RetroBoxFloppyLibrary(
+            new RetroBoxConfigStore(root),
+            deleteFile: _ => throw new IOException("simulated failure removing the image"));
+        await using var context = await StartGamesAsync(library);
+
+        using var response = await context.Client.DeleteAsync("/api/games/game");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var catalog = new RetroBoxConfigStore(root).Load();
+        Assert.Empty(catalog.Games);
+        Assert.DoesNotContain("disk1", catalog.Floppies.Keys);
+        Assert.Contains("disk2", catalog.Floppies.Keys);
     }
 
     [Fact]
@@ -234,13 +255,14 @@ public sealed class RetroBoxWebHostTests : IDisposable
         Assert.Contains("catalog-unavailable", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
-    private async Task<GamesEndpointContext> StartGamesAsync()
+    private async Task<GamesEndpointContext> StartGamesAsync(RetroBoxFloppyLibrary? library = null)
     {
         var store = new RetroBoxConfigStore(root);
         var source = new RetroBoxWatchingCatalogSource(root, store.Load(), watchFileSystem: false);
         var host = await RetroBoxWebHost.StartAsync(
             new RetroBoxWebOptions { Port = 0, ConfigRoot = root },
-            source);
+            source,
+            floppyLibrary: library);
         return new GamesEndpointContext(host, source, new HttpClient { BaseAddress = host.BaseAddress });
     }
 

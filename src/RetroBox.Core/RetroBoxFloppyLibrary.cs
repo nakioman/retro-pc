@@ -125,12 +125,31 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
         {
             var data = LoadOrThrow();
             var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal);
-            if (!games.Remove(id))
+            if (!games.Remove(id, out var game))
             {
                 return false;
             }
 
-            store.Save(data with { Games = games });
+            var images = game.FloppyIds.Select(floppyId => data.Floppies[floppyId].Image).ToArray();
+            var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal);
+            foreach (var floppyId in game.FloppyIds)
+            {
+                floppies.Remove(floppyId);
+            }
+
+            store.Save(data with { Floppies = floppies, Games = games });
+
+            foreach (var image in images)
+            {
+                try
+                {
+                    deleteImageFile(image);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
             return true;
         }
     }
