@@ -125,6 +125,39 @@ public sealed class RetroBoxWatchingCatalogSourceTests : IDisposable
         Assert.Equal(2, source.Current.Floppies.Count);
     }
 
+    [Fact]
+    public void A_watcher_error_is_reported_so_a_frozen_catalog_is_not_silent()
+    {
+        WriteCatalog("disk1");
+        var initial = new RetroBoxConfigStore(root).Load();
+        var failures = new List<string>();
+        using var source = new RetroBoxWatchingCatalogSource(root, initial, failures.Add, watchFileSystem: false);
+
+        source.ReportWatcherFailure(new IOException("inotify watch limit reached"));
+
+        Assert.Contains("catalog changes will no longer be noticed", Assert.Single(failures), StringComparison.Ordinal);
+        Assert.NotNull(source.LastError);
+    }
+
+    [Fact]
+    public void LastError_stays_reported_after_a_successful_reload_once_the_watcher_has_died()
+    {
+        // ReportWatcherFailure must not be undone by the panel's own next write: TryReload
+        // succeeding must not make the outage look resolved when nothing fixed the watcher.
+        WriteCatalog("disk1");
+        var initial = new RetroBoxConfigStore(root).Load();
+        using var source = new RetroBoxWatchingCatalogSource(root, initial, watchFileSystem: false);
+
+        source.ReportWatcherFailure(new IOException("inotify watch limit reached"));
+
+        WriteCatalog("disk1", "disk2");
+
+        Assert.True(source.Reload());
+        Assert.Equal(["disk1", "disk2"], source.Current.Floppies.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.NotNull(source.LastError);
+        Assert.Contains("watcher", source.LastError, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void WriteCatalog(params string[] floppyIds)
     {
         File.WriteAllText(Path.Combine(root, "config.yaml"), "defaultVm: dos\n");

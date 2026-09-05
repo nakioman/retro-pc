@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using RetroBox.Cli;
+using RetroBox.Daemon;
 
 namespace RetroBox.Tests;
 
@@ -373,7 +374,8 @@ public sealed class CliHelpSmokeTests
                 Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
 
                 // Shutdown comes from cancellation, not from stdin: a daemon that is serving the
-                // panel deliberately outlives its input stream (see the serial-less test below).
+                // panel deliberately outlives its input stream (see
+                // Daemon_parks_serving_the_panel_after_stdin_eof_with_no_serial_port_configured).
                 cancellation.Cancel();
                 input.Complete();
                 var exitCode = await AwaitWithinBound(invokeTask);
@@ -401,13 +403,89 @@ public sealed class CliHelpSmokeTests
     }
 
     [Fact]
+    public async Task Daemon_parks_serving_the_panel_after_stdin_eof_with_no_serial_port_configured()
+    {
+        // With no --serial-port at all, SuperviseSerialDeviceAsync reads events from stdin
+        // directly instead of retrying a device open. That path used to be exercised by
+        // Daemon_keeps_serving_the_panel_when_the_serial_device_is_unavailable, but that test
+        // configures a (missing) --serial-port, which now takes the retry-loop branch instead and
+        // never touches stdin at all. Nothing was left asserting that a daemon with no controller
+        // configured, and stdin at EOF, still parks and keeps serving the panel rather than
+        // exiting - this test is that guard.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-noserialport", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        const int maxAttempts = 6;
+
+        try
+        {
+            using var client = new HttpClient();
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                Console.SetIn(TextReader.Null);
+                Console.SetError(stderr);
+
+                var port = ReserveFreeTcpPort();
+                var url = $"http://127.0.0.1:{port}/api/catalog";
+                var command = CliCommandFactory.CreateRootCommand();
+                using var cancellation = new CancellationTokenSource();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    missingRoot,
+                    "--web-port",
+                    port.ToString(),
+                ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+                var poll = await WaitForCatalogResponse(client, url, stderr);
+
+                if (poll.LostPortRace)
+                {
+                    cancellation.Cancel();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
+
+                // Re-poll a few times rather than asserting once: each round trip through Kestrel
+                // takes real wall-clock time, giving the stdin-EOF fast path every opportunity to
+                // have already run and exited if parking were broken, without a bare fixed sleep.
+                for (var recheck = 0; recheck < 5; recheck++)
+                {
+                    Assert.False(invokeTask.IsCompleted, $"The daemon exited after stdin EOF instead of parking: {stderr}");
+                    Assert.Contains("\"floppies\"", await client.GetStringAsync(url), StringComparison.Ordinal);
+                }
+
+                cancellation.Cancel();
+                Assert.Equal(0, await AwaitWithinBound(invokeTask));
+                await Assert.ThrowsAsync<HttpRequestException>(() => client.GetStringAsync(url));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(missingRoot))
+            {
+                Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Daemon_keeps_serving_the_panel_when_the_serial_device_is_unavailable()
     {
         // The guard the unit change never had. The installer writes SERIAL_DEVICE=/dev/ttyUSB0
         // even when it detected no controller, so on a controller-less appliance ExecStart opens
-        // a device that is not there, and systemd hands the process /dev/null on stdin. Both must
-        // degrade to "no controller, panel still up": exiting either way (non-zero from the
-        // failed open, or zero at stdin EOF) leaves the appliance with no panel at all.
+        // a device that is not there. The supervisor must not exit over that: it keeps retrying
+        // the missing device on an interval, and the web panel keeps serving throughout.
         var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-noserial", Guid.NewGuid().ToString("N"));
         var missingDevice = $"/dev/retrobox-missing-{Guid.NewGuid():N}";
         var originalIn = Console.In;
@@ -450,12 +528,11 @@ public sealed class CliHelpSmokeTests
                 Assert.Contains("\"floppies\"", poll.Body, StringComparison.Ordinal);
 
                 // The panel can answer before the failed open is even attempted (the host starts
-                // first, on purpose), so both diagnostics are waited for rather than read once.
-                // The second one is also the ordering the assertions below need: once it appears
-                // the read loop has already ended on stdin EOF, so a daemon that is still running
-                // and still answering is proof that EOF did not take the panel down with it.
+                // first, on purpose). Once the "unavailable" diagnostic appears the supervisor is
+                // in its retry loop and keeps retrying indefinitely without exiting; a daemon that
+                // is still running and still answering here is proof the missing device does not
+                // take the panel down with it.
                 await WaitForStderr(stderr, "Floppy controller is unavailable", invokeTask);
-                await WaitForStderr(stderr, "the web panel keeps serving", invokeTask);
 
                 Assert.False(invokeTask.IsCompleted, $"The daemon exited while the panel was serving: {stderr}");
                 Assert.Contains("\"floppies\"", await client.GetStringAsync(url), StringComparison.Ordinal);
@@ -478,6 +555,168 @@ public sealed class CliHelpSmokeTests
                 Directory.Delete(missingRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task Daemon_recovers_the_serial_device_after_transient_open_failures()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-reopen", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var deviceReader = new PipeTextReader();
+        var deviceWriter = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                attempts++;
+                if (attempts <= 2)
+                {
+                    throw new RetroBoxSerialDeviceException($"attempt {attempts} failed");
+                }
+
+                deviceReader.WriteLine("INIT 1.0");
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), deviceReader, deviceWriter));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-reopen-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller connected", invocation);
+
+            // Reported once per outage, not once per failed attempt: two failed opens must leave
+            // exactly one "unavailable" diagnostic behind.
+            Assert.Equal(1, CountOccurrences(stderr.ToString(), "Floppy controller is unavailable"));
+
+            await WaitForStderr(stdout, "Floppy controller initialized (version 1.0)", invocation);
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_keeps_retrying_when_the_serial_device_fails_with_a_raw_IOException()
+    {
+        // SerialDeviceWriter does not wrap failures the way SerialDeviceReader does, so a write to
+        // a vanished port (the socket watcher's STATUS poll, in particular) surfaces a raw
+        // IOException. That must be caught alongside RetroBoxSerialDeviceException, or an unplug
+        // first observed by a write instead of a read still takes the whole daemon down.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-ioexception", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                attempts++;
+                TextReader reader = attempts == 1 ? new ThrowingAfterFirstLineReader() : TextReader.Null;
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), reader, TextWriter.Null));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-ioexception-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller went away", invocation);
+
+            Assert.False(invocation.IsCompleted, $"The daemon exited on a raw IOException instead of retrying: {stderr}");
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_reports_the_connected_diagnostic_only_once_per_connection()
+    {
+        // A device that opens fine but reads EOF at once (a half-dead adapter, a stale node during
+        // udev churn) reopens on every retry interval; the "connected" diagnostic must not reprint
+        // on each of those reopens, only on a genuine transition into the connected state.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "retrobox-eofloop", Guid.NewGuid().ToString("N"));
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        var attempts = 0;
+
+        Console.SetIn(TextReader.Null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Task<RetroBoxSerialDevice> Opener(RetroBoxSerialDeviceOptions options, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref attempts);
+                return Task.FromResult(new RetroBoxSerialDevice(new MemoryStream(), TextReader.Null, TextWriter.Null));
+            }
+
+            var command = CliCommandFactory.CreateRootCommand(serialDeviceOpener: Opener);
+            using var cancellation = new CancellationTokenSource();
+
+            var invocation = Task.Run(() => command.Parse([
+                "daemon",
+                "--config-root", missingRoot,
+                "--serial-port", "/dev/retrobox-eof-loop-test",
+                "--web-port", "0",
+            ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+            await WaitForStderr(stderr, "Floppy controller connected", invocation);
+            await WaitForCondition(() => Volatile.Read(ref attempts) >= 2, invocation);
+
+            Assert.Equal(1, CountOccurrences(stderr.ToString(), "Floppy controller connected."));
+
+            cancellation.Cancel();
+            await AwaitWithinBound(invocation);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+        }
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        return (haystack.Length - haystack.Replace(needle, string.Empty, StringComparison.Ordinal).Length) / needle.Length;
     }
 
     private static int ReserveFreeTcpPort()
@@ -554,6 +793,26 @@ public sealed class CliHelpSmokeTests
         Assert.Fail($"The daemon never printed '{fragment}' within {CatalogPollBudget}. stderr so far: {stderr}");
     }
 
+    // Bounded poll for an arbitrary condition, for assertions WaitForStderr's fixed-fragment
+    // match cannot express (waiting for a call count, for instance).
+    private static async Task WaitForCondition(Func<bool> predicate, Task<int> invokeTask)
+    {
+        var deadline = DateTime.UtcNow + CatalogPollBudget;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            Assert.False(invokeTask.IsCompleted, "The daemon exited before the condition was met.");
+            await Task.Delay(20);
+        }
+
+        Assert.Fail($"The condition was not met within {CatalogPollBudget}.");
+    }
+
     private static async Task<T> AwaitWithinBound<T>(Task<T> task)
     {
         var completed = await Task.WhenAny(task, Task.Delay(ExitBudget));
@@ -569,6 +828,8 @@ public sealed class CliHelpSmokeTests
             Channel.CreateUnbounded<string>();
 
         public void Complete() => channel.Writer.TryComplete();
+
+        public void WriteLine(string line) => channel.Writer.TryWrite(line);
 
         // Console.SetIn wraps whatever is assigned in a SyncTextReader, whose ReadLineAsync goes
         // through the synchronous ReadLine, not this type's ReadLineAsync(CancellationToken)
@@ -595,6 +856,23 @@ public sealed class CliHelpSmokeTests
             {
                 return null;
             }
+        }
+    }
+
+    /// <summary>Serves one line, then simulates a vanished port with a raw (unwrapped) IOException.</summary>
+    private sealed class ThrowingAfterFirstLineReader : TextReader
+    {
+        private bool served;
+
+        public override ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            if (!served)
+            {
+                served = true;
+                return ValueTask.FromResult<string?>("INIT 1.0");
+            }
+
+            throw new IOException("Floppy controller serial device vanished.");
         }
     }
 }

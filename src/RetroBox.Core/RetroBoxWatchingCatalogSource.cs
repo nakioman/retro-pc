@@ -15,6 +15,7 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private readonly FileSystemWatcher? watcher;
     private readonly Lock gate = new();
     private volatile CatalogSnapshot snapshot;
+    private volatile string? watcherFailureMessage;
     private CancellationTokenSource? pendingReload;
     private bool disposed;
 
@@ -58,12 +59,20 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
         watcher.Created += OnCatalogChanged;
         watcher.Deleted += OnCatalogChanged;
         watcher.Renamed += OnCatalogChanged;
+        watcher.Error += OnWatcherError;
         watcher.EnableRaisingEvents = true;
     }
 
     public RetroBoxCatalogData Current => snapshot.Catalog;
 
-    public string? LastError => snapshot.Error;
+    // The watcher's death is sticky and independent of the catalog snapshot: once inotify stops
+    // delivering events, a later successful reload (the panel's own writes still call Reload
+    // directly) must not make the outage look resolved when nothing fixed the watcher itself.
+    public string? LastError => watcherFailureMessage is null
+        ? snapshot.Error
+        : snapshot.Error is null
+            ? watcherFailureMessage
+            : $"{watcherFailureMessage} {snapshot.Error}";
 
     public bool TryReload() => Reload();
 
@@ -116,6 +125,24 @@ public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDis
     private void OnCatalogChanged(object sender, FileSystemEventArgs e)
     {
         ScheduleReload();
+    }
+
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        ReportWatcherFailure(e.GetException());
+    }
+
+    /// <summary>
+    /// On inotify buffer overflow or watch-limit exhaustion the watcher stops raising events and
+    /// can clear EnableRaisingEvents, which would silently return this source to the frozen
+    /// snapshot it exists to replace. Explicit reloads (the panel's own writes) still work.
+    /// </summary>
+    internal void ReportWatcherFailure(Exception error)
+    {
+        watcherFailureMessage =
+            $"Catalog watcher failed; catalog changes will no longer be noticed automatically: {error.Message}";
+
+        onReloadFailed?.Invoke(watcherFailureMessage);
     }
 
     // A single save rewrites several YAML files and raises several events; debouncing coalesces
