@@ -75,6 +75,66 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
         }
     }
 
+    public RetroBoxGame CreateGame(string id, string label)
+    {
+        lock (gate)
+        {
+            var data = LoadOrThrow();
+            if (data.Games.ContainsKey(id))
+            {
+                throw new RetroBoxCatalogException($"Game '{id}' already exists.");
+            }
+
+            var game = new RetroBoxGame { Label = label };
+            var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal)
+            {
+                [id] = game,
+            };
+
+            store.Save(data with { Games = games });
+            return game;
+        }
+    }
+
+    public RetroBoxGame? UpdateGame(string id, string? label, IReadOnlyList<string> floppyIds)
+    {
+        lock (gate)
+        {
+            var data = LoadOrThrow();
+            if (!data.Games.ContainsKey(id))
+            {
+                return null;
+            }
+
+            foreach (var floppyId in floppyIds)
+            {
+                RequireFloppy(data, floppyId);
+            }
+
+            var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal);
+            var game = new RetroBoxGame { Label = label ?? data.Games[id].Label, FloppyIds = [.. floppyIds] };
+            games[id] = game;
+            store.Save(data with { Games = games });
+            return game;
+        }
+    }
+
+    public bool DeleteGame(string id)
+    {
+        lock (gate)
+        {
+            var data = LoadOrThrow();
+            var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal);
+            if (!games.Remove(id))
+            {
+                return false;
+            }
+
+            store.Save(data with { Games = games });
+            return true;
+        }
+    }
+
     /// <summary>
     /// Records a written tag. Any other floppy holding this UID loses it: the tag is a physical
     /// object, so once it is reassigned the old entry genuinely has no tag, and leaving it

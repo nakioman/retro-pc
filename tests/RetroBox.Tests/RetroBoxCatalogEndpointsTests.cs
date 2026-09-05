@@ -13,7 +13,7 @@ public sealed class RetroBoxCatalogEndpointsTests
 
         var view = RetroBoxCatalogEndpoints.BuildCatalogView(source);
 
-        var floppy = Assert.Single(view.Floppies);
+        var floppy = Assert.Single(view.UngroupedFloppies);
         Assert.Equal("disk1", floppy.Id);
         Assert.Equal("Disk 1", floppy.Label);
         Assert.Equal(RetroBoxFloppyCatalogRules.ReadOnlyMode, floppy.Mode);
@@ -38,7 +38,7 @@ public sealed class RetroBoxCatalogEndpointsTests
 
         var view = RetroBoxCatalogEndpoints.BuildCatalogView(new RetroBoxStaticCatalogSource(catalog));
 
-        Assert.Equal(["adisk", "zdisk"], view.Floppies.Select(f => f.Id));
+        Assert.Equal(["adisk", "zdisk"], view.UngroupedFloppies.Select(f => f.Id));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class RetroBoxCatalogEndpointsTests
 
         var view = RetroBoxCatalogEndpoints.BuildCatalogView(source);
 
-        Assert.Empty(view.Floppies);
+        Assert.Empty(view.UngroupedFloppies);
         Assert.Equal("floppies.yaml is invalid", view.CatalogError);
     }
 
@@ -73,6 +73,6 @@ public sealed class RetroBoxCatalogEndpointsTests
             new Dictionary<string, RetroBoxVm>(StringComparer.Ordinal),
             new Dictionary<string, RetroBoxFloppy>(StringComparer.Ordinal));
 
-        Assert.Empty(RetroBoxCatalogEndpoints.BuildCatalogView(new RetroBoxStaticCatalogSource(catalog)).Floppies);
+        Assert.Empty(RetroBoxCatalogEndpoints.BuildCatalogView(new RetroBoxStaticCatalogSource(catalog)).UngroupedFloppies);
     }
 }
