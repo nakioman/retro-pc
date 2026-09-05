@@ -13,6 +13,21 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
 
     public Exception? ThrowOnCall { get; init; }
 
+    /// <summary>
+    /// Thrown only from WriteTagAsync, letting a test drive a TAGID that succeeds followed by a
+    /// WRITE that fails -- ThrowOnCall alone cannot express that, since it throws from either
+    /// method unconditionally.
+    /// </summary>
+    public Exception? ThrowOnWrite { get; init; }
+
+    /// <summary>
+    /// Runs just before WriteTagAsync returns its response, letting a test simulate something
+    /// else mutating the catalog while the serial round trip is still in flight -- there is no
+    /// other way to land in that window deterministically, since the stub's own calls otherwise
+    /// resolve synchronously.
+    /// </summary>
+    public Action? BeforeWriteResponse { get; init; }
+
     public Task<NfcResponse> ReadTagIdAsync(CancellationToken cancellationToken = default)
     {
         if (ThrowOnCall is not null)
@@ -31,7 +46,13 @@ internal sealed class StubNfcCommandChannel : IRetroBoxNfcCommandChannel
             throw ThrowOnCall;
         }
 
+        if (ThrowOnWrite is not null)
+        {
+            throw ThrowOnWrite;
+        }
+
         Calls.Add($"WRITE:{id}:{mode}");
+        BeforeWriteResponse?.Invoke();
         return Task.FromResult(WriteResponse);
     }
 }

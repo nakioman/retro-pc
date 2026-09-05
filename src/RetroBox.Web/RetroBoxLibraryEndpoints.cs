@@ -16,10 +16,16 @@ public static class RetroBoxLibraryEndpoints
     // ever run, so the "file-too-large" {code, message} response was dead code.
     public const long MaxRequestBodyBytes = MaxUploadBytes + 64 * 1024;
 
-    public static void Map(WebApplication app, RetroBoxWebOptions options, IRetroBoxCatalogSource catalogSource)
+    // library is shared with RetroBoxNfcEndpoints.Map by the caller (RetroBoxWebHost.StartAsync):
+    // both endpoint groups mutate the catalog through the same RetroBoxFloppyLibrary instance so
+    // they contend on its one instance-level lock, rather than each holding a private lock that
+    // does nothing to keep an upload and a tag write from racing each other's save.
+    public static void Map(
+        WebApplication app,
+        RetroBoxWebOptions options,
+        IRetroBoxCatalogSource catalogSource,
+        RetroBoxFloppyLibrary library)
     {
-        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
-
         app.MapPost("/api/floppies", (HttpRequest request) => UploadAsync(request, options, library, catalogSource));
         app.MapDelete("/api/floppies/{id}", (string id) => Delete(id, library, catalogSource));
         app.MapPatch("/api/floppies/{id}", (string id, RetroBoxFloppyPatch patch) => Patch(id, patch, library, catalogSource));

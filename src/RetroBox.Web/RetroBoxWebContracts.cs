@@ -12,9 +12,15 @@ public sealed record RetroBoxFloppyPatch(string? Label, string? Mode);
 
 public sealed record RetroBoxDriveView(string State, string? FloppyId, string? Mode, string? TagUid);
 
+public sealed record RetroBoxNfcWriteRequest(string FloppyId, bool Confirm);
+
+public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId, string? Message);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]
 [JsonSerializable(typeof(RetroBoxErrorView))]
 [JsonSerializable(typeof(RetroBoxFloppyPatch))]
 [JsonSerializable(typeof(RetroBoxDriveView))]
+[JsonSerializable(typeof(RetroBoxNfcWriteRequest))]
+[JsonSerializable(typeof(RetroBoxNfcWriteResult))]
 public sealed partial class RetroBoxWebJsonContext : JsonSerializerContext;

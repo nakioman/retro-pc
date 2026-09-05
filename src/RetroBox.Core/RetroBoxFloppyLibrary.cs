@@ -76,6 +76,55 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
     }
 
     /// <summary>
+    /// Records a written tag. Any other floppy holding this UID loses it: the tag is a physical
+    /// object, so once it is reassigned the old entry genuinely has no tag, and leaving it
+    /// claiming one would let the mount guard accept a stale tag.
+    /// </summary>
+    /// <param name="expectedMode">
+    /// The mode that was actually written onto the tag's payload, re-checked here against the
+    /// current catalog entry. A concurrent UpdateLabelAndMode call between the write and this
+    /// commit changes the mode and deliberately clears Nfc/NfcUid for exactly this reason — the
+    /// tag's payload is `&lt;id&gt;,&lt;mode&gt;`, so committing this assignment over a since-changed
+    /// mode would silently resurrect a tag whose payload the catalog no longer matches. Null skips
+    /// the check for callers that have not written a mode-bearing payload.
+    /// </param>
+    public void AssignTag(string id, string tagUid, string? expectedMode = null)
+    {
+        RunExclusively(() =>
+        {
+            var data = LoadOrThrow();
+            var floppy = RequireFloppy(data, id);
+
+            if (expectedMode is not null && !string.Equals(floppy.Mode, expectedMode, StringComparison.Ordinal))
+            {
+                throw new RetroBoxFloppyModeChangedException(
+                    $"Floppy '{id}' mode changed to '{floppy.Mode}' before the tag write could be recorded.");
+            }
+
+            var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal);
+
+            foreach (var (otherId, other) in data.Floppies)
+            {
+                if (!string.Equals(otherId, id, StringComparison.Ordinal)
+                    && string.Equals(other.NfcUid, tagUid, StringComparison.Ordinal))
+                {
+                    var released = other with { };
+                    released.Nfc = false;
+                    released.NfcUid = null;
+                    floppies[otherId] = released;
+                }
+            }
+
+            var assigned = floppy with { };
+            assigned.Nfc = true;
+            assigned.NfcUid = tagUid;
+            floppies[id] = assigned;
+
+            store.Save(data with { Floppies = floppies });
+        });
+    }
+
+    /// <summary>
     /// Runs an arbitrary catalog-mutating action under the same instance lock as Delete and
     /// UpdateLabelAndMode. The upload endpoint does its own load/resolve-id/save sequence outside
     /// this class (through RetroBoxFloppyImporter); without sharing this lock, two concurrent

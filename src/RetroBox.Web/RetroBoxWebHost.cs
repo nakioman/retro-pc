@@ -28,7 +28,8 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         CancellationToken cancellationToken = default,
         IRetroBoxDriveState? driveState = null,
         IRetroBoxNfcCommandChannel? nfcChannel = null,
-        Func<CancellationToken, Task>? driveEventsWaitForNextPoll = null)
+        Func<CancellationToken, Task>? driveEventsWaitForNextPoll = null,
+        RetroBoxFloppyLibrary? floppyLibrary = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
 
@@ -50,9 +51,15 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
 
         var app = builder.Build();
 
+        // One instance, shared by both endpoint groups below: RetroBoxFloppyLibrary's lock is
+        // per-instance, so upload/delete/rename and a tag write only serialise against each other
+        // if they all go through this same object.
+        var library = floppyLibrary ?? new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
+
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
-        RetroBoxLibraryEndpoints.Map(app, options, catalogSource);
+        RetroBoxLibraryEndpoints.Map(app, options, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
+        RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library);
         app.MapGet("/", () => ServeAsset("index.html"));
         app.MapGet("/{*asset}", (string asset) => ServeAsset(asset));
 
