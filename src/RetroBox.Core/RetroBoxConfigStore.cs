@@ -34,8 +34,9 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         var config = LoadConfig();
         var vms = LoadYaml<RetroBoxVmCatalog>("vms.yaml").Vms;
         var floppies = LoadFloppies();
+        var games = LoadGames();
 
-        var data = new RetroBoxCatalogData(config, vms, floppies);
+        var data = new RetroBoxCatalogData(config, vms, floppies) { Games = games };
         Validate(data);
         return data;
     }
@@ -50,6 +51,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             ("config.yaml", serializer.Serialize(data.Config)),
             ("vms.yaml", serializer.Serialize(new RetroBoxVmCatalog { Vms = new Dictionary<string, RetroBoxVm>(data.Vms, StringComparer.Ordinal) })),
             ("floppies.yaml", serializer.Serialize(new RetroBoxFloppyCatalog { Floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal) })),
+            ("games.yaml", serializer.Serialize(new RetroBoxGameCatalog { Games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal) })),
         ];
 
         SaveYamlSet(files);
@@ -78,6 +80,13 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
         return File.Exists(ResolvePath("floppies.yaml"))
             ? LoadYaml<RetroBoxFloppyCatalog>("floppies.yaml").Floppies
             : new Dictionary<string, RetroBoxFloppy>(StringComparer.Ordinal);
+    }
+
+    private Dictionary<string, RetroBoxGame> LoadGames()
+    {
+        return File.Exists(ResolvePath("games.yaml"))
+            ? LoadYaml<RetroBoxGameCatalog>("games.yaml").Games
+            : new Dictionary<string, RetroBoxGame>(StringComparer.Ordinal);
     }
 
     private T LoadYaml<T>(string fileName)
@@ -218,6 +227,28 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             if (!RetroBoxFloppyCatalogRules.IsValidSize(floppy.Size))
             {
                 throw new RetroBoxCatalogException($"Invalid floppy size '{floppy.Size}' for floppy '{id}'.");
+            }
+        }
+
+        var memberships = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (id, game) in data.Games)
+        {
+            id.RequireCatalogId("game ID");
+            game.Label.RequireCatalogValue($"Game '{id}' label");
+
+            foreach (var floppyId in game.FloppyIds)
+            {
+                if (!data.Floppies.ContainsKey(floppyId))
+                {
+                    throw new RetroBoxCatalogException(
+                        $"Game '{id}' references unknown floppy '{floppyId}'.");
+                }
+
+                if (!memberships.TryAdd(floppyId, id))
+                {
+                    throw new RetroBoxCatalogException(
+                        $"Floppy '{floppyId}' belongs to both games '{memberships[floppyId]}' and '{id}'.");
+                }
             }
         }
     }
