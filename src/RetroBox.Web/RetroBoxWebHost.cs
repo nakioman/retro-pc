@@ -29,7 +29,9 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         IRetroBoxDriveState? driveState = null,
         IRetroBoxNfcCommandChannel? nfcChannel = null,
         Func<CancellationToken, Task>? driveEventsWaitForNextPoll = null,
-        RetroBoxFloppyLibrary? floppyLibrary = null)
+        RetroBoxFloppyLibrary? floppyLibrary = null,
+        IRetroBoxCoverSource? coverSource = null,
+        Func<Uri, CancellationToken, Task<Stream>>? downloadCover = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
 
@@ -45,6 +47,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
             client.BaseAddress = RetroBoxScreenScraperCoverSource.ApiBaseAddress;
             client.Timeout = RetroBoxScreenScraperCoverSource.RequestTimeout;
         });
+        builder.Services.AddHttpClient(RetroBoxCoverCache.HttpClientName, client => client.Timeout = RetroBoxScreenScraperCoverSource.RequestTimeout);
 
         // Bound to every interface on purpose: the panel is useless if it is not reachable from
         // a phone on the LAN.
@@ -60,8 +63,21 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         // per-instance, so upload/delete/rename and a tag write only serialise against each other
         // if they all go through this same object.
         var library = floppyLibrary ?? new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
+        var settingsStore = new RetroBoxScraperSettingsStore(options.ConfigRoot);
+        var httpClientFactory = app.Services.GetRequiredService<IHttpClientFactory>();
+        Func<IRetroBoxCoverSource> coverSourceFactory = coverSource is null
+            ? () => new RetroBoxScreenScraperCoverSource(
+                httpClientFactory.CreateClient(RetroBoxScreenScraperCoverSource.HttpClientName),
+                settingsStore.Load())
+            : () => coverSource;
+        var coverCache = new RetroBoxCoverCache(
+            Path.Combine(options.ConfigRoot, "covers"),
+            library,
+            downloadCover ?? ((url, token) => httpClientFactory.CreateClient(RetroBoxCoverCache.HttpClientName).GetStreamAsync(url, token)));
 
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
+        RetroBoxScraperEndpoints.Map(app, settingsStore, coverSourceFactory);
+        RetroBoxCoverEndpoints.Map(app, settingsStore, coverSourceFactory, coverCache);
         RetroBoxLibraryEndpoints.Map(app, options, catalogSource, library);
         RetroBoxGameEndpoints.Map(app, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
