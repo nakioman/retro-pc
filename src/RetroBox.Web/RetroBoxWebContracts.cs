@@ -50,7 +50,7 @@ public sealed record RetroBoxScraperSearchResultView(string ScreenScraperId, str
 
 public sealed record RetroBoxCoverRequest(string? ScreenScraperId);
 
-public sealed record RetroBoxCoverView(string Cover, int ScreenScraperId);
+public sealed record RetroBoxCoverView(string Cover, int? ScreenScraperId);
 
 /// <param name="TagUid">
 /// The tag the caller believes is seated, echoed back from a tag-already-assigned 409. Required

@@ -162,7 +162,7 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
         }
     }
 
-    public RetroBoxGame? UpdateGameCover(string id, string cover, int screenScraperId)
+    public RetroBoxGame? UpdateGameCover(string id, string cover, int? screenScraperId)
     {
         lock (gate)
         {
