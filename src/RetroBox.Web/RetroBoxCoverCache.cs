@@ -5,9 +5,14 @@ namespace RetroBox.Web;
 public sealed class RetroBoxCoverCache(
     string coversRoot,
     RetroBoxFloppyLibrary library,
-    Func<Uri, CancellationToken, Task<Stream>> download)
+    Func<Uri, CancellationToken, Task<Stream>> download,
+    TimeSpan? copyTimeout = null)
 {
     public const string HttpClientName = "covers";
+
+    public const long MaxDownloadBytes = RetroBoxLibraryEndpoints.MaxUploadBytes;
+
+    private readonly TimeSpan copyTimeout = copyTimeout ?? RetroBoxScreenScraperCoverSource.RequestTimeout;
 
     public string CreateStagingPath(string extension)
     {
@@ -66,11 +71,7 @@ public sealed class RetroBoxCoverCache(
         var stagedPath = Path.Combine(coversRoot, $".{gameId}-{Guid.NewGuid():N}{extension}");
         try
         {
-            await using (var input = await download(source, cancellationToken))
-            await using (var output = File.Create(stagedPath))
-            {
-                await input.CopyToAsync(output, cancellationToken);
-            }
+            await DownloadToStagingAsync(source, stagedPath, extension, cancellationToken);
 
             var updated = false;
             library.RunExclusively(() =>
@@ -156,6 +157,45 @@ public sealed class RetroBoxCoverCache(
                     SafeDelete(backupPath);
                 }
             }
+        }
+    }
+
+    private async Task DownloadToStagingAsync(
+        Uri source,
+        string stagedPath,
+        string extension,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(copyTimeout);
+        await using var input = await download(source, timeout.Token);
+        await using (var output = File.Create(stagedPath))
+        {
+            var buffer = new byte[81920];
+            long downloaded = 0;
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer, timeout.Token);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                downloaded += read;
+                if (downloaded > MaxDownloadBytes)
+                {
+                    throw new InvalidDataException("The downloaded cover exceeds the size limit.");
+                }
+
+                await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
+            }
+
+            await output.FlushAsync(timeout.Token);
+        }
+
+        if (!RetroBoxCoverEndpoints.IsValidImage(stagedPath, extension))
+        {
+            throw new InvalidDataException("The downloaded cover is not a valid image.");
         }
     }
 

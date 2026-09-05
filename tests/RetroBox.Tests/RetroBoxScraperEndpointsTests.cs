@@ -121,12 +121,12 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         {
             GameMedia = [new RetroBoxCoverMedia("box-2D", "https://covers.example/doom.jpg", "sp", "es")],
         };
-        await using var context = await StartAsync(source, (_, _) => Task.FromResult<Stream>(new MemoryStream([4, 5, 6])));
+        await using var context = await StartAsync(source, (_, _) => Task.FromResult<Stream>(new MemoryStream(Jpeg)));
 
         using var response = await context.Client.PostAsync("/api/games/doom/cover", Json("{\"screenScraperId\":\"42\"}"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal([4, 5, 6], File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
+        Assert.Equal(Jpeg, File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
         Assert.Empty(Directory.GetFiles(Path.Combine(root, "covers"), "*.backup"));
         var game = new RetroBoxConfigStore(root).Load().Games["doom"];
         Assert.Equal("doom.jpg", game.Cover);
@@ -154,6 +154,67 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         var game = new RetroBoxConfigStore(root).Load().Games["doom"];
         Assert.Equal("doom.jpg", game.Cover);
         Assert.Equal(17, game.ScreenScraperId);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidDownloadedCoverBodies))]
+    public async Task Invalid_downloaded_cover_leaves_the_previous_cover_and_catalog_unchanged(byte[] downloaded)
+    {
+        ConfigureCredentials();
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
+        var source = new FakeCoverSource
+        {
+            GameMedia = [new RetroBoxCoverMedia("box-2D", "https://covers.example/doom.jpg", "sp", "es")],
+        };
+        await using var context = await StartAsync(source, (_, _) => Task.FromResult<Stream>(new MemoryStream(downloaded)));
+
+        using var response = await context.Client.PostAsync("/api/games/doom/cover", Json("{\"screenScraperId\":\"42\"}"));
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Contains("cover-download-failed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
+        var game = new RetroBoxConfigStore(root).Load().Games["doom"];
+        Assert.Equal("doom.jpg", game.Cover);
+        Assert.Equal(17, game.ScreenScraperId);
+    }
+
+    [Fact]
+    public async Task Oversized_downloaded_cover_leaves_the_previous_cover_and_catalog_unchanged()
+    {
+        ConfigureCredentials();
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
+        var source = new FakeCoverSource
+        {
+            GameMedia = [new RetroBoxCoverMedia("box-2D", "https://covers.example/doom.jpg", "sp", "es")],
+        };
+        await using var context = await StartAsync(source, (_, _) =>
+            Task.FromResult<Stream>(new MemoryStream(new byte[RetroBoxLibraryEndpoints.MaxUploadBytes + 1])));
+
+        using var response = await context.Client.PostAsync("/api/games/doom/cover", Json("{\"screenScraperId\":\"42\"}"));
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Contains("cover-download-failed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
+        Assert.Equal(17, new RetroBoxConfigStore(root).Load().Games["doom"].ScreenScraperId);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScraperFailures))]
+    public async Task Scraper_failures_return_stable_error_codes(string path, Exception failure, HttpStatusCode statusCode, string errorCode)
+    {
+        ConfigureCredentials();
+        await using var context = await StartAsync(new FakeCoverSource { SearchFailure = failure });
+
+        using var response = path == "/api/settings/scraper/test"
+            ? await context.Client.PostAsync(path, null)
+            : await context.Client.GetAsync(path);
+
+        Assert.Equal(statusCode, response.StatusCode);
+        Assert.Contains(errorCode, await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -299,6 +360,22 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
     public static IEnumerable<object[]> TruncatedImages() => SupportedImages()
         .Select(image => new object[] { image[0], image[1], ((byte[])image[2]).AsSpan(0, ((byte[])image[2]).Length - 1).ToArray() });
 
+    public static IEnumerable<object[]> InvalidDownloadedCoverBodies() =>
+    [
+        [Array.Empty<byte>()],
+        [Encoding.UTF8.GetBytes("not an image")],
+    ];
+
+    public static IEnumerable<object[]> ScraperFailures() =>
+    [
+        ["/api/scraper/search?q=doom", new HttpRequestException("network unavailable"), HttpStatusCode.BadGateway, "scraper-request-failed"],
+        ["/api/scraper/search?q=doom", new JsonException("not JSON"), HttpStatusCode.BadGateway, "scraper-invalid-response"],
+        ["/api/settings/scraper/test", new OperationCanceledException(), HttpStatusCode.GatewayTimeout, "scraper-timeout"],
+        ["/api/settings/scraper/test", new HttpRequestException("network unavailable"), HttpStatusCode.BadGateway, "scraper-request-failed"],
+        ["/api/settings/scraper/test", new JsonException("not JSON"), HttpStatusCode.BadGateway, "scraper-invalid-response"],
+        ["/api/scraper/search?q=doom", new OperationCanceledException(), HttpStatusCode.GatewayTimeout, "scraper-timeout"],
+    ];
+
     private static readonly byte[] Jpeg = Convert.FromBase64String("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==");
     private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAAB3YoTpAAAAAd0SU1FB+oJBRUcEdfvHDMAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjYtMDktMDVUMjE6Mjg6MTcrMDA6MDCkOaa0AAAAJXRFWHRkYXRlOm1vZGlmeQAyMDI2LTA5LTA1VDIxOjI4OjE3KzAwOjAw1WQeCAAAACh0RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyNi0wOS0wNVQyMToyODoxNyswMDowMIJxP9cAAAAKSURBVAjXY2AAAAACAAHiIbwzAAAAAElFTkSuQmCC");
     private static readonly byte[] WebpVp8 = Convert.FromBase64String("UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vv9UAA=");
@@ -320,12 +397,14 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
 
     private sealed class FakeCoverSource : IRetroBoxCoverSource
     {
+        public Exception? SearchFailure { get; init; }
+
         public IReadOnlyList<RetroBoxCoverSearchResult> SearchResults { get; init; } = [];
 
         public IReadOnlyList<RetroBoxCoverMedia> GameMedia { get; init; } = [];
 
         public Task<IReadOnlyList<RetroBoxCoverSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
-            Task.FromResult(SearchResults);
+            SearchFailure is null ? Task.FromResult(SearchResults) : Task.FromException<IReadOnlyList<RetroBoxCoverSearchResult>>(SearchFailure);
 
         public Task<IReadOnlyList<RetroBoxCoverMedia>> GetGameAsync(string screenScraperId, CancellationToken cancellationToken) =>
             Task.FromResult(GameMedia);

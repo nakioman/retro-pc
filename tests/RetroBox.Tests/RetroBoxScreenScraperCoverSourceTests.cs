@@ -92,6 +92,21 @@ public sealed class RetroBoxScreenScraperCoverSourceTests
     }
 
     [Fact]
+    public void Select_prefers_a_higher_priority_region_when_its_cover_has_no_language()
+    {
+        var selector = new RetroBoxCoverSelector();
+        var candidates = new[]
+        {
+            new RetroBoxCoverMedia("box-2D", "https://covers.example/us-en.png", "us", "en"),
+            new RetroBoxCoverMedia("box-2D", "https://covers.example/sp-unlabeled.png", "sp", null),
+        };
+
+        var selected = selector.Select(candidates, ["sp", "us"], ["es", "en"]);
+
+        Assert.Equal("https://covers.example/sp-unlabeled.png", selected!.Url);
+    }
+
+    [Fact]
     public void Select_returns_the_first_usable_box_2d_when_no_priority_matches()
     {
         var selector = new RetroBoxCoverSelector();

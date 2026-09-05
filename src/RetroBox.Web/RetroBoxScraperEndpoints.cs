@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using RetroBox.Core;
@@ -36,38 +37,38 @@ public static class RetroBoxScraperEndpoints
             return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "invalid-priorities", "Priority lists must contain each supported value exactly once.");
         }
 
-        var settings = settingsStore.Load();
-        if (patch.DevId is not null)
+        var settings = settingsStore.Update(settings =>
         {
-            settings.DevId = patch.DevId;
-        }
+            if (patch.DevId is not null)
+            {
+                settings.DevId = patch.DevId;
+            }
 
-        if (patch.DevPassword is not null)
-        {
-            settings.DevPassword = patch.DevPassword;
-        }
+            if (patch.DevPassword is not null)
+            {
+                settings.DevPassword = patch.DevPassword;
+            }
 
-        if (patch.SsId is not null)
-        {
-            settings.SsId = patch.SsId;
-        }
+            if (patch.SsId is not null)
+            {
+                settings.SsId = patch.SsId;
+            }
 
-        if (patch.SsPassword is not null)
-        {
-            settings.SsPassword = patch.SsPassword;
-        }
+            if (patch.SsPassword is not null)
+            {
+                settings.SsPassword = patch.SsPassword;
+            }
 
-        if (patch.RegionPriority is not null)
-        {
-            settings.RegionPriority = patch.RegionPriority;
-        }
+            if (patch.RegionPriority is not null)
+            {
+                settings.RegionPriority = patch.RegionPriority;
+            }
 
-        if (patch.LanguagePriority is not null)
-        {
-            settings.LanguagePriority = patch.LanguagePriority;
-        }
-
-        settingsStore.Save(settings);
+            if (patch.LanguagePriority is not null)
+            {
+                settings.LanguagePriority = patch.LanguagePriority;
+            }
+        });
         return Results.Json(
             RetroBoxScraperSettingsView.From(settings),
             RetroBoxWebJsonContext.Default.RetroBoxScraperSettingsView);
@@ -91,6 +92,18 @@ public static class RetroBoxScraperEndpoints
         catch (RetroBoxScreenScraperException ex)
         {
             return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "scraper-failed", ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ScraperRequestFailed(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ScraperInvalidResponse(ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return ScraperTimedOut();
         }
     }
 
@@ -122,6 +135,18 @@ public static class RetroBoxScraperEndpoints
         {
             return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "scraper-failed", ex.Message);
         }
+        catch (HttpRequestException ex)
+        {
+            return ScraperRequestFailed(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ScraperInvalidResponse(ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return ScraperTimedOut();
+        }
     }
 
     private static bool IsClosedPriority(string[] values, HashSet<string> allowed)
@@ -133,4 +158,13 @@ public static class RetroBoxScraperEndpoints
     {
         return RetroBoxWebResults.Error(StatusCodes.Status409Conflict, "scraper-not-configured", "All ScreenScraper credentials are required.");
     }
+
+    private static IResult ScraperRequestFailed(HttpRequestException exception) =>
+        RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "scraper-request-failed", exception.Message);
+
+    private static IResult ScraperInvalidResponse(JsonException exception) =>
+        RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "scraper-invalid-response", exception.Message);
+
+    private static IResult ScraperTimedOut() =>
+        RetroBoxWebResults.Error(StatusCodes.Status504GatewayTimeout, "scraper-timeout", "ScreenScraper did not respond in time.");
 }
