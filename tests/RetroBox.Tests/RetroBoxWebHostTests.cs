@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using RetroBox.Core;
 using RetroBox.Web;
 
@@ -125,6 +126,35 @@ public sealed class RetroBoxWebHostTests : IDisposable
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Contains("\"id\":\"monkey-island\"", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         Assert.Equal("Monkey Island", new RetroBoxConfigStore(root).Load().Games["monkey-island"].Label);
+    }
+
+    [Fact]
+    public async Task Games_create_assign_and_reload_into_grouped_and_ungrouped_catalog_output()
+    {
+        await using var context = await StartGamesAsync();
+
+        using (var create = await context.Client.PostAsync(
+            "/api/games",
+            Json("{\"id\":\"monkey-island\",\"label\":\"Monkey Island\"}")))
+        {
+            Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        }
+
+        using (var assign = await context.Client.PatchAsync(
+            "/api/games/monkey-island",
+            Json("{\"floppyIds\":[\"disk1\"]}")))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        }
+
+        Assert.True(context.Source.TryReload());
+
+        using var catalog = JsonDocument.Parse(await context.Client.GetStringAsync("/api/catalog"));
+        var game = Assert.Single(catalog.RootElement.GetProperty("games").EnumerateArray());
+        Assert.Equal("monkey-island", game.GetProperty("id").GetString());
+        Assert.Equal("Monkey Island", game.GetProperty("label").GetString());
+        Assert.Equal("disk1", Assert.Single(game.GetProperty("floppies").EnumerateArray()).GetProperty("id").GetString());
+        Assert.Equal("disk2", Assert.Single(catalog.RootElement.GetProperty("ungroupedFloppies").EnumerateArray()).GetProperty("id").GetString());
     }
 
     [Fact]
