@@ -8,4 +8,6 @@ namespace RetroBox.Core;
 [YamlSerializable(typeof(RetroBoxFloppy))]
 [YamlSerializable(typeof(RetroBoxVmCatalog))]
 [YamlSerializable(typeof(RetroBoxFloppyCatalog))]
+[YamlSerializable(typeof(RetroBoxGame))]
+[YamlSerializable(typeof(RetroBoxGameCatalog))]
 public partial class RetroBoxYamlContext : StaticContext;

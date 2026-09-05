@@ -5,6 +5,9 @@ public sealed record RetroBoxCatalogData(
     IReadOnlyDictionary<string, RetroBoxVm> Vms,
     IReadOnlyDictionary<string, RetroBoxFloppy> Floppies)
 {
+    public IReadOnlyDictionary<string, RetroBoxGame> Games { get; init; } =
+        new Dictionary<string, RetroBoxGame>(StringComparer.Ordinal);
+
     public static RetroBoxCatalogData Empty { get; } = new(
         new RetroBoxConfig(),
         new Dictionary<string, RetroBoxVm>(StringComparer.Ordinal),
@@ -46,11 +49,18 @@ public sealed record RetroBoxFloppy
 
 public sealed record RetroBoxGame
 {
-    public string Label { get; init; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
 
-    public string? DefaultVm { get; init; }
+    public string? Cover { get; set; }
 
-    public List<string> FloppyIds { get; init; } = [];
+    public int? ScreenScraperId { get; set; }
+
+    public List<string> FloppyIds { get; set; } = [];
+}
+
+internal sealed record RetroBoxGameCatalog
+{
+    public Dictionary<string, RetroBoxGame> Games { get; set; } = new(StringComparer.Ordinal);
 }
 
 internal sealed record RetroBoxVmCatalog

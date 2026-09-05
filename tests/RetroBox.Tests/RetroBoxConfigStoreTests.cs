@@ -261,6 +261,87 @@ public sealed class RetroBoxConfigStoreTests
         Assert.True(data.Floppies["monkey1-disk1"].Nfc);
     }
 
+    [Fact]
+    public void Load_uses_empty_game_catalog_when_games_yaml_is_missing()
+    {
+        var root = CreateValidRoot();
+
+        var data = new RetroBoxConfigStore(root).Load();
+
+        Assert.Empty(data.Games);
+    }
+
+    [Fact]
+    public void Save_round_trips_games()
+    {
+        var root = CreateValidRoot();
+        var store = new RetroBoxConfigStore(root);
+        var original = store.Load();
+        var games = new Dictionary<string, RetroBoxGame>(StringComparer.Ordinal)
+        {
+            ["monkey-island"] = new() { Label = "The Secret of Monkey Island", FloppyIds = ["monkey1-disk1"] }
+        };
+
+        store.Save(original with { Games = games });
+
+        var reloaded = store.Load();
+        Assert.Equal("The Secret of Monkey Island", reloaded.Games["monkey-island"].Label);
+        Assert.Equal(["monkey1-disk1"], reloaded.Games["monkey-island"].FloppyIds);
+    }
+
+    [Theory]
+    [InlineData("BAD_ID", "game ID")]
+    [InlineData("monkey-island", "Game 'monkey-island' label")]
+    public void Load_rejects_invalid_game_values(string id, string expectedMessage)
+    {
+        var root = CreateValidRoot();
+        var label = id == "BAD_ID" ? "Good label" : "";
+        File.WriteAllText(Path.Combine(root, "games.yaml"), $"games:\n  {id}:\n    label: {label}\n");
+
+        var error = Assert.Throws<RetroBoxCatalogException>(() => new RetroBoxConfigStore(root).Load());
+
+        Assert.Contains(expectedMessage, error.Message);
+    }
+
+    [Fact]
+    public void Load_rejects_unknown_game_membership()
+    {
+        var root = CreateValidRoot();
+        File.WriteAllText(
+            Path.Combine(root, "games.yaml"),
+            """
+            games:
+              first:
+                label: First
+                floppyIds: [missing]
+            """);
+
+        var error = Assert.Throws<RetroBoxCatalogException>(() => new RetroBoxConfigStore(root).Load());
+
+        Assert.Contains("unknown floppy 'missing'", error.Message);
+    }
+
+    [Fact]
+    public void Load_rejects_duplicate_game_membership()
+    {
+        var root = CreateValidRoot();
+        File.WriteAllText(
+            Path.Combine(root, "games.yaml"),
+            """
+            games:
+              first:
+                label: First
+                floppyIds: [monkey1-disk1]
+              second:
+                label: Second
+                floppyIds: [monkey1-disk1]
+            """);
+
+        var error = Assert.Throws<RetroBoxCatalogException>(() => new RetroBoxConfigStore(root).Load());
+
+        Assert.Contains("belongs to both games", error.Message);
+    }
+
     private static string CreateValidRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "retrobox-tests", Guid.NewGuid().ToString("N"));
