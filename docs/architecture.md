@@ -59,7 +59,8 @@ Flat, file-per-concern `RetroBox*` classes. No external dependencies except
 YamlDotNet.
 
 - `RetroBoxConfigStore` — reads/writes `config.yaml`, `vms.yaml`,
-  `floppies.yaml` under the catalog root (default `/data/retrobox`), with
+  `floppies.yaml`, and `games.yaml` under the catalog root (default
+  `/data/retrobox`), with
   validation and backup-then-restore on failed saves.
 - `RetroBoxCatalogModels` / `RetroBoxCatalogValidation` / `RetroBoxCatalogRules`
   — YAML data shapes and ID/mode/size validation rules.
@@ -104,10 +105,10 @@ assets, preserved in the AOT single-file binary) on the port specified by
 daemon process because the daemon owns the serial port exclusively. The panel
 runs without a floppy controller attached, allowing catalog management with no
 hardware dependencies. It is **unauthenticated and openly writable**: anyone on
-the LAN can list, upload, rename, re-mode, and delete floppies. Authentication
-and TLS are explicitly out of scope, consistent with the appliance's existing
-guest-writable Samba share and the principle that the appliance is a LAN-trusted
-device.
+the LAN can list, upload, rename, re-mode, and delete floppies, and create,
+edit, or delete game groups. Authentication and TLS are explicitly out of
+scope, consistent with the appliance's existing guest-writable Samba share and
+the principle that the appliance is a LAN-trusted device.
 
 Uploads always land untagged (`nfc: false`), and the daemon refuses to mount an
 untagged floppy, so a floppy uploaded through the panel is listed but cannot be
@@ -120,7 +121,7 @@ service.
 
 The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
 the daemon: edits from the panel, from `retrobox import` on the host, or over
-SSH are picked up without restarting. A malformed `floppies.yaml` at startup no
+SSH are picked up without restarting. A malformed catalog file at startup no
 longer blocks the daemon — it starts with an empty catalog and reports the
 validation error, allowing the panel to fix it. A catalog reload that fails
 validation during runtime is discarded, leaving the daemon running with the
@@ -184,6 +185,30 @@ floppies:
     size: 3.5-1.44M
     nfc: true
 ```
+
+```yaml
+# games.yaml
+games:
+  monkey-island:
+    label: "Monkey Island"
+    floppyIds:
+      - monkey1-disk1
+```
+
+`games.yaml` is optional; an absent file means there are no groups. A game
+contains display metadata and an ordered list of floppy IDs. Each referenced
+floppy must exist and may belong to only one game; floppies may remain
+ungrouped. Covers and ScreenScraper IDs are metadata only in this phase and are
+not served or validated. Deleting a game also removes its floppy entries and then attempts to
+remove their image files. The catalog is saved first, so an image-cleanup failure leaves only an
+orphaned file and does not fail the delete.
+
+The panel exposes `GET /api/catalog`, which returns each game with its floppy
+views and a separate `ungroupedFloppies` list. `POST /api/games` creates a game
+from `{ id, label }`; `PATCH /api/games/{id}` replaces its label and/or complete
+floppy membership with `{ label, floppyIds }`; `DELETE /api/games/{id}` removes
+the group and its floppies. Game mutations save the catalog atomically and reload the
+watching source before the next catalog response.
 
 The `nfc` field tracks whether a physical NFC tag has been assigned to this floppy. When `true`, the daemon accepts inserts for this floppy ID. When `false`, the daemon refuses any insert attempt (without touching the 86Box socket) because no tag has been written for this catalog entry yet. Assign one by putting the floppy in the drive and using the web panel's drive section, which writes the tag over serial.
 

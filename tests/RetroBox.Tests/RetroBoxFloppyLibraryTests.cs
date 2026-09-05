@@ -63,6 +63,31 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
     }
 
     [Fact]
+    public void DeleteGame_removes_its_floppies_before_ignoring_an_image_cleanup_failure()
+    {
+        WriteCatalog("disk1");
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    floppyIds: [disk1]\n");
+        var image = Path.Combine(root, "disk1.img");
+        var catalogWasSavedBeforeImageCleanup = false;
+        var library = new RetroBoxFloppyLibrary(
+            new RetroBoxConfigStore(root),
+            deleteFile: _ =>
+            {
+                var catalog = new RetroBoxConfigStore(root).Load();
+                catalogWasSavedBeforeImageCleanup = catalog.Games.Count == 0 && catalog.Floppies.Count == 0;
+                throw new IOException("simulated failure removing the image");
+            });
+
+        Assert.True(library.DeleteGame("game"));
+
+        Assert.True(catalogWasSavedBeforeImageCleanup);
+        Assert.True(File.Exists(image));
+        var catalog = new RetroBoxConfigStore(root).Load();
+        Assert.Empty(catalog.Games);
+        Assert.Empty(catalog.Floppies);
+    }
+
+    [Fact]
     public void UpdateLabelAndMode_changes_the_label_without_touching_nfc()
     {
         WriteCatalog("disk1");
