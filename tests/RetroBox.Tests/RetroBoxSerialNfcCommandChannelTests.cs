@@ -131,8 +131,10 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         var retry = channel.ReadTagIdAsync();
 
         // Proof the retry has actually reached the quarantine rather than merely being slow off
-        // the mark: the only timer that can be registered now is WaitForClearSlotAsync's own.
-        // Without this the three assertions below could all pass vacuously.
+        // the mark. On this build the only timer registered by now is WaitForClearSlotAsync's own;
+        // on a build that lost the quarantine it is the retry's own reply timer, which is exactly
+        // the case this catches — without it the assertions below pass vacuously whenever the
+        // retry simply has not started yet.
         await WaitForRegisteredTimer(time);
 
         // The retry must not even be on the wire yet: the quarantine holds it until the straggler
@@ -207,15 +209,17 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
         await WaitForPendingCommand(router);
 
         var status = channel.SendStatusAsync();
-        await Task.Delay(50);
 
+        // No wait needed: on a contended semaphore gate.WaitAsync returns an incomplete task, so
+        // status is already pending the instant SendStatusAsync returns. A build that skipped the
+        // gate would have completed synchronously and failed here.
         Assert.False(status.IsCompleted);
         Assert.DoesNotContain("STATUS", serial.ToString(), StringComparison.Ordinal);
 
         Assert.True(router.TryRoute("Tag ID: 04A13BFE"));
 
-        await AwaitWithinBound(read);
-        await AwaitWithinBound(status);
+        await WithFailureDeadline(read);
+        await WithFailureDeadline(status);
 
         Assert.Contains("STATUS", serial.ToString(), StringComparison.Ordinal);
     }
@@ -262,14 +266,6 @@ public sealed class RetroBoxSerialNfcCommandChannelTests
     // finally block), so it does not necessarily land in the same synchronous step as the
     // event that triggers it. Bound the wait instead of awaiting the task directly, so a lost
     // release fails fast with a readable message instead of hanging for the full CI timeout.
-    private static async Task AwaitWithinBound(Task task)
-    {
-        await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
-
-        Assert.True(task.IsCompleted, "The awaited task did not complete within the bound.");
-        await task;
-    }
-
     /// <summary>
     /// Polls until the code under test has registered its timer against the fake clock. A timer's
     /// due time is fixed when it is created, so advancing beforehand simply carries that due time

@@ -334,8 +334,8 @@ public static class CliCommandFactory
                 // without ever touching the channel, so a disk that was seated at unplug time
                 // would otherwise keep /api/drive reporting "loaded" for the whole outage. Only
                 // INIT resets the tracker otherwise, and a controller that is gone sends none.
-                driveState.Reset();
                 channelHolder.Set(null);
+                driveState.Reset();
 
                 try
                 {

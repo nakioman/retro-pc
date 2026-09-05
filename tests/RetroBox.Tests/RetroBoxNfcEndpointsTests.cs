@@ -183,6 +183,10 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Contains("write-failed", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         Assert.False(new RetroBoxConfigStore(root).Load().Floppies["disk1"].Nfc);
+
+        // The re-announce belongs to the caller now, so nothing must ask the firmware to
+        // re-report a floppy whose tag was never written.
+        Assert.DoesNotContain("STATUS", channel.Calls);
     }
 
     [Fact]
