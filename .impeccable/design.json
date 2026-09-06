@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "northStar": "The Windows 3.1 Manager",
+  "mode": "operate",
+  "elevation": {
+    "philosophy": "flat-tonal",
+    "shadows": false
+  },
+  "breakpoints": {
+    "compact": "34rem"
+  },
+  "motion": {
+    "default": "restrained",
+    "principle": "Prefer immediate state changes; use motion only to clarify panel transitions or feedback."
+  },
+  "rules": [
+    "Green, amber, and red communicate state or action; do not use them as decoration.",
+    "Use background and inset changes to establish hierarchy; reserve shadows for justified interaction or overlay states.",
+    "Preserve the compact, explicit, keyboard-operable utility character during the Vite/React migration."
+  ],
+  "do": [
+    "Use monospace typography and explicit labels for operational controls.",
+    "Use borders and tonal layers to make panels easy to scan.",
+    "Preserve physical-machine vocabulary and meaningful status signals."
+  ],
+  "dont": [
+    "Do not use bright gradients, oversized hero sections, or decorative glass effects.",
+    "Do not use excessive rounded corners, heavy shadows, or ornamental decoration.",
+    "Do not sacrifice accessible contrast, target size, or keyboard operation for nostalgia."
+  ]
+}
