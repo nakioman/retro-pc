@@ -172,6 +172,22 @@ public sealed class RetroBoxWebHostTests : IDisposable
     }
 
     [Fact]
+    public async Task Patch_games_preserves_existing_cover_metadata()
+    {
+        File.WriteAllText(
+            Path.Combine(root, "games.yaml"),
+            "games:\n  game:\n    label: Game\n    cover: game.png\n    screenScraperId: 42\n    floppyIds: [disk1]\n");
+        await using var context = await StartGamesAsync();
+
+        using var response = await context.Client.PatchAsync("/api/games/game", Json("{\"label\":\"Renamed\",\"floppyIds\":[\"disk2\"]}"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var game = new RetroBoxConfigStore(root).Load().Games["game"];
+        Assert.Equal("game.png", game.Cover);
+        Assert.Equal(42, game.ScreenScraperId);
+    }
+
+    [Fact]
     public async Task Delete_games_removes_the_group_its_floppies_and_their_images()
     {
         File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  game:\n    label: Game\n    floppyIds: [disk1]\n");

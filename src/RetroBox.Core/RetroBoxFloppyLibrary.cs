@@ -112,7 +112,7 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
             }
 
             var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal);
-            var game = new RetroBoxGame { Label = label ?? data.Games[id].Label, FloppyIds = [.. floppyIds] };
+            var game = data.Games[id] with { Label = label ?? data.Games[id].Label, FloppyIds = [.. floppyIds] };
             games[id] = game;
             store.Save(data with { Games = games });
             return game;
@@ -151,6 +151,33 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
             }
 
             return true;
+        }
+    }
+
+    public RetroBoxGame? GetGame(string id)
+    {
+        lock (gate)
+        {
+            return LoadOrThrow().Games.GetValueOrDefault(id);
+        }
+    }
+
+    public RetroBoxGame? UpdateGameCover(string id, string cover, int screenScraperId)
+    {
+        lock (gate)
+        {
+            var data = LoadOrThrow();
+            if (!data.Games.TryGetValue(id, out var game))
+            {
+                return null;
+            }
+
+            var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal)
+            {
+                [id] = game with { Cover = cover, ScreenScraperId = screenScraperId },
+            };
+            store.Save(data with { Games = games });
+            return game;
         }
     }
 

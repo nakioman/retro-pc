@@ -38,6 +38,20 @@ public sealed record RetroBoxScraperSettingsView(
         settings.LanguagePriority);
 }
 
+public sealed record RetroBoxScraperSettingsPatch(
+    string? DevId,
+    string? DevPassword,
+    string? SsId,
+    string? SsPassword,
+    string[]? RegionPriority,
+    string[]? LanguagePriority);
+
+public sealed record RetroBoxScraperSearchResultView(string ScreenScraperId, string Title);
+
+public sealed record RetroBoxCoverRequest(string? ScreenScraperId);
+
+public sealed record RetroBoxCoverView(string Cover, int ScreenScraperId);
+
 /// <param name="TagUid">
 /// The tag the caller believes is seated, echoed back from a tag-already-assigned 409. Required
 /// on a confirmed request; optional otherwise.
@@ -55,6 +69,10 @@ public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyI
 [JsonSerializable(typeof(RetroBoxGamePatch))]
 [JsonSerializable(typeof(RetroBoxDriveView))]
 [JsonSerializable(typeof(RetroBoxScraperSettingsView))]
+[JsonSerializable(typeof(RetroBoxScraperSettingsPatch))]
+[JsonSerializable(typeof(RetroBoxScraperSearchResultView[]))]
+[JsonSerializable(typeof(RetroBoxCoverRequest))]
+[JsonSerializable(typeof(RetroBoxCoverView))]
 [JsonSerializable(typeof(RetroBoxNfcWriteRequest))]
 [JsonSerializable(typeof(RetroBoxNfcWriteResult))]
 public sealed partial class RetroBoxWebJsonContext : JsonSerializerContext;
