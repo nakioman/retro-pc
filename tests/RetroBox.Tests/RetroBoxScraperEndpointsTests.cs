@@ -155,6 +155,90 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         Assert.Equal(17, game.ScreenScraperId);
     }
 
+    [Theory]
+    [MemberData(nameof(SupportedImages))]
+    public async Task Upload_cover_replaces_the_file_and_clears_the_scraper_id_for_supported_images(
+        string fileName,
+        string contentType,
+        byte[] image)
+    {
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload(fileName, contentType, image));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(image, File.ReadAllBytes(Path.Combine(root, "covers", fileName)));
+        var game = new RetroBoxConfigStore(root).Load().Games["doom"];
+        Assert.Equal(fileName, game.Cover);
+        Assert.Null(game.ScreenScraperId);
+    }
+
+    [Theory]
+    [InlineData("doom.gif", "image/gif", new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 })]
+    [InlineData("doom.bmp", "image/bmp", new byte[] { 0x42, 0x4d })]
+    public async Task Upload_cover_rejects_unsupported_extensions_without_replacing_existing_state(
+        string fileName,
+        string contentType,
+        byte[] image)
+    {
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload(fileName, contentType, image));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("unsupported-extension", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
+        Assert.Equal(17, new RetroBoxConfigStore(root).Load().Games["doom"].ScreenScraperId);
+    }
+
+    [Fact]
+    public async Task Upload_cover_rejects_malformed_content_without_replacing_existing_state()
+    {
+        File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
+        Directory.CreateDirectory(Path.Combine(root, "covers"));
+        File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload("doom.png", "image/png", [1, 2, 3]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid-image", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(root, "covers", "doom.jpg")));
+        Assert.Equal(17, new RetroBoxConfigStore(root).Load().Games["doom"].ScreenScraperId);
+    }
+
+    [Fact]
+    public async Task Upload_cover_rejects_oversized_requests()
+    {
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync(
+            "/api/games/doom/cover/upload",
+            Upload("doom.jpg", "image/jpeg", new byte[RetroBoxLibraryEndpoints.MaxUploadBytes + 1]));
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.Contains("file-too-large", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Upload_cover_reports_an_unknown_game_after_validating_the_image()
+    {
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync(
+            "/api/games/missing/cover/upload",
+            Upload("doom.jpg", "image/jpeg", [0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9]));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains("unknown-game", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
     private void ConfigureCredentials()
     {
         new RetroBoxScraperSettingsStore(root).Save(new RetroBoxScraperSettings
@@ -181,6 +265,27 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
     }
 
     private static StringContent Json(string value) => new(value, System.Text.Encoding.UTF8, "application/json");
+
+    private static MultipartFormDataContent Upload(string fileName, string contentType, byte[] content)
+    {
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        return new MultipartFormDataContent { { file, "file", fileName } };
+    }
+
+    public static IEnumerable<object[]> SupportedImages()
+    {
+        var jpeg = new byte[] { 0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9 };
+        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0, 0, 0, 0 };
+        var webp = new byte[] { 0x52, 0x49, 0x46, 0x46, 22, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0 };
+        return
+        [
+            ["doom.jpg", "image/jpeg", jpeg],
+            ["doom.jpeg", "image/jpeg", jpeg],
+            ["doom.png", "image/png", png],
+            ["doom.webp", "image/webp", webp],
+        ];
+    }
 
     private sealed record EndpointContext(
         RetroBoxWebHost Host,

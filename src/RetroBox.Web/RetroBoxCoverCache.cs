@@ -9,6 +9,12 @@ public sealed class RetroBoxCoverCache(
 {
     public const string HttpClientName = "covers";
 
+    public string CreateStagingPath(string extension)
+    {
+        Directory.CreateDirectory(coversRoot);
+        return Path.Combine(coversRoot, $".upload-{Guid.NewGuid():N}{extension}");
+    }
+
     public async Task<RetroBoxCoverView?> ReplaceAsync(
         string gameId,
         int screenScraperId,
@@ -42,7 +48,24 @@ public sealed class RetroBoxCoverCache(
         }
     }
 
-    private void ReplaceUnderLock(string gameId, string cover, int screenScraperId, string stagedPath)
+    public Task<RetroBoxCoverView?> ReplaceUploadAsync(
+        string gameId,
+        string extension,
+        string stagedPath,
+        CancellationToken cancellationToken)
+    {
+        var cover = $"{gameId}{extension}";
+        var updated = false;
+        library.RunExclusively(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceUnderLock(gameId, cover, null, stagedPath);
+            updated = true;
+        });
+        return Task.FromResult<RetroBoxCoverView?>(updated ? new RetroBoxCoverView(cover, null) : null);
+    }
+
+    private void ReplaceUnderLock(string gameId, string cover, int? screenScraperId, string stagedPath)
     {
         var game = library.GetGame(gameId) ?? throw new RetroBoxUnknownGameException($"Unknown game '{gameId}'.");
         var finalPath = Path.Combine(coversRoot, cover);
