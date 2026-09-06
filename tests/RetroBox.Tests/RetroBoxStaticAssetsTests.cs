@@ -141,6 +141,54 @@ public sealed class RetroBoxStaticAssetsTests
         Assert.Contains("Delete this group and its floppies? Their images will also be deleted.", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_library_can_open_and_leave_the_full_screen_settings_view()
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("index.html", out var html, out _));
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var markup = Encoding.UTF8.GetString(html);
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("id=\"settings-open\"", markup, StringComparison.Ordinal);
+        Assert.Contains("id=\"settings-view\"", markup, StringComparison.Ordinal);
+        Assert.Contains("id=\"settings-back\"", markup, StringComparison.Ordinal);
+        Assert.Contains("showSettings()", script, StringComparison.Ordinal);
+        Assert.Contains("showLibrary()", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Scraper_secrets_start_blank_and_are_only_sent_after_being_edited()
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("input.value = \"\"", script, StringComparison.Ordinal);
+        Assert.Contains("input.dataset.dirty = \"false\"", script, StringComparison.Ordinal);
+        Assert.Contains("input.dataset.dirty === \"true\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("settings.devPassword", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("settings.ssPassword", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Settings_persist_language_and_offer_scraper_and_manual_cover_controls()
+    {
+        Assert.True(RetroBoxStaticAssets.TryGet("index.html", out var html, out _));
+        Assert.True(RetroBoxStaticAssets.TryGet("app.js", out var js, out _));
+
+        var markup = Encoding.UTF8.GetString(html);
+        var script = Encoding.UTF8.GetString(js);
+
+        Assert.Contains("id=\"language\"", markup, StringComparison.Ordinal);
+        Assert.Contains("window.localStorage.setItem(\"retrobox.lang\", language)", script, StringComparison.Ordinal);
+        Assert.Contains("/api/settings/scraper", script, StringComparison.Ordinal);
+        Assert.Contains("/api/settings/scraper/test", script, StringComparison.Ordinal);
+        Assert.Contains("/api/scraper/search?q=", script, StringComparison.Ordinal);
+        Assert.Contains("/cover/upload", script, StringComparison.Ordinal);
+        Assert.Contains("FormData()", script, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("no-tag-present")]
     [InlineData("tag-already-assigned")]

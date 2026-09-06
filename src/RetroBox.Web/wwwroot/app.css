@@ -58,6 +58,8 @@ h2 { margin: 0; font-size: 0.8125rem; text-transform: uppercase; letter-spacing:
 
 .header-tools { display: flex; gap: 0.5rem; }
 
+.icon-button { padding: 0.35rem 0.55rem; font-size: 1.1rem; line-height: 1; }
+
 input[type="search"], select {
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--line);
@@ -164,9 +166,36 @@ legend { padding: 0 0.25rem; color: var(--muted); font-size: 0.75rem; }
   font: inherit;
 }
 
+.settings-view { min-height: calc(100vh - 3rem); max-width: 60rem; }
+.settings-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+.settings-card { display: grid; gap: 1rem; }
+.setting-field { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.75rem; }
+.setting-field input, .setting-field select {
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  background: var(--inset);
+  color: var(--text);
+  font: inherit;
+}
+.credential-grid, .priority-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.priority-grid section { display: grid; gap: 0.5rem; }
+.priority-grid h3, .cover-controls h5 { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 400; }
+.priority-list { display: grid; gap: 0.35rem; }
+.priority-item { display: flex; align-items: center; gap: 0.5rem; }
+.priority-item span { flex: 1; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 0.25rem; background: var(--inset); }
+.priority-item button { padding: 0.25rem 0.4rem; font-size: 0.6875rem; }
+.scraper-flags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.cover-controls { display: grid; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
+.cover-search, .cover-upload, .cover-results { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.cover-search input { flex: 1; min-width: 12rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: 0.25rem; background: var(--inset); color: var(--text); font: inherit; }
+
 @media (max-width: 34rem) {
   body { padding: 1rem; }
   .header-tools, .header-tools input[type="search"] { width: 100%; }
   .header-tools input[type="search"] { flex: 1; }
   .card-head, .game-head { align-items: flex-start; }
+  .credential-grid, .priority-grid { grid-template-columns: 1fr; }
 }

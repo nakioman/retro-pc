@@ -17,14 +17,11 @@
   </div>
   <div class="header-tools">
     <input type="search" id="search" data-i18n-placeholder="searchPlaceholder">
-    <select id="language" aria-label="Language">
-      <option value="es">Espanol</option>
-      <option value="en">English</option>
-    </select>
+    <button id="settings-open" class="icon-button" type="button" data-i18n-title="settings" aria-label="Settings">⚙</button>
   </div>
 </header>
 
-<main>
+<main id="library-view">
   <section class="card drop">
     <h2 data-i18n="uploadTitle"></h2>
     <p class="hint" data-i18n="uploadHint"></p>
@@ -64,6 +61,46 @@
     <div id="library" class="library"></div>
     <p id="empty" class="hint" data-i18n="empty" hidden></p>
   </section>
+</main>
+
+<main id="settings-view" class="settings-view" hidden>
+  <div class="settings-header">
+    <button id="settings-back" type="button" data-i18n="back"></button>
+    <h2 data-i18n="settings"></h2>
+  </div>
+  <section class="card settings-card">
+    <label class="setting-field"><span data-i18n="language"></span>
+      <select id="language" aria-label="Language">
+        <option value="es">Español</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+  </section>
+  <form id="scraper-settings" class="card settings-card">
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="scraperTitle"></h2>
+        <p class="hint" data-i18n="scraperHint"></p>
+      </div>
+      <span id="scraper-status" class="hint" role="status"></span>
+    </div>
+    <div id="scraper-flags" class="scraper-flags" aria-live="polite"></div>
+    <div class="credential-grid">
+      <label class="setting-field"><span data-i18n="devId"></span><input id="dev-id" name="devId" autocomplete="off"></label>
+      <label class="setting-field"><span data-i18n="devPassword"></span><input id="dev-password" name="devPassword" type="password" autocomplete="new-password"></label>
+      <label class="setting-field"><span data-i18n="ssId"></span><input id="ss-id" name="ssId" autocomplete="off"></label>
+      <label class="setting-field"><span data-i18n="ssPassword"></span><input id="ss-password" name="ssPassword" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="priority-grid">
+      <section><h3 data-i18n="regionPriority"></h3><div id="region-priority" class="priority-list"></div></section>
+      <section><h3 data-i18n="languagePriority"></h3><div id="language-priority" class="priority-list"></div></section>
+    </div>
+    <p id="scraper-error" class="error" role="alert" hidden></p>
+    <div class="actions">
+      <button id="scraper-save" class="primary" type="submit" data-i18n="save"></button>
+      <button id="scraper-test" type="button" data-i18n="testCredentials"></button>
+    </div>
+  </form>
 </main>
 
 <script src="app.js"></script>

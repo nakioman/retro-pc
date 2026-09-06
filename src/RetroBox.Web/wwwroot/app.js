@@ -66,7 +66,45 @@ const STRINGS = {
     "no-controller": "No hay controlador de disquetes conectado.",
     "mode-changed": "El modo del disquete cambió mientras se grababa el tag.",
     "tag-changed": "El tag de la disquetera cambió mientras confirmabas. No se grabó nada; probá de nuevo.",
-    "invalid-request": "La solicitud no es válida."
+    "invalid-request": "La solicitud no es válida.",
+    settings: "Configuración",
+    back: "Volver",
+    language: "Idioma",
+    scraperTitle: "ScreenScraper",
+    scraperHint: "Las credenciales se guardan de forma privada. Dejá un campo vacío sin tocar para conservarlo; borrá su contenido para eliminarlo.",
+    devId: "ID de desarrollador",
+    devPassword: "Contraseña de desarrollador",
+    ssId: "ID de ScreenScraper",
+    ssPassword: "Contraseña de ScreenScraper",
+    regionPriority: "Prioridad de región",
+    languagePriority: "Prioridad de idioma",
+    save: "Guardar",
+    saved: "Configuración guardada.",
+    testCredentials: "Probar credenciales",
+    credentialsWorking: "Las credenciales funcionan.",
+    developerConfigured: "Desarrollador configurado",
+    developerMissing: "Faltan datos de desarrollador",
+    userConfigured: "Cuenta configurada",
+    userMissing: "Faltan datos de cuenta",
+    configured: "ScreenScraper listo",
+    notConfigured: "Faltan credenciales",
+    moveUp: "Subir",
+    moveDown: "Bajar",
+    coverSearch: "Buscar portada",
+    coverSearchPrompt: "Buscá el juego en ScreenScraper",
+    coverSearchButton: "Buscar",
+    coverChoose: "Usar esta portada",
+    coverUpload: "Subir portada",
+    coverUploadHint: "JPG, PNG o WebP",
+    coverUploaded: "Portada actualizada.",
+    coverSearchEmpty: "No se encontraron portadas utilizables.",
+    "invalid-priorities": "La prioridad de región o idioma no es válida.",
+    "scraper-not-configured": "Configurá las cuatro credenciales de ScreenScraper antes de continuar.",
+    "scraper-failed": "ScreenScraper rechazó la solicitud.",
+    "invalid-query": "Escribí una búsqueda.",
+    "cover-not-found": "No se encontró una portada utilizable.",
+    "cover-download-failed": "No se pudo descargar la portada.",
+    "invalid-image": "El archivo no es una imagen válida."
   },
   en: {
     subtitle: "Floppy library",
@@ -133,7 +171,45 @@ const STRINGS = {
     "no-controller": "No floppy controller is connected.",
     "mode-changed": "The floppy's mode changed while the tag was being written.",
     "tag-changed": "The tag in the drive changed while you were confirming. Nothing was written; try again.",
-    "invalid-request": "That request is not valid."
+    "invalid-request": "That request is not valid.",
+    settings: "Settings",
+    back: "Back",
+    language: "Language",
+    scraperTitle: "ScreenScraper",
+    scraperHint: "Credentials are stored privately. Leave an empty field untouched to keep it; erase its contents to clear it.",
+    devId: "Developer ID",
+    devPassword: "Developer password",
+    ssId: "ScreenScraper ID",
+    ssPassword: "ScreenScraper password",
+    regionPriority: "Region priority",
+    languagePriority: "Language priority",
+    save: "Save",
+    saved: "Settings saved.",
+    testCredentials: "Test credentials",
+    credentialsWorking: "Credentials work.",
+    developerConfigured: "Developer configured",
+    developerMissing: "Developer details missing",
+    userConfigured: "Account configured",
+    userMissing: "Account details missing",
+    configured: "ScreenScraper ready",
+    notConfigured: "Credentials missing",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    coverSearch: "Search cover",
+    coverSearchPrompt: "Search for this game on ScreenScraper",
+    coverSearchButton: "Search",
+    coverChoose: "Use this cover",
+    coverUpload: "Upload cover",
+    coverUploadHint: "JPG, PNG or WebP",
+    coverUploaded: "Cover updated.",
+    coverSearchEmpty: "No usable covers were found.",
+    "invalid-priorities": "The region or language priority is not valid.",
+    "scraper-not-configured": "Configure all four ScreenScraper credentials before continuing.",
+    "scraper-failed": "ScreenScraper rejected the request.",
+    "invalid-query": "Enter a search.",
+    "cover-not-found": "No usable cover was found.",
+    "cover-download-failed": "The cover could not be downloaded.",
+    "invalid-image": "The file is not a valid image."
   }
 };
 
@@ -142,6 +218,13 @@ let floppies = [];
 let games = [];
 let ungroupedFloppies = [];
 let editingGameId = null;
+let scraperSettings = {
+  configured: false,
+  developerConfigured: false,
+  userConfigured: false,
+  regionPriority: ["sp", "wor", "eu", "us"],
+  languagePriority: ["es", "en"]
+};
 
 function pickLanguage() {
   const stored = window.localStorage.getItem("retrobox.lang");
@@ -171,6 +254,163 @@ function applyStaticText() {
   document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
     node.placeholder = t(node.dataset.i18nPlaceholder);
   });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    node.title = t(node.dataset.i18nTitle);
+  });
+}
+
+function showSettings() {
+  document.querySelector("header").hidden = true;
+  document.getElementById("library-view").hidden = true;
+  document.getElementById("settings-view").hidden = false;
+  loadScraperSettings();
+}
+
+function showLibrary() {
+  document.querySelector("header").hidden = false;
+  document.getElementById("settings-view").hidden = true;
+  document.getElementById("library-view").hidden = false;
+}
+
+function scraperError(message) {
+  const node = document.getElementById("scraper-error");
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function applyScraperSettings(settings) {
+  scraperSettings = settings;
+  renderScraperSummary();
+  for (const input of document.querySelectorAll("#scraper-settings input")) {
+    input.value = "";
+    input.dataset.dirty = "false";
+  }
+}
+
+function renderScraperSummary() {
+  const settings = scraperSettings;
+  const status = document.getElementById("scraper-status");
+  status.textContent = settings.configured ? t("configured") : t("notConfigured");
+  const flags = document.getElementById("scraper-flags");
+  flags.textContent = "";
+  for (const item of [
+    [settings.developerConfigured, "developerConfigured", "developerMissing"],
+    [settings.userConfigured, "userConfigured", "userMissing"]
+  ]) {
+    const flag = document.createElement("span");
+    flag.className = "badge " + (item[0] ? "tagged" : "untagged");
+    flag.textContent = t(item[0] ? item[1] : item[2]);
+    flags.appendChild(flag);
+  }
+
+  renderPriority("region-priority", "regionPriority");
+  renderPriority("language-priority", "languagePriority");
+}
+
+function renderPriority(id, property) {
+  const container = document.getElementById(id);
+  container.textContent = "";
+  scraperSettings[property].forEach((value, index) => {
+    const row = document.createElement("div");
+    row.className = "priority-item";
+    const label = document.createElement("span");
+    label.textContent = value;
+    const up = document.createElement("button");
+    up.type = "button";
+    up.textContent = t("moveUp");
+    up.disabled = index === 0;
+    up.addEventListener("click", () => movePriority(property, index, -1));
+    const down = document.createElement("button");
+    down.type = "button";
+    down.textContent = t("moveDown");
+    down.disabled = index === scraperSettings[property].length - 1;
+    down.addEventListener("click", () => movePriority(property, index, 1));
+    row.append(label, up, down);
+    container.appendChild(row);
+  });
+}
+
+function movePriority(property, index, direction) {
+  const next = index + direction;
+  if (next < 0 || next >= scraperSettings[property].length) {
+    return;
+  }
+
+  const values = scraperSettings[property];
+  [values[index], values[next]] = [values[next], values[index]];
+  renderPriority(property === "regionPriority" ? "region-priority" : "language-priority", property);
+}
+
+async function loadScraperSettings() {
+  scraperError("");
+  try {
+    const response = await fetch("/api/settings/scraper");
+    if (!response.ok) {
+      throw new Error("settings");
+    }
+
+    applyScraperSettings(await response.json());
+  } catch (error) {
+    scraperError(t("loadFailed"));
+  }
+}
+
+function scraperPayload() {
+  const payload = {
+    regionPriority: scraperSettings.regionPriority,
+    languagePriority: scraperSettings.languagePriority
+  };
+  for (const input of document.querySelectorAll("#scraper-settings input")) {
+    if (input.dataset.dirty === "true") {
+      payload[input.name] = input.value;
+    }
+  }
+
+  return payload;
+}
+
+async function saveScraperSettings(event) {
+  event.preventDefault();
+  const button = document.getElementById("scraper-save");
+  button.disabled = true;
+  scraperError("");
+  try {
+    const response = await fetch("/api/settings/scraper", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scraperPayload())
+    });
+    if (!response.ok) {
+      scraperError(await readError(response));
+      return;
+    }
+
+    applyScraperSettings(await response.json());
+    document.getElementById("scraper-status").textContent = t("saved");
+  } catch (error) {
+    scraperError(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testScraperSettings() {
+  const button = document.getElementById("scraper-test");
+  button.disabled = true;
+  scraperError("");
+  try {
+    const response = await fetch("/api/settings/scraper/test", { method: "POST" });
+    if (!response.ok) {
+      scraperError(await readError(response));
+      return;
+    }
+
+    document.getElementById("scraper-status").textContent = t("credentialsWorking");
+  } catch (error) {
+    scraperError(t("networkError"));
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function describeError(body) {
@@ -301,7 +541,128 @@ function renderGame(game, visibleFloppies) {
     rows.appendChild(renderRow(floppy));
   }
   section.appendChild(rows);
+  section.appendChild(renderCoverControls(game));
   return section;
+}
+
+function renderCoverControls(game) {
+  const panel = document.createElement("section");
+  panel.className = "cover-controls";
+  const title = document.createElement("h5");
+  title.textContent = t("coverSearch");
+
+  const search = document.createElement("form");
+  search.className = "cover-search";
+  const query = document.createElement("input");
+  query.type = "search";
+  query.required = true;
+  query.placeholder = t("coverSearchPrompt");
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = t("coverSearchButton");
+  const results = document.createElement("div");
+  results.className = "cover-results";
+  const status = document.createElement("p");
+  status.className = "hint";
+  status.setAttribute("role", "status");
+  search.append(query, submit);
+  search.addEventListener("submit", (event) => searchCovers(event, game.id, query, results, status, submit));
+
+  const upload = document.createElement("div");
+  upload.className = "cover-upload";
+  const uploadInput = document.createElement("input");
+  uploadInput.type = "file";
+  uploadInput.accept = ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
+  uploadInput.hidden = true;
+  const uploadButton = document.createElement("button");
+  uploadButton.type = "button";
+  uploadButton.textContent = t("coverUpload");
+  const uploadHint = document.createElement("span");
+  uploadHint.className = "hint";
+  uploadHint.textContent = t("coverUploadHint");
+  uploadButton.addEventListener("click", () => uploadInput.click());
+  uploadInput.addEventListener("change", () => uploadCover(game.id, uploadInput, status, uploadButton));
+  upload.append(uploadInput, uploadButton, uploadHint);
+
+  panel.append(title, search, upload, results, status);
+  return panel;
+}
+
+async function searchCovers(event, gameId, input, results, status, button) {
+  event.preventDefault();
+  const query = input.value.trim();
+  if (!query) {
+    status.textContent = t("invalid-query");
+    return;
+  }
+
+  button.disabled = true;
+  results.textContent = "";
+  status.textContent = "";
+  try {
+    const response = await fetch("/api/scraper/search?q=" + encodeURIComponent(query));
+    if (!response.ok) {
+      status.textContent = await readError(response);
+      return;
+    }
+
+    const matches = await response.json();
+    if (matches.length === 0) {
+      status.textContent = t("coverSearchEmpty");
+      return;
+    }
+
+    for (const match of matches) {
+      const choice = document.createElement("button");
+      choice.type = "button";
+      choice.textContent = t("coverChoose") + ": " + match.title;
+      choice.addEventListener("click", () => chooseCover(gameId, match.screenScraperId, choice, status));
+      results.appendChild(choice);
+    }
+  } catch (error) {
+    status.textContent = t("networkError");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function chooseCover(gameId, screenScraperId, button, status) {
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/games/" + encodeURIComponent(gameId) + "/cover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ screenScraperId: screenScraperId })
+    });
+    status.textContent = response.ok ? t("coverUploaded") : await readError(response);
+  } catch (error) {
+    status.textContent = t("networkError");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function uploadCover(gameId, input, status, button) {
+  const file = input.files[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+
+  button.disabled = true;
+  const body = new FormData();
+  body.append("file", file, file.name);
+  try {
+    const response = await fetch("/api/games/" + encodeURIComponent(gameId) + "/cover/upload", {
+      method: "POST",
+      body
+    });
+    status.textContent = response.ok ? t("coverUploaded") : await readError(response);
+  } catch (error) {
+    status.textContent = t("networkError");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderGameEditor(game) {
@@ -689,6 +1050,16 @@ document.getElementById("file").addEventListener("change", (event) => {
   uploadFiles(files);
 });
 document.getElementById("search").addEventListener("input", render);
+document.getElementById("settings-open").addEventListener("click", showSettings);
+document.getElementById("settings-back").addEventListener("click", showLibrary);
+document.querySelectorAll("#scraper-settings input").forEach((input) => {
+  input.dataset.dirty = "false";
+  input.addEventListener("input", () => {
+    input.dataset.dirty = "true";
+  });
+});
+document.getElementById("scraper-settings").addEventListener("submit", saveScraperSettings);
+document.getElementById("scraper-test").addEventListener("click", testScraperSettings);
 document.getElementById("game-create-toggle").addEventListener("click", () => {
   const form = document.getElementById("game-create");
   form.hidden = !form.hidden;
@@ -702,6 +1073,7 @@ document.getElementById("language").addEventListener("change", (event) => {
   window.localStorage.setItem("retrobox.lang", language);
   applyStaticText();
   render();
+  renderScraperSummary();
 });
 // Wired last: if #assign-write were ever missing from the markup, a TypeError here must not
 // take the listeners above (upload, search, language) down with it.
