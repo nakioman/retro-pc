@@ -77,6 +77,7 @@ was verified against the code, not assumed.
 | D5 | The **tag UID is recorded** in the catalog | Enables the "this tag is already assigned" warning |
 | D6 | Cover art is **downloaded and cached**, never hotlinked | Constraint 8 |
 | D7 | **No authentication.** The panel is LAN-trusted | Explicit owner decision; see Assumptions |
+| D8 | Cover art may also be uploaded manually as JPG, PNG, or WebP | Keeps the panel useful when ScreenScraper has no matching cover |
 
 ## Non-goals
 
@@ -87,6 +88,7 @@ was verified against the code, not assumed.
 - Any change to the NFC tag payload format (see ADR
   [0004](../../decisions/0004-nfc-raw-bytes-not-ndef.md)).
 - Automatic cover matching without user confirmation.
+- Animated GIF cover uploads.
 
 ## Architecture
 
@@ -281,8 +283,12 @@ languagePriority: [es, en]
 ```
 
 Credentials are **write-only over HTTP**: `GET /api/settings/scraper` returns
-`{ "configured": true, "regionPriority": [...], "languagePriority": [...] }`
-and never the secrets.
+`{ "configured": true, "developerConfigured": true,
+"userConfigured": true, "regionPriority": [...], "languagePriority": [...] }`
+and never the secrets. It also returns `developerConfigured` and
+`userConfigured` separately. The four credentials are required before search or
+cover download is enabled. A `PUT` omits unchanged secret fields; an
+explicitly empty secret clears it.
 
 ### Covers
 
@@ -304,6 +310,7 @@ Downloaded to `/data/retrobox/covers/<game-id>.<ext>`.
 | `DELETE` | `/api/games/{id}` | Ungroup; does not delete floppies |
 | `GET` | `/api/scraper/search?q=` | `jeuRecherche.php`, `systemeid=135` |
 | `POST` | `/api/games/{id}/cover` | `jeuInfos.php` → download `box-2D` |
+| `POST` | `/api/games/{id}/cover/upload` | Upload a local JPG, PNG, or WebP cover |
 | `GET` `PUT` | `/api/settings/scraper` | Scraper settings, write-only secrets |
 | `POST` | `/api/settings/scraper/test` | Credential check |
 
@@ -377,14 +384,33 @@ to the first available. The image is downloaded and `screenScraperId` is
 persisted so the cover can be re-fetched without searching again.
 
 ScreenScraper requires `devid`/`devpassword` (a developer account requested
-from their forum) and optionally `ssid`/`sspassword`, which govern the request
-quota. PC DOS is `systemeid=135`.
+from their forum) and this panel requires `ssid`/`sspassword` as well before
+enabling search or cover download. PC DOS is `systemeid=135`. Search results
+without a usable `box-2D` image are filtered out before returning them to the
+frontend.
+
+### Manual cover upload
+
+`POST /api/games/{id}/cover/upload` accepts a multipart image upload with a
+`.jpg`, `.jpeg`, `.png`, or `.webp` extension and a bounded request size. The
+server validates the image before replacing the existing cached cover. The
+stored path remains `/data/retrobox/covers/<game-id>.<ext>`. A successful manual
+upload clears `screenScraperId`, because the active cover no longer represents
+the ScreenScraper result. The old cover is removed only after the catalog and
+new file are safely in place; a failed upload leaves the existing cover
+unchanged. Manual covers are not overwritten by later searches unless the user
+explicitly confirms a new ScreenScraper cover.
 
 ## Localization
 
 The panel ships in **Spanish (default) and English**. No dependencies: a
 per-key JS dictionary, `data-i18n` attributes in the HTML, initial selection
-from `navigator.language`, and a manual override persisted in `localStorage`.
+from `navigator.language`, and a manual override persisted immediately in
+`localStorage`. The language selector lives in a full-screen Settings view,
+reachable through a gear button in the library and navigable back with a
+“Volver” button. Settings also contains the ScreenScraper credentials and
+priority lists. Secret fields are write-only: the API never returns their
+values, and the frontend omits untouched secrets from updates.
 
 API errors travel as **codes**, not prose — `no-tag-present`,
 `tag-already-assigned`, `catalog-invalid`, `scraper-not-configured` — and the
