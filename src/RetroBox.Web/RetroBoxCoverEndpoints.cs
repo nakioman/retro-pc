@@ -177,6 +177,15 @@ public static class RetroBoxCoverEndpoints
         };
     }
 
+    internal static string? DetectImageExtension(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        if (IsValidJpeg(bytes)) return ".jpg";
+        if (IsValidPng(bytes)) return ".png";
+        if (IsValidWebp(bytes)) return ".webp";
+        return null;
+    }
+
     private static bool IsValidJpeg(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length < 4 || bytes[0] != 0xff || bytes[1] != 0xd8)
@@ -402,4 +411,10 @@ public static class RetroBoxCoverEndpoints
             && (type.SequenceEqual("VP8 "u8) && IsValidVp8(payload.Slice(24, (int)length))
                 || type.SequenceEqual("VP8L"u8) && IsValidVp8L(payload.Slice(24, (int)length)));
     }
+}
+
+internal static class RetroBoxEndpoints
+{
+    public static bool IsSupportedImageExtension(string extension) =>
+        extension is ".jpg" or ".jpeg" or ".png" or ".webp";
 }

@@ -64,6 +64,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         // if they all go through this same object.
         var library = floppyLibrary ?? new RetroBoxFloppyLibrary(new RetroBoxConfigStore(options.ConfigRoot));
         var settingsStore = new RetroBoxScraperSettingsStore(options.ConfigRoot);
+        var scraperSettings = settingsStore.Load();
         var httpClientFactory = app.Services.GetRequiredService<IHttpClientFactory>();
         Func<IRetroBoxCoverSource> coverSourceFactory = coverSource is null
             ? () => new RetroBoxScreenScraperCoverSource(
@@ -73,7 +74,9 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         var coverCache = new RetroBoxCoverCache(
             Path.Combine(options.ConfigRoot, "covers"),
             library,
-            downloadCover ?? ((url, token) => httpClientFactory.CreateClient(RetroBoxCoverCache.HttpClientName).GetStreamAsync(url, token)));
+            downloadCover ?? ((url, token) => httpClientFactory.CreateClient(RetroBoxCoverCache.HttpClientName).GetStreamAsync(url, token)),
+            TimeSpan.FromSeconds(Math.Clamp(scraperSettings.RequestTimeoutSeconds, 5, 600)));
+        coverCache.MaximumDownloadBytes = Math.Clamp((long)scraperSettings.MaxDownloadMegabytes * 1024 * 1024, 1 * 1024 * 1024, 64 * 1024 * 1024);
 
         app.MapGet("/api/catalog", () => RetroBoxCatalogEndpoints.BuildCatalogView(catalogSource));
         RetroBoxScraperEndpoints.Map(app, settingsStore, coverSourceFactory);

@@ -10,7 +10,9 @@ public sealed class RetroBoxScreenScraperCoverSource(HttpClient client, RetroBox
 
     public static readonly Uri ApiBaseAddress = new("https://api.screenscraper.fr/api2/");
 
-    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(60);
+
+    public TimeSpan ConfiguredTimeout => TimeSpan.FromSeconds(Math.Clamp(settings.RequestTimeoutSeconds, 5, 600));
 
     public async Task<IReadOnlyList<RetroBoxCoverSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
     {
@@ -44,7 +46,7 @@ public sealed class RetroBoxScreenScraperCoverSource(HttpClient client, RetroBox
     {
         EnsureConfigured();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(RequestTimeout);
+        timeout.CancelAfter(ConfiguredTimeout);
         using var request = new HttpRequestMessage(HttpMethod.Get, BuildRequestUri(path, parameters));
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         response.EnsureSuccessStatusCode();

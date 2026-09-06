@@ -95,6 +95,10 @@
       <section><h3 data-i18n="regionPriority"></h3><div id="region-priority" class="priority-list"></div></section>
       <section><h3 data-i18n="languagePriority"></h3><div id="language-priority" class="priority-list"></div></section>
     </div>
+    <div class="credential-grid">
+      <label class="setting-field"><span data-i18n="requestTimeout"></span><input id="request-timeout" name="requestTimeoutSeconds" type="number" min="5" max="600"></label>
+      <label class="setting-field"><span data-i18n="maxDownload"></span><input id="max-download" name="maxDownloadMegabytes" type="number" min="1" max="64"></label>
+    </div>
     <p id="scraper-error" class="error" role="alert" hidden></p>
     <div class="actions">
       <button id="scraper-save" class="primary" type="submit" data-i18n="save"></button>
