@@ -74,6 +74,14 @@ public static class RetroBoxCoverEndpoints
         {
             return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "cover-download-failed", ex.Message);
         }
+        catch (InvalidDataException ex)
+        {
+            return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "cover-download-failed", ex.Message);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            return RetroBoxWebResults.Error(StatusCodes.Status502BadGateway, "cover-download-failed", ex.Message);
+        }
     }
 
     private static async Task<IResult> UploadAsync(
@@ -157,7 +165,7 @@ public static class RetroBoxCoverEndpoints
         }
     }
 
-    private static bool IsValidImage(string path, string extension)
+    internal static bool IsValidImage(string path, string extension)
     {
         var bytes = File.ReadAllBytes(path);
         return extension switch

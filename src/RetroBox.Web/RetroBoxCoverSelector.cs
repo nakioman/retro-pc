@@ -10,15 +10,21 @@ public sealed class RetroBoxCoverSelector
         var usable = candidates.Where(IsUsableBox2D).ToArray();
         foreach (var region in regionPriority)
         {
+            var regionalCandidates = usable.Where(candidate =>
+                string.Equals(candidate.Region, region, StringComparison.OrdinalIgnoreCase)).ToArray();
             foreach (var language in languagePriority)
             {
-                var match = usable.FirstOrDefault(candidate =>
-                    string.Equals(candidate.Region, region, StringComparison.OrdinalIgnoreCase) &&
+                var match = regionalCandidates.FirstOrDefault(candidate =>
                     string.Equals(candidate.Language, language, StringComparison.OrdinalIgnoreCase));
                 if (match is not null)
                 {
                     return match;
                 }
+            }
+
+            if (regionalCandidates.Length > 0)
+            {
+                return regionalCandidates[0];
             }
         }
 

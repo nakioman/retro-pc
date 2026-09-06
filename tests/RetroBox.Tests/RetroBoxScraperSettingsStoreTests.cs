@@ -121,4 +121,28 @@ public sealed class RetroBoxScraperSettingsStoreTests : IDisposable
         Assert.Equal(string.Empty, reloaded.DevPassword);
         Assert.False(RetroBoxScraperSettingsView.From(reloaded).Configured);
     }
+
+    [Fact]
+    public async Task Update_serializes_concurrent_read_modify_write_operations()
+    {
+        var store = new RetroBoxScraperSettingsStore(root);
+        store.Save(new RetroBoxScraperSettings());
+        using var firstUpdateStarted = new ManualResetEventSlim();
+        using var releaseFirstUpdate = new ManualResetEventSlim();
+
+        var first = Task.Run(() => store.Update(settings =>
+        {
+            firstUpdateStarted.Set();
+            releaseFirstUpdate.Wait();
+            settings.DevId = "developer";
+        }));
+        Assert.True(firstUpdateStarted.Wait(TimeSpan.FromSeconds(5)));
+        var second = Task.Run(() => store.Update(settings => settings.SsId = "user"));
+        releaseFirstUpdate.Set();
+        await Task.WhenAll(first, second);
+
+        var reloaded = store.Load();
+        Assert.Equal("developer", reloaded.DevId);
+        Assert.Equal("user", reloaded.SsId);
+    }
 }
