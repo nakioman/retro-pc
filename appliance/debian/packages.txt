@@ -7,7 +7,7 @@
 #
 # The official debian:13-slim image is a useful reference for keeping the
 # starting point small, but the final target is a physical Debian system with
-# systemd, hardware devices, SSH, Samba, and audio support.
+# systemd, hardware devices, SSH, and audio support.
 
 # Base service/runtime
 systemd
@@ -25,7 +25,6 @@ systemd-resolved
 
 # Appliance administration and file transfer
 openssh-server
-samba
 sudo
 
 # Hardware and audio runtime

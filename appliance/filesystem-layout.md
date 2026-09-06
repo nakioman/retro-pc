@@ -74,7 +74,7 @@ The current `retrobox` code uses these paths directly:
 
 The directories may be created during appliance provisioning. The `retrobox`
 system user/group should own `/data/retrobox` and the cataloged application
-state. Samba write access should be restricted to the `scratch` directory;
+state. Network users do not receive write access to appliance data;
 network users must not be granted write access to catalogs, VM disks, or
 snapshots.
 
@@ -97,7 +97,7 @@ The USB installer implements this contract as follows:
 - `/` is mounted `ro,errors=remount-ro`.
 - `/tmp` is `tmpfs` (volatile).
 - `/var` is an `overlay` mount whose writable upperdir lives under
-  `/data/system/var` (see the `/data` tree above), so logs, Samba state, DHCP
+  `/data/system/var` (see the `/data` tree above), so logs, DHCP
   leases, and ALSA state persist across reboots without a writable root.
 - `/etc` stays **read-only**. The few files that must exist per machine — the
   SSH host keys and the machine-id — are generated into the image at install
@@ -143,8 +143,6 @@ hardware:
 - `retrobox` writes imported assets to `/data/floppies/cataloged` only through
   the import workflow.
 - administrators use SSH and `sudo` for maintenance and diagnostics.
-- Samba provides a restricted drop folder at
-  `/data/floppies/scratch`, not a general `/data` share.
 - the 86Box control socket is created at
   `/run/retrobox/86box-floppy.sock` by the eventual runtime service.
 

@@ -107,7 +107,7 @@ runs without a floppy controller attached, allowing catalog management with no
 hardware dependencies. It is **unauthenticated and openly writable**: anyone on
 the LAN can list, upload, rename, re-mode, and delete floppies, and create,
 edit, or delete game groups. Authentication and TLS are explicitly out of
-scope, consistent with the appliance's existing guest-writable Samba share and
+scope, consistent with the appliance being a LAN-trusted device and
 the principle that the appliance is a LAN-trusted device.
 
 Uploads always land untagged (`nfc: false`), and the daemon refuses to mount an
@@ -120,7 +120,7 @@ over the same serial connection the daemon already holds — no stopping the
 service.
 
 The panel uses `RetroBoxWatchingCatalogSource` to keep its catalog in sync with
-the daemon: edits from the panel, from `retrobox import` on the host, or over
+the daemon: edits from the panel or over
 SSH are picked up without restarting. A malformed catalog file at startup no
 longer blocks the daemon — it starts with an empty catalog and reports the
 validation error, allowing the panel to fix it. A catalog reload that fails
@@ -141,7 +141,7 @@ in `sketch.yaml`. See the
 
 Debian 13 base layout: read-only root, persistent `/data` for VMs, floppies,
 catalogs, and snapshots; a single `retrobox` account (root locked, `sudo`
-available); a restricted Samba scratch share. The bootable USB installer builds
+available. The bootable USB installer builds
 a live installer rootfs plus the target appliance rootfs and installs offline.
 See [`appliance/README.md`](../appliance/README.md) and
 [`appliance/installer/README.md`](../appliance/installer/README.md).

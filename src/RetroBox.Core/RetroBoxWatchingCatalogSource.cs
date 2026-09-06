@@ -2,7 +2,7 @@ namespace RetroBox.Core;
 
 /// <summary>
 /// Republishes the catalog whenever the YAML under the config root changes, whoever changed it —
-/// the web panel, `retrobox import`, or someone over SSH. A reload that does not validate is
+/// the web panel or someone over SSH. A reload that does not validate is
 /// discarded: a half-written or malformed file must not take down a running daemon.
 /// </summary>
 public sealed class RetroBoxWatchingCatalogSource : IRetroBoxCatalogSource, IDisposable

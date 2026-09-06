@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install and enable the appliance services, SSH, Samba, networking, and the
+# Install and enable the appliance services, SSH, networking, and the
 # boot splash into the target. The installer is the authoritative source of
 # these artifacts until the standalone child issues (#28/#29) land.
 #
@@ -10,13 +10,12 @@
 install_services() {
     _install_systemd_units
     _configure_ssh
-    _configure_samba
     _configure_network
     _configure_splash
     _configure_locale
     _configure_identity
     _finalize_target_image
-    ok "Services, SSH, Samba, networking, and splash configured"
+    ok "Services, SSH, networking, and splash configured"
 }
 
 _install_systemd_units() {
@@ -80,14 +79,6 @@ EOF
         log "Persisted SSH host keys under /data/system/ssh"
     fi
     enable_unit ssh.service
-}
-
-_configure_samba() {
-    log "Configuring Samba scratch share"
-    mkdir -p "$TARGET_MNT/etc/samba"
-    install -m 0644 "$PAYLOAD_DIR/samba/retropc-scratch.conf" "$TARGET_MNT/etc/samba/smb.conf"
-    enable_unit smbd.service
-    enable_unit nmbd.service
 }
 
 _configure_network() {

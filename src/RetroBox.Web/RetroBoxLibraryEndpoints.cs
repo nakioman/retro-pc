@@ -113,9 +113,8 @@ public static class RetroBoxLibraryEndpoints
                 }
                 catch (IOException ex)
                 {
-                    // The scratch root is also reachable directly over the LAN (the Samba share
-                    // that is the documented way images reach the appliance), so a file with this
-                    // exact resolved name can already be sitting there. Report it and leave it
+                    // A file with this exact resolved name can already be sitting in the scratch
+                    // root. Report it and leave it
                     // alone: it is not this request's file to delete.
                     failure = new UploadFailure(
                         StatusCodes.Status409Conflict,

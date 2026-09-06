@@ -116,9 +116,8 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     {
         await using var context = await StartAsync();
 
-        // The scratch root is also reachable directly over the LAN (the Samba share that is the
-        // documented way images reach the appliance), so a file with the exact name this upload
-        // will resolve to can already be sitting there before the request ever arrives.
+        // A file with the exact name this upload will resolve to can already be sitting in the
+        // scratch root before the request ever arrives.
         var preExisting = Path.Combine(root, "scratch", "disk.img");
         var preExistingContent = new byte[] { 1, 2, 3, 4 };
         File.WriteAllBytes(preExisting, preExistingContent);
