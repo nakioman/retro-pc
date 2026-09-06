@@ -20,6 +20,8 @@ public static class RetroBoxCatalogEndpoints
             .Select(entry => new RetroBoxGameView(
                 entry.Key,
                 entry.Value.Label,
+                entry.Value.Cover,
+                entry.Value.ScreenScraperId,
                 entry.Value.FloppyIds.Select(id => floppies[id]).ToArray()))
             .ToArray();
         var ungroupedFloppies = floppies

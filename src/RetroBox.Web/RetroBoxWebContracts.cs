@@ -11,7 +11,12 @@ public sealed record RetroBoxCatalogView(
     RetroBoxFloppyView[] UngroupedFloppies,
     string? CatalogError);
 
-public sealed record RetroBoxGameView(string Id, string Label, RetroBoxFloppyView[] Floppies);
+public sealed record RetroBoxGameView(
+    string Id,
+    string Label,
+    string? Cover,
+    int? ScreenScraperId,
+    RetroBoxFloppyView[] Floppies);
 
 public sealed record RetroBoxErrorView(string Code, string Message);
 

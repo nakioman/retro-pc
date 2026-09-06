@@ -515,6 +515,13 @@ function renderGame(game, visibleFloppies) {
   head.className = "game-head";
   const title = document.createElement("h4");
   title.textContent = game.label;
+  if (game.cover) {
+    const cover = document.createElement("img");
+    cover.className = "game-cover";
+    cover.src = "/api/covers/" + encodeURIComponent(game.cover);
+    cover.alt = game.label;
+    head.appendChild(cover);
+  }
   const actions = document.createElement("div");
   actions.className = "actions";
   const edit = document.createElement("button");
@@ -634,7 +641,12 @@ async function chooseCover(gameId, screenScraperId, button, status) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ screenScraperId: screenScraperId })
     });
-    status.textContent = response.ok ? t("coverUploaded") : await readError(response);
+    if (response.ok) {
+      status.textContent = t("coverUploaded");
+      await loadCatalog();
+    } else {
+      status.textContent = await readError(response);
+    }
   } catch (error) {
     status.textContent = t("networkError");
   } finally {
@@ -657,7 +669,12 @@ async function uploadCover(gameId, input, status, button) {
       method: "POST",
       body
     });
-    status.textContent = response.ok ? t("coverUploaded") : await readError(response);
+    if (response.ok) {
+      status.textContent = t("coverUploaded");
+      await loadCatalog();
+    } else {
+      status.textContent = await readError(response);
+    }
   } catch (error) {
     status.textContent = t("networkError");
   } finally {

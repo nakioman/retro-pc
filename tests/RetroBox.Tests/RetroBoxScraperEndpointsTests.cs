@@ -131,6 +131,7 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         var game = new RetroBoxConfigStore(root).Load().Games["doom"];
         Assert.Equal("doom.jpg", game.Cover);
         Assert.Equal(42, game.ScreenScraperId);
+        Assert.Contains("\"cover\":\"doom.jpg\"", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,10 +171,12 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload(fileName, contentType, image));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(image, File.ReadAllBytes(Path.Combine(root, "covers", fileName)));
+        var cover = $"doom{Path.GetExtension(fileName)}";
+        Assert.Equal(image, File.ReadAllBytes(Path.Combine(root, "covers", cover)));
         var game = new RetroBoxConfigStore(root).Load().Games["doom"];
-        Assert.Equal(fileName, game.Cover);
+        Assert.Equal(cover, game.Cover);
         Assert.Null(game.ScreenScraperId);
+        Assert.Contains($"\"cover\":\"{cover}\"", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -197,15 +200,19 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
         Assert.Equal(17, new RetroBoxConfigStore(root).Load().Games["doom"].ScreenScraperId);
     }
 
-    [Fact]
-    public async Task Upload_cover_rejects_malformed_content_without_replacing_existing_state()
+    [Theory]
+    [MemberData(nameof(TruncatedImages))]
+    public async Task Upload_cover_rejects_truncated_images_without_replacing_existing_state(
+        string fileName,
+        string contentType,
+        byte[] image)
     {
         File.WriteAllText(Path.Combine(root, "games.yaml"), "games:\n  doom:\n    label: Doom\n    cover: doom.jpg\n    screenScraperId: 17\n");
         Directory.CreateDirectory(Path.Combine(root, "covers"));
         File.WriteAllBytes(Path.Combine(root, "covers", "doom.jpg"), [1, 2, 3]);
         await using var context = await StartAsync();
 
-        using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload("doom.png", "image/png", [1, 2, 3]));
+        using var response = await context.Client.PostAsync("/api/games/doom/cover/upload", Upload(fileName, contentType, image));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("invalid-image", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
@@ -233,7 +240,7 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
 
         using var response = await context.Client.PostAsync(
             "/api/games/missing/cover/upload",
-            Upload("doom.jpg", "image/jpeg", [0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9]));
+            Upload("doom.jpg", "image/jpeg", Jpeg));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Contains("unknown-game", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
@@ -275,17 +282,28 @@ public sealed class RetroBoxScraperEndpointsTests : IDisposable
 
     public static IEnumerable<object[]> SupportedImages()
     {
-        var jpeg = new byte[] { 0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9 };
-        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0, 0, 0, 0 };
-        var webp = new byte[] { 0x52, 0x49, 0x46, 0x46, 22, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0 };
+        var jpeg = Jpeg;
+        var png = Png;
+        var webp = WebpVp8;
         return
         [
             ["doom.jpg", "image/jpeg", jpeg],
             ["doom.jpeg", "image/jpeg", jpeg],
             ["doom.png", "image/png", png],
             ["doom.webp", "image/webp", webp],
+            ["doom-lossless.webp", "image/webp", WebpVp8L],
+            ["doom-animated.webp", "image/webp", WebpVp8X],
         ];
     }
+
+    public static IEnumerable<object[]> TruncatedImages() => SupportedImages()
+        .Select(image => new object[] { image[0], image[1], ((byte[])image[2]).AsSpan(0, ((byte[])image[2]).Length - 1).ToArray() });
+
+    private static readonly byte[] Jpeg = Convert.FromBase64String("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==");
+    private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAAB3YoTpAAAAAd0SU1FB+oJBRUcEdfvHDMAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjYtMDktMDVUMjE6Mjg6MTcrMDA6MDCkOaa0AAAAJXRFWHRkYXRlOm1vZGlmeQAyMDI2LTA5LTA1VDIxOjI4OjE3KzAwOjAw1WQeCAAAACh0RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyNi0wOS0wNVQyMToyODoxNyswMDowMIJxP9cAAAAKSURBVAjXY2AAAAACAAHiIbwzAAAAAElFTkSuQmCC");
+    private static readonly byte[] WebpVp8 = Convert.FromBase64String("UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vv9UAA=");
+    private static readonly byte[] WebpVp8L = Convert.FromBase64String("UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==");
+    private static readonly byte[] WebpVp8X = Convert.FromBase64String("UklGRoQAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5JTQYAAAAAAAD/AABBTk1GJgAAAAAAAAAAAAAAAAAAAGQAAAJWUDhMDgAAAC8AAAAABxAR/Q9ERP8DQU5NRioAAAAAAAAAAAAAAAAAAABkAAAAVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=");
 
     private sealed record EndpointContext(
         RetroBoxWebHost Host,

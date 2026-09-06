@@ -25,7 +25,7 @@ public static class RetroBoxGameEndpoints
             var game = library.CreateGame(request.Id!, request.Label!);
             Refresh(catalogSource);
             return Results.Json(
-                new RetroBoxGameView(request.Id!, game.Label, []),
+                new RetroBoxGameView(request.Id!, game.Label, null, null, []),
                 RetroBoxWebJsonContext.Default.RetroBoxGameView,
                 statusCode: StatusCodes.Status201Created);
         }
