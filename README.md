@@ -14,6 +14,7 @@ RetroBox is built from four parts that live in this repository:
 | Daemon | [`src/RetroBox.Daemon`](src/RetroBox.Daemon) | Long-lived floppy/NFC event loop that drives the 86Box floppy socket. |
 | Firmware | [`firmware/retrofloppy-esp8266`](firmware/retrofloppy-esp8266/README.md) | ESP8266 (NodeMCU) firmware that reads/writes NFC tags in floppy shells. |
 | Appliance | [`appliance/`](appliance/README.md) | Debian 13 base layout, read-only root, and the bootable USB installer. |
+| Hardware | [`hardware/`](hardware/) | 3D-printable parts: the Macintosh Classic style case and the NFC floppy blank. |
 | Tests | [`tests/RetroBox.Tests`](tests/RetroBox.Tests) | xUnit test suite for Core, Daemon, and CLI. |
 
 ## What it does
@@ -36,6 +37,10 @@ RetroBox is built from four parts that live in this repository:
 - **WiFi first-boot.** Detects a USB WiFi NIC, prompts for SSID + password on
   first boot, and auto-connects via `wpa_supplicant` + systemd-networkd
   (DHCP). See [`appliance/README.md`](appliance/README.md).
+- **A Macintosh Classic shell.** The whole PC — micro-ATX board, ATX PSU,
+  floppy, DVD drive, and a 9.7" retina LCD — lives inside a full-size
+  3D-printed Macintosh Classic style case that fits on a 250 mm print bed.
+  See [`hardware/mac-classic-case/README.md`](hardware/mac-classic-case/README.md).
 
 ## Prerequisites
 
@@ -92,6 +97,7 @@ retrobox nfc     Read or write NFC-backed floppy labels.
 - [`docs/86box-floppy-control-integration-verification.md`](docs/86box-floppy-control-integration-verification.md) — end-to-end verification guide.
 - [`docs/floppy-controller-wiring.md`](docs/floppy-controller-wiring.md) — physical floppy drive build.
 - [`docs/cdrom-passthrough.md`](docs/cdrom-passthrough.md) — physical CD-ROM validation.
+- [`hardware/mac-classic-case/README.md`](hardware/mac-classic-case/README.md) — the printable Macintosh Classic style case: BOM, print notes, assembly.
 - [`docs/decisions/`](docs/decisions/) — architecture decision records.
 - [`appliance/README.md`](appliance/README.md) — appliance base layout and runtime behavior.
 - [`appliance/installer/README.md`](appliance/installer/README.md) — the USB installer.
