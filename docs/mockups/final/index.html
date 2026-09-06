@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RetroBox — Mockup final</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="window">
+    <header class="title-bar"><span class="app-mark" aria-hidden="true"></span><h1>RetroBox — Administrador de disquetes y máquinas virtuales</h1><span class="demo-label">MOCKUP</span></header>
+    <nav class="menu-bar" aria-label="Menú principal">
+      <details><summary>Archivo</summary><div class="menu-popup"><button data-action="upload">Subir disquetes…</button><button data-action="new-vm">Crear VM…</button></div></details>
+      <button class="menu-button" data-action="settings">Opciones…</button>
+      <button class="menu-button" data-action="about">Ayuda</button>
+    </nav>
+    <nav class="tabs" aria-label="Secciones">
+      <a id="tab-floppies" href="#/floppies">Disquetes y juegos</a>
+      <a id="tab-vms" href="#/vms">Máquinas virtuales (86Box)</a>
+    </nav>
+    <section id="floppies-view" class="view" aria-labelledby="tab-floppies">
+      <div class="toolbar"><button data-action="upload">Subir disquetes…</button><button data-action="expand-all">Expandir todo</button><button data-action="collapse-all">Colapsar todo</button><label class="search">Buscar: <input id="floppy-search" type="search" placeholder="Juego o archivo de disquete"></label></div>
+      <div id="library" class="workspace" aria-label="Biblioteca de disquetes"></div>
+      <nav class="pagination" aria-label="Paginación de juegos"><span>10 juegos por página</span><span id="page-info" role="status"></span><button id="previous-page" data-action="previous-page">Anterior</button><button id="next-page" data-action="next-page">Siguiente</button></nav>
+    </section>
+    <section id="vms-view" class="view" aria-labelledby="tab-vms" hidden>
+      <div class="toolbar"><button data-action="new-vm">Crear VM…</button><label class="search">Buscar: <input id="vm-search" type="search" placeholder="Nombre de la máquina"></label></div>
+      <div id="vm-list" class="workspace" aria-label="Máquinas virtuales"></div>
+    </section>
+    <footer class="status-bar"><span id="stats"></span><span id="running-status"></span><span>Datos de demostración · Se reinician al recargar</span></footer>
+  </main>
+  <p id="notification" class="notification" role="status" hidden></p>
+
+  <dialog id="rename-floppy-dialog" class="small-dialog" aria-labelledby="rename-floppy-title">
+    <form id="rename-floppy-form"><div class="title-bar"><h2 id="rename-floppy-title">Renombrar disquete</h2><button type="button" data-close aria-label="Cerrar">×</button></div>
+      <div class="dialog-body"><div class="dialog-content"><label>Nombre del disquete<input name="name" required maxlength="100" autocomplete="off"></label><p class="hint">La asociación NFC y el modo de escritura se conservan.</p></div><div class="dialog-actions"><button type="submit">Guardar</button><button type="button" data-close>Cancelar</button></div></div>
+    </form>
+  </dialog>
+  <dialog id="vm-dialog" aria-labelledby="vm-title">
+    <form id="vm-form">
+      <div class="title-bar"><h2 id="vm-title">Crear VM</h2><button type="button" data-close aria-label="Cerrar">×</button></div>
+      <div class="dialog-body"><div class="dialog-content">
+        <label>Nombre de la VM<input name="name" required maxlength="100" autocomplete="off"></label>
+        <label>Configuración de 86Box (86box.cfg)<textarea name="cfg" class="cfg-editor" required spellcheck="false" placeholder="Pegá aquí el contenido completo de tu archivo 86box.cfg."></textarea></label>
+        <p class="hint">Copiá la configuración desde tu 86Box. El hardware se define en este archivo.</p>
+        <p id="vm-edit-hint" class="hint" hidden>Podés cambiar solo el nombre y conservar la configuración y los backups.</p>
+      </div><div class="dialog-actions"><button id="vm-save" type="submit">Crear</button><button type="button" data-close>Cancelar</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="backups-dialog" class="wide-dialog" aria-labelledby="backups-title">
+    <div class="title-bar"><h2 id="backups-title">Backups</h2><button data-close aria-label="Cerrar">×</button></div>
+    <div class="dialog-body"><div class="dialog-content">
+      <div class="section-toolbar"><p>Copias de seguridad de esta máquina</p><button data-action="new-backup">Crear backup…</button></div>
+      <div class="table-scroll"><table><thead><tr><th>Fecha / Hora</th><th>Tamaño</th><th>Etiqueta</th><th>Acciones</th></tr></thead><tbody id="backup-list"></tbody></table></div>
+      <p class="hint">Demostración: las copias y sus tamaños son simulados.</p>
+    </div><div class="dialog-actions"><button data-close>Cerrar</button></div></div>
+  </dialog>
+
+  <dialog id="backup-create-dialog" class="small-dialog" aria-labelledby="backup-create-title">
+    <form id="backup-form"><div class="title-bar"><h2 id="backup-create-title">Crear backup</h2><button type="button" data-close aria-label="Cerrar">×</button></div>
+      <div class="dialog-body"><div class="dialog-content"><label>Etiqueta<input name="label" required maxlength="100" placeholder="Antes de instalar un juego"></label><p class="hint">Se agregará una copia simulada a esta VM.</p></div><div class="dialog-actions"><button type="submit">Crear</button><button type="button" data-close>Cancelar</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="upload-dialog" aria-labelledby="upload-title">
+    <form id="upload-form"><div class="title-bar"><h2 id="upload-title">Subir disquetes</h2><button type="button" data-close aria-label="Cerrar">×</button></div>
+      <div class="dialog-body"><div class="dialog-content">
+        <label id="upload-name-label">Nombre del juego o software<input name="title" required maxlength="100" placeholder="Por ejemplo: The Secret of Monkey Island"></label>
+        <fieldset><legend>Imágenes de disquete</legend><label>Seleccionar archivos (.img, .ima, .dsk)<input name="files" type="file" accept=".img,.ima,.dsk" multiple required></label><ul id="upload-files" class="file-list"></ul></fieldset>
+        <p class="hint">Los archivos seleccionados se mostrarán como disquetes sin NFC. No se sube contenido a ningún servidor.</p>
+        <p id="upload-error" class="error" role="alert" hidden></p>
+      </div><div class="dialog-actions"><button type="submit">Agregar</button><button type="button" data-close>Cancelar</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="cover-dialog" aria-labelledby="cover-title">
+    <div class="title-bar"><h2 id="cover-title">Propiedades de carátula</h2><button data-close aria-label="Cerrar">×</button></div>
+    <div class="dialog-body"><div class="dialog-content">
+      <div class="cover-layout"><div id="cover-preview" class="cover-preview"></div><div class="cover-tools">
+        <fieldset><legend>Archivo local</legend><label>Cargar imagen<input id="cover-file" type="file" accept="image/png,image/jpeg,image/webp"></label></fieldset>
+        <fieldset><legend>ScreenScraper</legend><form id="cover-search-form"><label>Nombre del juego<input id="cover-query" type="search" required></label><button type="submit">Buscar</button></form></fieldset>
+      </div></div>
+      <fieldset><legend>Resultados</legend><div id="cover-results" class="cover-results" aria-live="polite"></div></fieldset>
+      <p class="hint">La búsqueda es simulada. Las muestras tipográficas representan carátulas.</p>
+    </div><div class="dialog-actions"><button data-action="save-cover">Aceptar</button><button data-close>Cancelar</button></div></div>
+  </dialog>
+
+  <dialog id="nfc-dialog" class="small-dialog" aria-labelledby="nfc-title">
+    <div class="title-bar"><h2 id="nfc-title">Escribir etiqueta NFC</h2><button data-close aria-label="Cerrar">×</button></div>
+    <div class="dialog-body"><div class="dialog-content"><p id="nfc-file"></p><p>Insertá el disquete físico que querés asociar en la unidad.</p><div class="inset"><p id="nfc-state" role="status">Esperando un disquete…</p><button data-action="detect-nfc">Simular detección</button></div><p class="hint">Al escribir se reemplaza la asociación anterior de esa etiqueta.</p></div><div class="dialog-actions"><button id="nfc-write" data-action="write-nfc" disabled>Escribir</button><button data-close>Cancelar</button></div></div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="wide-dialog" aria-labelledby="settings-title">
+    <form id="settings-form"><div class="title-bar"><h2 id="settings-title">Configuración</h2><button type="button" data-close aria-label="Cerrar">×</button></div>
+      <div class="dialog-body"><div class="dialog-content">
+        <fieldset><legend>Biblioteca</legend><label class="checkbox-field"><input name="startCollapsed" type="checkbox">Iniciar con los juegos colapsados</label><p class="hint">Al cambiar esta opción se aplica también a la biblioteca actual.</p></fieldset>
+        <fieldset><legend>Idioma de la interfaz</legend><label class="inline-field">Idioma / Language<select name="language"><option value="es">Español</option><option value="en">English</option></select></label><p class="hint">El selector es demostrativo; el mockup mantiene sus textos en español.</p></fieldset>
+        <fieldset><legend>ScreenScraper — credenciales</legend><p class="hint">Usá valores de prueba. No se conecta a ScreenScraper.</p><div class="field-grid">
+          <label>ID de desarrollador<input name="devId" autocomplete="off"></label><label>Contraseña de desarrollador<input name="devPassword" type="password" autocomplete="new-password"></label>
+          <label>ID de ScreenScraper<input name="ssId" autocomplete="off"></label><label>Contraseña de ScreenScraper<input name="ssPassword" type="password" autocomplete="new-password"></label>
+        </div><button type="button" data-action="test-scraper">Probar credenciales</button><p id="scraper-result" role="status"></p></fieldset>
+        <div class="field-grid"><fieldset><legend>Prioridad de región</legend><div id="region-priority"></div></fieldset><fieldset><legend>Prioridad de idioma de metadatos</legend><div id="language-priority"></div></fieldset></div>
+        <div class="field-grid"><label>Tiempo de espera (segundos)<input name="requestTimeoutSeconds" type="number" min="5" max="600" required></label><label>Descarga máxima (MB)<input name="maxDownloadMegabytes" type="number" min="1" max="64" required></label></div>
+      </div><div class="dialog-actions"><button type="submit">Aceptar</button><button type="button" data-close>Cancelar</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="small-dialog" aria-labelledby="confirm-title">
+    <div class="title-bar"><h2 id="confirm-title">Confirmar eliminación</h2><button data-close aria-label="Cerrar">×</button></div><div class="dialog-body"><div class="dialog-content"><p id="confirm-message"></p></div><div class="dialog-actions"><button id="confirm-accept">Eliminar</button><button data-close autofocus>Cancelar</button></div></div>
+  </dialog>
+  <dialog id="about-dialog" class="small-dialog" aria-labelledby="about-title">
+    <div class="title-bar"><h2 id="about-title">Acerca de RetroBox</h2><button data-close aria-label="Cerrar">×</button></div><div class="dialog-body"><div class="dialog-content"><p>Administración de disquetes NFC y máquinas virtuales 86Box.</p><p>Mockup de escritorio con estética Windows 3.1. Todas las operaciones son simuladas y se descartan al recargar.</p><p>Usá las pestañas para navegar y Escape para cerrar un diálogo. El archivo README.md acompaña este prototipo con los flujos y el alcance de implementación.</p></div><div class="dialog-actions"><button data-close>Cerrar</button></div></div>
+  </dialog>
+</body>
+</html>

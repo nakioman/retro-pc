@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroManager 3.1 - Floppies & 86Box VMs</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "MS Sans Serif", Tahoma, Geneva, sans-serif;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        body {
+            background-color: #008080;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Ventana Principal */
+        .win31-window {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 860px;
+            padding: 3px;
+            position: relative;
+        }
+
+        .title-bar {
+            background-color: #000080;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 3px 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title-bar-buttons {
+            display: flex;
+            gap: 2px;
+        }
+
+        .win-btn-small {
+            width: 14px;
+            height: 14px;
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .menu-bar {
+            display: flex;
+            gap: 12px;
+            padding: 4px 8px;
+            border-bottom: 1px solid #808080;
+            background-color: #c0c0c0;
+        }
+
+        .menu-item span {
+            text-decoration: underline;
+        }
+
+        /* Pestañas Win 3.1 */
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            padding-left: 4px;
+            border-bottom: 2px solid #808080;
+        }
+
+        .tab-btn {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: transparent;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-weight: bold;
+            position: relative;
+            top: 2px;
+        }
+
+        .tab-btn.active {
+            background-color: #c0c0c0;
+            border-bottom-color: #c0c0c0;
+            z-index: 10;
+            top: 0px;
+            padding-bottom: 6px;
+        }
+
+        .window-body {
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Botones 3D */
+        .btn-3d {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000000;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-3d:active {
+            border: 2px solid #000000;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px 7px 2px 9px;
+        }
+
+        .sunken-box {
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px;
+        }
+
+        .toolbar-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #c0c0c0;
+            padding: 4px;
+            border: 1px solid #808080;
+        }
+
+        input[type="text"], select {
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 2px 4px;
+            outline: none;
+            background: #fff;
+        }
+
+        /* Tarjeta de Juego y VM */
+        .item-group {
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 6px;
+            background-color: #c0c0c0;
+            margin-bottom: 8px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #808080;
+            color: #ffffff;
+            padding: 4px 6px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .cover-art-thumb {
+            width: 48px;
+            height: 56px;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            object-fit: cover;
+            background: #000;
+            cursor: pointer;
+        }
+
+        /* Tablas */
+        .win-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+        }
+
+        .win-table th {
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 3px 6px;
+            text-align: left;
+        }
+
+        .win-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid #e0e0e0;
+            vertical-align: middle;
+        }
+
+        .badge-status {
+            padding: 1px 5px;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .badge-running { background-color: #008000; color: #fff; }
+        .badge-stopped { background-color: #808080; color: #fff; }
+
+        .status-bar {
+            border-top: 1px solid #808080;
+            padding: 3px 6px;
+            background-color: #c0c0c0;
+            display: flex;
+            justify-content: space-between;
+            color: #404040;
+        }
+
+        /* Modales Win 3.1 */
+        .modal-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .win31-dialog {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 520px;
+            padding: 3px;
+        }
+
+        .dialog-body {
+            padding: 10px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .dialog-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 90px;
+        }
+
+        .group-box {
+            border: 1px solid #ffffff;
+            border-top-color: #808080;
+            border-left-color: #808080;
+            padding: 8px;
+            position: relative;
+            margin-top: 4px;
+        }
+
+        .group-box-title {
+            position: absolute;
+            top: -7px;
+            left: 8px;
+            background-color: #c0c0c0;
+            padding: 0 4px;
+            font-weight: bold;
+        }
+
+        .cover-preview-large {
+            width: 110px;
+            height: 130px;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            object-fit: cover;
+            background-color: #000;
+        }
+
+        .scraper-results {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 4px;
+            background: #fff;
+            border: 2px solid #808080;
+            border-right-color: #fff;
+            border-bottom-color: #fff;
+            max-height: 80px;
+        }
+
+        .scraper-thumb {
+            width: 45px;
+            height: 55px;
+            object-fit: cover;
+            cursor: pointer;
+            border: 1px solid #808080;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="win31-window">
+        <!-- Barra de Título -->
+        <div class="title-bar">
+            <span>💾 RetroManager 3.1 - [MS-DOS & 86Box Hub]</span>
+            <div class="title-bar-buttons">
+                <div class="win-btn-small">▲</div>
+                <div class="win-btn-small">▼</div>
+            </div>
+        </div>
+
+        <!-- Menú Principal -->
+        <div class="menu-bar">
+            <div class="menu-item"><span>A</span>rchivo</div>
+            <div class="menu-item"><span>V</span>Ms</div>
+            <div class="menu-item"><span>O</span>pciones</div>
+            <div class="menu-item">A<span>y</span>uda</div>
+        </div>
+
+        <!-- Pestañas -->
+        <div class="tab-bar">
+            <button id="tabFloppiesBtn" class="tab-btn active" onclick="switchTab('floppies')">💾 Disquetes y Juegos</button>
+            <button id="tabVmsBtn" class="tab-btn" onclick="switchTab('vms')">🖥️ Máquinas Virtuales (86Box)</button>
+        </div>
+
+        <!-- Cuerpo Ventana -->
+        <div class="window-body">
+            
+            <!-- VISTA 1: DISQUETES -->
+            <div id="viewFloppies">
+                <div class="toolbar-container" style="margin-bottom:8px;">
+                    <button class="btn-3d" onclick="document.getElementById('fileInput').click()">
+                        💾 <u>S</u>ubir Discos...
+                    </button>
+                    <input type="file" id="fileInput" multiple accept=".img,.dsk,.ima" style="display:none;" onchange="handleFileUpload(event)">
+
+                    <span style="margin-left: auto;">Buscar:</span>
+                    <input type="text" id="searchFloppyInput" oninput="renderFloppies()" placeholder="Monkey Island..." style="width:160px;">
+                </div>
+
+                <div id="floppyContainer" class="sunken-box" style="height: 380px; overflow-y: scroll;"></div>
+            </div>
+
+            <!-- VISTA 2: VMS 86BOX -->
+            <div id="viewVms" style="display: none;">
+                <div class="toolbar-container" style="margin-bottom:8px;">
+                    <button class="btn-3d" onclick="openNewVmModal()">
+                        ➕ <u>N</u>ueva VM (86Box)...
+                    </button>
+                    <button class="btn-3d" onclick="triggerAllBackups()">
+                        📦 Respaldar Todas
+                    </button>
+
+                    <span style="margin-left: auto;">Buscar VM:</span>
+                    <input type="text" id="searchVmInput" oninput="renderVMs()" placeholder="Socket 7, 486..." style="width:160px;">
+                </div>
+
+                <div id="vmsContainer" class="sunken-box" style="height: 380px; overflow-y: scroll;"></div>
+            </div>
+
+        </div>
+
+        <!-- Barra de Estado -->
+        <div class="status-bar">
+            <span id="statusStats">Cargando...</span>
+            <span>86Box Engine: v4.1 (Active)</span>
+        </div>
+
+        <!-- MODAL 1: CARÁTULA Y SCRAPER -->
+        <div id="coverModal" class="modal-overlay">
+            <div class="win31-dialog">
+                <div class="title-bar"><span id="modalGameTitle">Propiedades de Carátula</span></div>
+                <div class="dialog-body">
+                    <div class="dialog-content">
+                        <div style="display:flex; gap:12px;">
+                            <img id="largeCoverPreview" src="" class="cover-preview-large">
+                            <div style="flex-grow:1; display:flex; flex-direction:column; gap:6px;">
+                                <div class="group-box">
+                                    <span class="group-box-title">Archivo Local</span>
+                                    <input type="file" id="coverFileInput" accept="image/*" style="display:none;" onchange="handleCoverUpload(event)">
+                                    <button class="btn-3d" onclick="document.getElementById('coverFileInput').click()" style="width:100%;">📁 Cargar Imagen...</button>
+                                </div>
+                                <div class="group-box">
+                                    <span class="group-box-title">Scraper en Línea</span>
+                                    <div style="display:flex; gap:4px; margin-top:2px;">
+                                        <input type="text" id="scraperQuery" style="width:100%;">
+                                        <button class="btn-3d" onclick="runScraper()">🔍</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="group-box">
+                            <span class="group-box-title">Resultados</span>
+                            <div id="scraperResults" class="scraper-results">
+                                <span style="color:#808080; padding:10px;">Presione '🔍' para buscar.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveCoverChange()">Aceptar</button>
+                        <button class="btn-3d" onclick="closeCoverModal()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 2: NUEVA VM 86BOX -->
+        <div id="newVmModal" class="modal-overlay">
+            <div class="win31-dialog">
+                <div class="title-bar"><span>Crear Nueva VM en 86Box</span></div>
+                <div class="dialog-body">
+                    <div class="dialog-content">
+                        <label>Nombre de la Máquina:</label>
+                        <input type="text" id="vmName" value="MS-DOS 6.22 Gaming PC">
+
+                        <div class="group-box">
+                            <span class="group-box-title">Perfil de Hardware</span>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-top:4px;">
+                                <div>
+                                    <label>CPU/Arquitectura:</label><br>
+                                    <select id="vmCpu" style="width:100%;">
+                                        <option>i486DX2 / 66 MHz</option>
+                                        <option>Pentium MMX / 200 MHz</option>
+                                        <option>386DX / 33 MHz</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>RAM (MB):</label><br>
+                                    <select id="vmRam" style="width:100%;">
+                                        <option>16 MB</option>
+                                        <option>32 MB</option>
+                                        <option>64 MB</option>
+                                        <option>8 MB</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Aceleradora de Video:</label><br>
+                                    <select id="vmGpu" style="width:100%;">
+                                        <option>S3 Trio64 (VGA)</option>
+                                        <option>3dfx Voodoo Graphics</option>
+                                        <option>ET4000 AX</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Disco Rígido (IDE):</label><br>
+                                    <select id="vmHdd" style="width:100%;">
+                                        <option>540 MB (.vhdx)</option>
+                                        <option>2.1 GB (.vhdx)</option>
+                                        <option>100 MB (.vhdx)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveNewVM()">Crear</button>
+                        <button class="btn-3d" onclick="closeNewVmModal()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /* ESTADO GLOBAL */
+        let activeTab = 'floppies';
+
+        let games = [
+            {
+                id: 1,
+                title: "The Secret of Monkey Island",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co2044.webp",
+                floppies: [
+                    { id: "f1", name: "DISK01.IMG", readOnly: true, nfcId: "04:A1:3B:FE" },
+                    { id: "f2", name: "DISK02.IMG", readOnly: true, nfcId: "04:A1:3B:FF" }
+                ]
+            },
+            {
+                id: 2,
+                title: "Doom II: Hell on Earth",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co22i1.webp",
+                floppies: [
+                    { id: "f4", name: "DISK1_INSTALL.IMG", readOnly: true, nfcId: "04:B2:1C:11" }
+                ]
+            }
+        ];
+
+        let vms = [
+            {
+                id: 101,
+                name: "Pentium 200 - Win95 Rig",
+                status: "Detenida",
+                cpu: "Pentium MMX 200MHz",
+                ram: "64 MB",
+                gpu: "3dfx Voodoo 1",
+                hddSize: "2.1 GB",
+                lastBackup: "2026-09-01 14:30"
+            },
+            {
+                id: 102,
+                name: "486DX2 - MS-DOS 6.22 Pure",
+                status: "Ejecutando",
+                cpu: "i486DX2 66MHz",
+                ram: "16 MB",
+                gpu: "S3 Trio64",
+                hddSize: "540 MB",
+                lastBackup: "Sin backups"
+            }
+        ];
+
+        /* NAVEGACIÓN PESTAÑAS */
+        function switchTab(tab) {
+            activeTab = tab;
+            document.getElementById('tabFloppiesBtn').className = tab === 'floppies' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('tabVmsBtn').className = tab === 'vms' ? 'tab-btn active' : 'tab-btn';
+            
+            document.getElementById('viewFloppies').style.display = tab === 'floppies' ? 'block' : 'none';
+            document.getElementById('viewVms').style.display = tab === 'vms' ? 'block' : 'none';
+
+            updateStatusBar();
+        }
+
+        function updateStatusBar() {
+            if (activeTab === 'floppies') {
+                document.getElementById('statusStats').innerText = `${games.length} Colección(es) de disquetes`;
+            } else {
+                document.getElementById('statusStats').innerText = `${vms.length} Máquina(s) Virtuales configuradas`;
+            }
+        }
+
+        /* RENDERS */
+        function renderFloppies() {
+            const container = document.getElementById('floppyContainer');
+            const search = document.getElementById('searchFloppyInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            games.filter(g => g.title.toLowerCase().includes(search)).forEach(game => {
+                const group = document.createElement('div');
+                group.className = 'item-group';
+
+                let rows = game.floppies.map(f => `
+                    <tr>
+                        <td style="width:25px; text-align:center;">💾</td>
+                        <td><strong>${f.name}</strong></td>
+                        <td style="width:110px;">
+                            <button class="btn-3d" onclick="toggleReadOnly(${game.id}, '${f.id}')" style="font-size:10px; padding:1px 4px;">
+                                ${f.readOnly ? '🔒 Read-Only' : '🔓 Read-Write'}
+                            </button>
+                        </td>
+                        <td style="width:130px;">
+                            <span class="badge-status ${f.nfcId ? 'badge-running' : 'badge-stopped'}">
+                                ${f.nfcId ? 'NFC: ' + f.nfcId : 'Sin NFC'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+
+                group.innerHTML = `
+                    <div class="item-header">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img src="${game.cover}" class="cover-art-thumb" onclick="openCoverModal(${game.id})">
+                            <span>${game.title} (${game.floppies.length} discos)</span>
+                        </div>
+                        <button class="btn-3d" onclick="openCoverModal(${game.id})" style="font-size:10px;">🖼️ Carátula...</button>
+                    </div>
+                    <table class="win-table"><tbody>${rows}</tbody></table>
+                `;
+                container.appendChild(group);
+            });
+            updateStatusBar();
+        }
+
+        function renderVMs() {
+            const container = document.getElementById('vmsContainer');
+            const search = document.getElementById('searchVmInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            vms.filter(v => v.name.toLowerCase().includes(search)).forEach(vm => {
+                const group = document.createElement('div');
+                group.className = 'item-group';
+
+                const isRunning = vm.status === 'Ejecutando';
+
+                group.innerHTML = `
+                    <div class="item-header">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span>🖥️ ${vm.name}</span>
+                            <span class="badge-status ${isRunning ? 'badge-running' : 'badge-stopped'}">${vm.status}</span>
+                        </div>
+                        <div>
+                            <button class="btn-3d" onclick="toggleVmPower(${vm.id})" style="font-size:10px;">
+                                ${isRunning ? '⏹️ Apagar' : '▶️ Iniciar 86Box'}
+                            </button>
+                            <button class="btn-3d" onclick="deleteVM(${vm.id})" style="font-size:10px;">🗑️ Borrar</button>
+                        </div>
+                    </div>
+                    
+                    <div style="padding:6px; background:#fff; border:1px solid #808080;">
+                        <table style="width:100%;">
+                            <tr>
+                                <td><strong>CPU:</strong> ${vm.cpu}</td>
+                                <td><strong>RAM:</strong> ${vm.ram}</td>
+                                <td><strong>Video:</strong> ${vm.gpu}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>HDD principal:</strong> ${vm.hddSize}</td>
+                                <td colspan="2"><strong>Último Backup:</strong> ${vm.lastBackup}</td>
+                            </tr>
+                        </table>
+                        
+                        <div style="margin-top:8px; border-top:1px solid #e0e0e0; padding-top:6px; display:flex; gap:6px;">
+                            <button class="btn-3d" onclick="backupVM(${vm.id})">📦 Crear Backup (.zip)</button>
+                            <button class="btn-3d" onclick="downloadBackup(${vm.id})" ${vm.lastBackup === 'Sin backups' ? 'disabled' : ''}>
+                                💾 Descargar Backup
+                            </button>
+                            <button class="btn-3d" style="margin-left:auto;" onclick="alert('Abriendo 86Box.cfg editor...')">⚙️ Config.cfg</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(group);
+            });
+            updateStatusBar();
+        }
+
+        /* LÓGICA DE VMS (86Box) */
+        function openNewVmModal() { document.getElementById('newVmModal').style.display = 'flex'; }
+        function closeNewVmModal() { document.getElementById('newVmModal').style.display = 'none'; }
+
+        function saveNewVM() {
+            const name = document.getElementById('vmName').value;
+            const cpu = document.getElementById('vmCpu').value;
+            const ram = document.getElementById('vmRam').value;
+            const gpu = document.getElementById('vmGpu').value;
+            const hddSize = document.getElementById('vmHdd').value;
+
+            vms.push({
+                id: Date.now(),
+                name,
+                status: 'Detenida',
+                cpu,
+                ram,
+                gpu,
+                hddSize,
+                lastBackup: 'Sin backups'
+            });
+
+            closeNewVmModal();
+            renderVMs();
+        }
+
+        function deleteVM(id) {
+            if (confirm("¿Seguro que querés eliminar esta Máquina Virtual y sus discos rígidos?")) {
+                vms = vms.filter(v => v.id !== id);
+                renderVMs();
+            }
+        }
+
+        function toggleVmPower(id) {
+            const vm = vms.find(v => v.id === id);
+            vm.status = vm.status === 'Ejecutando' ? 'Detenida' : 'Ejecutando';
+            renderVMs();
+        }
+
+        function backupVM(id) {
+            const vm = vms.find(v => v.id === id);
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+            vm.lastBackup = now;
+            alert(`Backup creado con éxito para ${vm.name}\nArchivo: backup_${vm.id}_${Date.now()}.zip`);
+            renderVMs();
+        }
+
+        function downloadBackup(id) {
+            const vm = vms.find(v => v.id === id);
+            alert(`Iniciando descarga del archivo de respaldo para ${vm.name}...`);
+        }
+
+        function triggerAllBackups() {
+            vms.forEach(v => backupVM(v.id));
+        }
+
+        /* COVERS & SCRAPER LOGIC */
+        let activeGameId = null;
+        let selectedCoverUrl = "";
+
+        function openCoverModal(gameId) {
+            activeGameId = gameId;
+            const game = games.find(g => g.id === gameId);
+            selectedCoverUrl = game.cover;
+            document.getElementById('modalGameTitle').innerText = `Carátula - ${game.title}`;
+            document.getElementById('largeCoverPreview').src = game.cover;
+            document.getElementById('scraperQuery').value = game.title;
+            document.getElementById('coverModal').style.display = 'flex';
+        }
+        function closeCoverModal() { document.getElementById('coverModal').style.display = 'none'; }
+        
+        function saveCoverChange() {
+            games.find(g => g.id === activeGameId).cover = selectedCoverUrl;
+            closeCoverModal();
+            renderFloppies();
+        }
+
+        function handleCoverUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    selectedCoverUrl = evt.target.result;
+                    document.getElementById('largeCoverPreview').src = selectedCoverUrl;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function runScraper() {
+            const resultsBox = document.getElementById('scraperResults');
+            resultsBox.innerHTML = '<span>Buscando en IGDB...</span>';
+            setTimeout(() => {
+                const mock = [
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co2044.webp",
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co22i1.webp",
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xyp.webp"
+                ];
+                resultsBox.innerHTML = mock.map(url => `<img src="${url}" class="scraper-thumb" onclick="selectedCoverUrl='${url}'; document.getElementById('largeCoverPreview').src='${url}';">`).join('');
+            }, 400);
+        }
+
+        /* INICIALIZACIÓN */
+        renderFloppies();
+        renderVMs();
+    </script>
+</body>
+</html>

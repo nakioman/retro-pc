@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroFloppy Manager v1.0 - Windows 3.1</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "MS Sans Serif", Tahoma, Geneva, sans-serif;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        body {
+            background-color: #008080; /* Azul Tecla Windows 3.1 */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Ventana Principal Windows 3.1 */
+        .win31-window {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 820px;
+            padding: 3px;
+            position: relative;
+        }
+
+        /* Barra de Título */
+        .title-bar {
+            background-color: #000080;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 3px 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            letter-spacing: 0.5px;
+        }
+
+        .title-bar-buttons {
+            display: flex;
+            gap: 2px;
+        }
+
+        .win-btn-small {
+            width: 14px;
+            height: 14px;
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* Menú Superior con Desplegables */
+        .menu-bar {
+            display: flex;
+            gap: 12px;
+            padding: 4px 8px;
+            border-bottom: 1px solid #808080;
+            background-color: #c0c0c0;
+            position: relative;
+        }
+
+        .menu-item {
+            cursor: pointer;
+            color: #000;
+            padding: 1px 4px;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            background-color: #000080;
+            color: #ffffff;
+        }
+
+        .menu-item span {
+            text-decoration: underline;
+        }
+
+        /* Submenú emergente retro */
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            min-width: 140px;
+            z-index: 100;
+        }
+
+        .dropdown-menu div {
+            padding: 3px 8px;
+            color: #000;
+            cursor: pointer;
+        }
+
+        .dropdown-menu div:hover {
+            background-color: #000080;
+            color: #fff;
+        }
+
+        /* Contenido Principal */
+        .window-body {
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Botones 3D Retro */
+        .btn-3d {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000000;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-3d:active {
+            border: 2px solid #000000;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px 7px 2px 9px;
+        }
+
+        /* Inputs y Cajas rehundidas */
+        .sunken-box {
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px;
+        }
+
+        .search-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #c0c0c0;
+            padding: 4px;
+            border: 1px solid #808080;
+        }
+
+        input[type="text"], select {
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 2px 4px;
+            outline: none;
+            background: #fff;
+        }
+
+        /* Cajas de Juegos */
+        .game-group {
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 6px;
+            background-color: #c0c0c0;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #808080;
+            color: #ffffff;
+            padding: 3px 6px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .game-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cover-art {
+            width: 32px;
+            height: 36px;
+            border: 1px solid #000;
+            object-fit: cover;
+            background: #000;
+        }
+
+        /* Tabla de Discos */
+        .floppy-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+        }
+
+        .floppy-table th {
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 3px 6px;
+            text-align: left;
+        }
+
+        .floppy-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid #e0e0e0;
+            vertical-align: middle;
+        }
+
+        .badge-nfc {
+            background-color: #008000;
+            color: #ffffff;
+            padding: 1px 4px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+
+        .badge-no-nfc {
+            background-color: #808000;
+            color: #ffffff;
+            padding: 1px 4px;
+            font-size: 10px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            border-top: 1px solid #808080;
+            padding: 3px 6px;
+            background-color: #c0c0c0;
+            display: flex;
+            justify-content: space-between;
+            color: #404040;
+        }
+
+        /* --- CUADROS DE DIÁLOGO MODALES (WINDOWS 3.1) --- */
+        .modal-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.2);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .win31-dialog {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 380px;
+            padding: 3px;
+        }
+
+        .dialog-body {
+            padding: 12px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .dialog-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 80px;
+        }
+
+        .group-box {
+            border: 1px solid #ffffff;
+            border-top-color: #808080;
+            border-left-color: #808080;
+            padding: 8px;
+            position: relative;
+            margin-top: 4px;
+        }
+
+        .group-box-title {
+            position: absolute;
+            top: -7px;
+            left: 8px;
+            background-color: #c0c0c0;
+            padding: 0 4px;
+            font-weight: bold;
+        }
+
+        .form-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="win31-window">
+        <!-- Barra de Título -->
+        <div class="title-bar">
+            <span>💾 RetroFloppy Manager 1.0 - [MS-DOS Library]</span>
+            <div class="title-bar-buttons">
+                <div class="win-btn-small">▲</div>
+                <div class="win-btn-small">▼</div>
+            </div>
+        </div>
+
+        <!-- Menú de opciones -->
+        <div class="menu-bar">
+            <div class="menu-item" onclick="toggleMenu('menuArchivo')">
+                <span>A</span>rchivo
+                <div id="menuArchivo" class="dropdown-menu">
+                    <div onclick="document.getElementById('fileInput').click()">Subir Discos...</div>
+                    <hr style="border:0; border-top:1px solid #808080; margin:2px 0;">
+                    <div onclick="alert('Cerrando aplicación...')">Salir</div>
+                </div>
+            </div>
+
+            <div class="menu-item" onclick="toggleMenu('menuOpciones')">
+                <span>O</span>pciones
+                <div id="menuOpciones" class="dropdown-menu">
+                    <div onclick="openSettingsDialog()"><span>C</span>onfiguración...</div>
+                </div>
+            </div>
+
+            <div class="menu-item" onclick="toggleMenu('menuAyuda')">
+                A<span>y</span>uda
+                <div id="menuAyuda" class="dropdown-menu">
+                    <div onclick="alert('RetroFloppy Manager v1.0\nSistema para MS-DOS y lectura NFC')">Acerca de...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cuerpo de Ventana -->
+        <div class="window-body">
+            
+            <!-- Barra de Herramientas -->
+            <div class="search-container">
+                <button class="btn-3d" onclick="document.getElementById('fileInput').click()">
+                    💾 <u>S</u>ubir Discos...
+                </button>
+                <input type="file" id="fileInput" multiple accept=".img,.dsk,.ima" style="display:none;" onchange="handleFileUpload(event)">
+
+                <button class="btn-3d" onclick="openSettingsDialog()">
+                    ⚙️ <u>O</u>pciones...
+                </button>
+
+                <span style="margin-left: auto;">Buscar:</span>
+                <input type="text" id="searchInput" oninput="renderLibrary()" placeholder="Monkey Island, Doom..." style="width:160px;">
+            </div>
+
+            <!-- Librería de Software -->
+            <div id="libraryContainer" class="sunken-box" style="max-height: 440px; overflow-y: scroll;">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+        </div>
+
+        <!-- Barra de Estado -->
+        <div class="status-bar">
+            <span id="statusStats">Cargando discos...</span>
+            <span>Unidad A: 3.5" HD (1.44MB)</span>
+        </div>
+
+        <!-- DIÁLOGO DE CONFIGURACIÓN / OPCIONES (MODAL ESTILO WIN 3.1) -->
+        <div id="settingsModal" class="modal-overlay">
+            <div class="win31-dialog">
+                <div class="title-bar">
+                    <span>Configuración de Sistema</span>
+                </div>
+                <div class="dialog-body">
+                    
+                    <div class="dialog-content">
+                        <!-- Grupo Idioma -->
+                        <div class="group-box">
+                            <span class="group-box-title">Idioma / Language</span>
+                            <div class="form-row" style="margin-top:4px;">
+                                <label for="langSelect">Seleccionar:</label>
+                                <select id="langSelect" style="width: 140px;">
+                                    <option value="es">Español (Latino)</option>
+                                    <option value="en">English (US)</option>
+                                    <option value="de">Deutsch</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Grupo Lector NFC -->
+                        <div class="group-box">
+                            <span class="group-box-title">Dispositivo NFC</span>
+                            <div class="form-row" style="margin-top:4px;">
+                                <label for="comPort">Puerto Serie:</label>
+                                <select id="comPort" style="width: 140px;">
+                                    <option value="COM1">COM1 (0x3F8)</option>
+                                    <option value="COM2">COM2 (0x2F8)</option>
+                                    <option value="WEB">WebNFC API</option>
+                                </select>
+                            </div>
+                            <div style="margin-top: 8px;">
+                                <label><input type="checkbox" id="autoBeep" checked> Emitir pitido al grabar</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botones laterales estándar de diálogo Windows 3.1 -->
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveSettings()">Aceptar</button>
+                        <button class="btn-3d" onclick="closeSettingsDialog()">Cancelar</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let games = [
+            {
+                id: 1,
+                title: "The Secret of Monkey Island",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co2044.webp",
+                floppies: [
+                    { id: "f1", name: "DISK01.IMG (VGA/EGA)", readOnly: true, nfcId: "04:A1:3B:FE" },
+                    { id: "f2", name: "DISK02.IMG", readOnly: true, nfcId: "04:A1:3B:FF" },
+                    { id: "f3", name: "DISK03.IMG", readOnly: true, nfcId: "04:A1:3B:FG" },
+                    { id: "f4", name: "DISK04.IMG", readOnly: false, nfcId: null }
+                ]
+            },
+            {
+                id: 2,
+                title: "Doom II: Hell on Earth",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co22i1.webp",
+                floppies: [
+                    { id: "f5", name: "DISK1_INSTALL.IMG", readOnly: true, nfcId: "04:B2:1C:11" },
+                    { id: "f6", name: "DISK2.IMG", readOnly: true, nfcId: "04:B2:1C:12" },
+                    { id: "f7", name: "DISK3.IMG", readOnly: true, nfcId: null }
+                ]
+            }
+        ];
+
+        // Manejo de Menús
+        function toggleMenu(id) {
+            const el = document.getElementById(id);
+            const isVisible = el.style.display === 'block';
+            closeAllMenus();
+            if (!isVisible) el.style.display = 'block';
+        }
+
+        function closeAllMenus() {
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+        }
+
+        window.onclick = function(e) {
+            if (!e.target.matches('.menu-item') && !e.target.matches('.menu-item span')) {
+                closeAllMenus();
+            }
+        };
+
+        // Modal Configuración
+        function openSettingsDialog() {
+            closeAllMenus();
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+
+        function closeSettingsDialog() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        function saveSettings() {
+            const lang = document.getElementById('langSelect').value;
+            const port = document.getElementById('comPort').value;
+            alert(`Configuración guardada:\nIdioma: ${lang.toUpperCase()}\nPuerto NFC: ${port}`);
+            closeSettingsDialog();
+        }
+
+        // Renderizado de la Librería
+        function renderLibrary() {
+            const container = document.getElementById('libraryContainer');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            const filtered = games.filter(g => 
+                g.title.toLowerCase().includes(search) || 
+                g.floppies.some(f => f.name.toLowerCase().includes(search) || (f.nfcId && f.nfcId.toLowerCase().includes(search)))
+            );
+
+            let totalDisks = 0;
+            let totalNFC = 0;
+
+            filtered.forEach(game => {
+                totalDisks += game.floppies.length;
+                totalNFC += game.floppies.filter(f => f.nfcId).length;
+
+                const group = document.createElement('div');
+                group.className = 'game-group';
+
+                let rowsHTML = game.floppies.map(f => `
+                    <tr>
+                        <td style="width:25px; text-align:center;">💾</td>
+                        <td><strong>${f.name}</strong></td>
+                        <td style="width:110px;">
+                            <button class="btn-3d" onclick="toggleReadOnly(${game.id}, '${f.id}')" style="font-size:10px; padding:1px 4px;">
+                                ${f.readOnly ? '🔒 Read-Only' : '🔓 Read-Write'}
+                            </button>
+                        </td>
+                        <td style="width:130px;">
+                            ${f.nfcId 
+                                ? `<span class="badge-nfc">NFC: ${f.nfcId}</span>` 
+                                : `<span class="badge-no-nfc">⚠️ Sin NFC</span>`
+                            }
+                        </td>
+                        <td style="width:140px; text-align:right;">
+                            <button class="btn-3d" onclick="writeNFC(${game.id}, '${f.id}')">
+                                ${f.nfcId ? 'Escribir NFC' : 'Grabar NFC'}
+                            </button>
+                            <button class="btn-3d" onclick="deleteFloppy(${game.id}, '${f.id}')">
+                                🗑
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                group.innerHTML = `
+                    <div class="game-header">
+                        <div class="game-info">
+                            <img src="${game.cover}" class="cover-art" onerror="this.style.display='none'">
+                            <span>${game.title} (${game.floppies.length} disquetes)</span>
+                        </div>
+                        <button class="btn-3d" onclick="addDisk(${game.id})" style="font-size:10px;">+ Agregar Disco</button>
+                    </div>
+                    <table class="floppy-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Nombre de Archivo</th>
+                                <th>Atributo</th>
+                                <th>ID NFC</th>
+                                <th style="text-align:right;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHTML}
+                        </tbody>
+                    </table>
+                `;
+
+                container.appendChild(group);
+            });
+
+            document.getElementById('statusStats').innerText = `${games.length} Colecciones | ${totalDisks} Floppies (${totalNFC} vinculados a NFC)`;
+        }
+
+        function toggleReadOnly(gameId, floppyId) {
+            const game = games.find(g => g.id === gameId);
+            const floppy = game.floppies.find(f => f.id === floppyId);
+            floppy.readOnly = !floppy.readOnly;
+            renderLibrary();
+        }
+
+        function writeNFC(gameId, floppyId) {
+            const fakeUID = '04:' + Array.from({length: 3}, () => Math.floor(Math.random()*256).toString(16).padStart(2, '0').toUpperCase()).join(':');
+            alert(`[NFC Writer v1.0]\nAproxime la tarjeta NFC al dispositivo...\n\n¡Escritura Exitosa!\nUID: ${fakeUID}`);
+            const game = games.find(g => g.id === gameId);
+            const floppy = game.floppies.find(f => f.id === floppyId);
+            floppy.nfcId = fakeUID;
+            renderLibrary();
+        }
+
+        function deleteFloppy(gameId, floppyId) {
+            if(!confirm("¿Desea eliminar este disquete de la lista?")) return;
+            const game = games.find(g => g.id === gameId);
+            game.floppies = game.floppies.filter(f => f.id !== floppyId);
+            if(game.floppies.length === 0) {
+                games = games.filter(g => g.id !== gameId);
+            }
+            renderLibrary();
+        }
+
+        function addDisk(gameId) {
+            const name = prompt("Ingrese el nombre del archivo de disquete:");
+            if(!name) return;
+            const game = games.find(g => g.id === gameId);
+            game.floppies.push({
+                id: 'f_' + Date.now(),
+                name: name.toUpperCase(),
+                readOnly: false,
+                nfcId: null
+            });
+            renderLibrary();
+        }
+
+        function handleFileUpload(event) {
+            const files = Array.from(event.target.files);
+            if(files.length === 0) return;
+            const title = prompt("Nombre del software para estos discos:", files[0].name.split('.')[0].toUpperCase());
+            if(!title) return;
+
+            games.unshift({
+                id: Date.now(),
+                title: title,
+                cover: "",
+                floppies: files.map((file, idx) => ({
+                    id: 'f_' + Date.now() + '_' + idx,
+                    name: file.name.toUpperCase(),
+                    readOnly: false,
+                    nfcId: null
+                }))
+            });
+
+            renderLibrary();
+        }
+
+        renderLibrary();
+    </script>
+
+</body>
+</html>

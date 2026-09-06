@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroManager 3.1 - 86Box & Floppies</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "MS Sans Serif", Tahoma, Geneva, sans-serif;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        body {
+            background-color: #008080;
+            margin: 0;
+            padding: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Ventana Principal - Ocupa casi el 100% del viewport */
+        .win31-window {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 98vw;
+            height: 96vh;
+            padding: 3px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .title-bar {
+            background-color: #000080;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .menu-bar {
+            display: flex;
+            gap: 16px;
+            padding: 4px 8px;
+            border-bottom: 1px solid #808080;
+            background-color: #c0c0c0;
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+            padding-left: 4px;
+            border-bottom: 2px solid #808080;
+        }
+
+        .tab-btn {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: transparent;
+            padding: 5px 14px;
+            cursor: pointer;
+            font-weight: bold;
+            position: relative;
+            top: 2px;
+        }
+
+        .tab-btn.active {
+            background-color: #c0c0c0;
+            border-bottom-color: #c0c0c0;
+            z-index: 10;
+            top: 0px;
+            padding-bottom: 7px;
+        }
+
+        .window-body {
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+            min-height: 0; /* Permite flex scroll */
+        }
+
+        .btn-3d {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000000;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-3d:active {
+            border: 2px solid #000000;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 5px 9px 3px 11px;
+        }
+
+        .sunken-box {
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 6px;
+        }
+
+        .toolbar-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background-color: #c0c0c0;
+            padding: 4px;
+            border: 1px solid #808080;
+        }
+
+        input[type="text"] {
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 3px 6px;
+            outline: none;
+            background: #fff;
+        }
+
+        .item-group {
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 8px;
+            background-color: #c0c0c0;
+            margin-bottom: 8px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #808080;
+            color: #ffffff;
+            padding: 5px 8px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .win-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+        }
+
+        .win-table th {
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 4px 8px;
+            text-align: left;
+        }
+
+        .win-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e0e0e0;
+            vertical-align: middle;
+        }
+
+        .badge-status {
+            padding: 2px 8px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        .badge-running { background-color: #008000; color: #fff; }
+        .badge-stopped { background-color: #808080; color: #fff; }
+
+        .status-bar {
+            border-top: 1px solid #808080;
+            padding: 4px 8px;
+            background-color: #c0c0c0;
+            display: flex;
+            justify-content: space-between;
+            color: #333;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .win31-dialog {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            padding: 3px;
+        }
+
+        .dialog-body {
+            padding: 10px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .dialog-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100px;
+        }
+
+        /* Editor .ini estilo bloc de notas expandido */
+        .ini-editor {
+            width: 100%;
+            height: 420px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 6px;
+            resize: none;
+            white-space: pre;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="win31-window">
+        <!-- Sin botones de minimizar / maximizar -->
+        <div class="title-bar">
+            <span>💾 RetroManager 3.1 - [86Box & Disquetes]</span>
+        </div>
+
+        <div class="menu-bar">
+            <div><span>A</span>rchivo</div>
+            <div><span>M</span>áquinas</div>
+            <div><span>O</span>pciones</div>
+            <div>A<span>y</span>uda</div>
+        </div>
+
+        <div class="tab-bar">
+            <button id="tabVmsBtn" class="tab-btn active" onclick="switchTab('vms')">🖥️ Máquinas Virtuales (86Box)</button>
+            <button id="tabFloppiesBtn" class="tab-btn" onclick="switchTab('floppies')">💾 Disquetes</button>
+        </div>
+
+        <div class="window-body">
+            <!-- VISTA VMS 86BOX -->
+            <div id="viewVms" style="display:flex; flex-direction:column; height:100%;">
+                <div class="toolbar-container" style="margin-bottom:8px;">
+                    <button class="btn-3d" onclick="openNewVmModal()">➕ Crear Nueva VM...</button>
+                    <span style="margin-left: auto;">Buscar:</span>
+                    <input type="text" id="searchVmInput" oninput="renderVMs()" placeholder="Pentium, 486..." style="width:220px;">
+                </div>
+
+                <div id="vmsContainer" class="sunken-box" style="flex-grow:1; overflow-y: scroll;"></div>
+            </div>
+
+            <!-- VISTA DISQUETES -->
+            <div id="viewFloppies" style="display:none; height:100%;">
+                <div class="toolbar-container" style="margin-bottom:8px;">
+                    <button class="btn-3d">💾 Subir Discos...</button>
+                </div>
+                <div class="sunken-box" style="height: calc(100% - 40px); padding:10px; color:#808080;">
+                    Vista de disquetes activa.
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="statusStats">Cargando...</span>
+            <span>86Box Host Agent: Conectado</span>
+        </div>
+
+        <!-- MODAL 1: EDITOR DE CONFIGURACIÓN (.INI / .CFG) (EXPANDIDO) -->
+        <div id="cfgModal" class="modal-overlay">
+            <div class="win31-dialog" style="width: 80vw; max-width: 900px;">
+                <div class="title-bar"><span id="cfgModalTitle">Editar 86box.cfg</span></div>
+                <div class="dialog-body">
+                    <div class="dialog-content">
+                        <label id="cfgVmLabel">Configuración directa (86box.cfg):</label>
+                        <textarea id="cfgTextArea" class="ini-editor" spellcheck="false"></textarea>
+                        <span style="color:#505050; font-size:11px;">Podés pegar o copiar directamente el contenido del archivo de configuración de tu 86Box local.</span>
+                    </div>
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveCfg()">Guardar</button>
+                        <button class="btn-3d" onclick="closeCfgModal()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 2: GESTOR DE BACKUPS -->
+        <div id="backupsModal" class="modal-overlay">
+            <div class="win31-dialog" style="width: 75vw; max-width: 800px;">
+                <div class="title-bar"><span id="backupModalTitle">Administrar Backups de la VM</span></div>
+                <div class="dialog-body">
+                    <div class="dialog-content">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span>Copias de seguridad guardadas:</span>
+                            <button class="btn-3d" onclick="createNewBackup()">📦 Crear Backup Ahora</button>
+                        </div>
+                        
+                        <div class="sunken-box" style="height: 300px; overflow-y: scroll;">
+                            <table class="win-table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha / Hora</th>
+                                        <th>Tamaño</th>
+                                        <th>Etiqueta</th>
+                                        <th style="text-align:right;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backupListTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="closeBackupsModal()">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 3: NUEVA VM -->
+        <div id="newVmModal" class="modal-overlay">
+            <div class="win31-dialog" style="width: 70vw; max-width: 750px;">
+                <div class="title-bar"><span>Crear Nueva Máquina Virtual</span></div>
+                <div class="dialog-body">
+                    <div class="dialog-content">
+                        <label>Nombre de la VM:</label>
+                        <input type="text" id="newVmName" value="Nueva VM 86Box" style="width:100%;">
+                        <label style="margin-top:6px;">Configuración inicial (86box.cfg):</label>
+                        <textarea id="newVmCfg" class="ini-editor" style="height:200px;" spellcheck="false">[General]
+manufacturer = Award
+system_type = socket7
+
+[Machine]
+machine = p55t2p4
+cpu_family = pentium
+cpu_speed = 200000000
+memory = 64
+</textarea>
+                    </div>
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveNewVM()">Crear</button>
+                        <button class="btn-3d" onclick="closeNewVmModal()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let vms = [
+            {
+                id: 101,
+                name: "Pentium 200 - Win95 Rig",
+                isRunning: true,
+                cfg: `[General]
+manufacturer = Award
+system_type = socket7
+
+[Machine]
+machine = p55t2p4
+cpu_family = pentium_mmx
+cpu_speed = 200000000
+memory = 64
+
+[Video]
+card = voodoo
+
+[Hard Disk 0]
+file = win95_disk.vhdx`,
+                backups: [
+                    { id: 'b1', date: '2026-09-01 14:30', size: '2.1 GB', label: 'Instalación limpia Win95' },
+                    { id: 'b2', date: '2026-09-05 09:15', size: '2.4 GB', label: 'Previo a instalar parches' }
+                ]
+            },
+            {
+                id: 102,
+                name: "486DX2 - MS-DOS Pure",
+                isRunning: false,
+                cfg: `[General]
+system_type = isa
+
+[Machine]
+machine = opti495
+cpu_family = i486dx2
+cpu_speed = 66666666
+memory = 16`,
+                backups: []
+            }
+        ];
+
+        let activeVmId = null;
+
+        function switchTab(tab) {
+            document.getElementById('tabVmsBtn').className = tab === 'vms' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('tabFloppiesBtn').className = tab === 'floppies' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('viewVms').style.display = tab === 'vms' ? 'flex' : 'none';
+            document.getElementById('viewFloppies').style.display = tab === 'floppies' ? 'block' : 'none';
+        }
+
+        function renderVMs() {
+            const container = document.getElementById('vmsContainer');
+            const search = document.getElementById('searchVmInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            const filtered = vms.filter(v => v.name.toLowerCase().includes(search));
+
+            filtered.forEach(vm => {
+                const group = document.createElement('div');
+                group.className = 'item-group';
+
+                group.innerHTML = `
+                    <div class="item-header">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:12px;">🖥️ ${vm.name}</span>
+                            <span class="badge-status ${vm.isRunning ? 'badge-running' : 'badge-stopped'}">
+                                ${vm.isRunning ? '● En ejecución' : '○ Detenida'}
+                            </span>
+                        </div>
+                        <button class="btn-3d" onclick="deleteVM(${vm.id})" style="font-size:10px;">🗑️ Borrar VM</button>
+                    </div>
+
+                    <div style="padding:8px; background:#fff; border:1px solid #808080;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><strong>Backups disponibles:</strong> ${vm.backups.length} copia(s)</span>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn-3d" onclick="openCfgModal(${vm.id})">⚙️ Editar Config (86box.cfg)</button>
+                                <button class="btn-3d" onclick="openBackupsModal(${vm.id})">📦 Administrar Backups...</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(group);
+            });
+
+            document.getElementById('statusStats').innerText = `${vms.length} VM(s) registradas (${vms.filter(v=>v.isRunning).length} activas)`;
+        }
+
+        /* EDITOR CFG / INI */
+        function openCfgModal(id) {
+            activeVmId = id;
+            const vm = vms.find(v => v.id === id);
+            document.getElementById('cfgModalTitle').innerText = `86box.cfg - ${vm.name}`;
+            document.getElementById('cfgTextArea').value = vm.cfg;
+            document.getElementById('cfgModal').style.display = 'flex';
+        }
+
+        function closeCfgModal() { document.getElementById('cfgModal').style.display = 'none'; }
+
+        function saveCfg() {
+            const vm = vms.find(v => v.id === activeVmId);
+            vm.cfg = document.getElementById('cfgTextArea').value;
+            closeCfgModal();
+            alert("Configuración 86box.cfg actualizada correctamente.");
+        }
+
+        /* GESTOR DE BACKUPS */
+        function openBackupsModal(id) {
+            activeVmId = id;
+            renderBackupsList();
+            document.getElementById('backupsModal').style.display = 'flex';
+        }
+
+        function closeBackupsModal() { document.getElementById('backupsModal').style.display = 'none'; }
+
+        function renderBackupsList() {
+            const vm = vms.find(v => v.id === activeVmId);
+            document.getElementById('backupModalTitle').innerText = `Backups - ${vm.name}`;
+            const tbody = document.getElementById('backupListTable');
+            tbody.innerHTML = '';
+
+            if (vm.backups.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#808080; padding:16px;">No hay backups creados para esta máquina.</td></tr>`;
+                return;
+            }
+
+            vm.backups.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${b.date}</td>
+                    <td>${b.size}</td>
+                    <td>${b.label}</td>
+                    <td style="text-align:right;">
+                        <button class="btn-3d" onclick="downloadBackupFile('${b.id}')">💾 Bajar</button>
+                        <button class="btn-3d" onclick="deleteBackup('${b.id}')">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function createNewBackup() {
+            const vm = vms.find(v => v.id === activeVmId);
+            const label = prompt("Descripción del backup:", "Copia manual");
+            if (label) {
+                const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+                vm.backups.unshift({
+                    id: 'b_' + Date.now(),
+                    date: now,
+                    size: '2.2 GB',
+                    label: label
+                });
+                renderBackupsList();
+                renderVMs();
+            }
+        }
+
+        function deleteBackup(bId) {
+            const vm = vms.find(v => v.id === activeVmId);
+            if (confirm("¿Seguro que querés eliminar esta copia de respaldo?")) {
+                vm.backups = vm.backups.filter(b => b.id !== bId);
+                renderBackupsList();
+                renderVMs();
+            }
+        }
+
+        function downloadBackupFile(bId) {
+            alert("Iniciando la descarga del archivo comprimido del backup...");
+        }
+
+        /* NUEVA VM */
+        function openNewVmModal() { document.getElementById('newVmModal').style.display = 'flex'; }
+        function closeNewVmModal() { document.getElementById('newVmModal').style.display = 'none'; }
+
+        function saveNewVM() {
+            const name = document.getElementById('newVmName').value;
+            const cfg = document.getElementById('newVmCfg').value;
+
+            vms.push({
+                id: Date.now(),
+                name,
+                isRunning: false,
+                cfg,
+                backups: []
+            });
+
+            closeNewVmModal();
+            renderVMs();
+        }
+
+        function deleteVM(id) {
+            if (confirm("¿Seguro que querés eliminar esta Máquina Virtual?")) {
+                vms = vms.filter(v => v.id !== id);
+                renderVMs();
+            }
+        }
+
+        renderVMs();
+    </script>
+</body>
+</html>
