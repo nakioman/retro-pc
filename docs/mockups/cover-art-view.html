@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroFloppy Manager v1.0 - Windows 3.1</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "MS Sans Serif", Tahoma, Geneva, sans-serif;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        body {
+            background-color: #008080;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Ventana Principal */
+        .win31-window {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 840px;
+            padding: 3px;
+            position: relative;
+        }
+
+        .title-bar {
+            background-color: #000080;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 3px 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title-bar-buttons {
+            display: flex;
+            gap: 2px;
+        }
+
+        .win-btn-small {
+            width: 14px;
+            height: 14px;
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .menu-bar {
+            display: flex;
+            gap: 12px;
+            padding: 4px 8px;
+            border-bottom: 1px solid #808080;
+            background-color: #c0c0c0;
+        }
+
+        .menu-item {
+            cursor: pointer;
+            color: #000;
+        }
+
+        .menu-item span {
+            text-decoration: underline;
+        }
+
+        .window-body {
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Botones 3D */
+        .btn-3d {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000000;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-3d:active {
+            border: 2px solid #000000;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px 7px 2px 9px;
+        }
+
+        .sunken-box {
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 4px;
+        }
+
+        .search-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #c0c0c0;
+            padding: 4px;
+            border: 1px solid #808080;
+        }
+
+        input[type="text"], select {
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 2px 4px;
+            outline: none;
+            background: #fff;
+        }
+
+        /* Tarjeta de Juego */
+        .game-group {
+            border: 2px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 6px;
+            background-color: #c0c0c0;
+            margin-bottom: 8px;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #808080;
+            color: #ffffff;
+            padding: 4px 6px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .game-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Carátula en miniatura interactiva */
+        .cover-art-thumb {
+            width: 48px;
+            height: 56px;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            object-fit: cover;
+            background: #000;
+            cursor: pointer;
+        }
+
+        .cover-art-thumb:hover {
+            border-color: #000080;
+        }
+
+        /* Tabla de Discos */
+        .floppy-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+        }
+
+        .floppy-table th {
+            background-color: #c0c0c0;
+            border: 1px solid #ffffff;
+            border-right-color: #808080;
+            border-bottom-color: #808080;
+            padding: 3px 6px;
+            text-align: left;
+        }
+
+        .floppy-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid #e0e0e0;
+            vertical-align: middle;
+        }
+
+        .badge-nfc {
+            background-color: #008000;
+            color: #ffffff;
+            padding: 1px 4px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+
+        .badge-no-nfc {
+            background-color: #808000;
+            color: #ffffff;
+            padding: 1px 4px;
+            font-size: 10px;
+        }
+
+        .status-bar {
+            border-top: 1px solid #808080;
+            padding: 3px 6px;
+            background-color: #c0c0c0;
+            display: flex;
+            justify-content: space-between;
+            color: #404040;
+        }
+
+        /* Modal Generico Windows 3.1 */
+        .modal-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .win31-dialog {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 500px;
+            padding: 3px;
+        }
+
+        .dialog-body {
+            padding: 10px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .dialog-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 90px;
+        }
+
+        .group-box {
+            border: 1px solid #ffffff;
+            border-top-color: #808080;
+            border-left-color: #808080;
+            padding: 8px;
+            position: relative;
+            margin-top: 4px;
+        }
+
+        .group-box-title {
+            position: absolute;
+            top: -7px;
+            left: 8px;
+            background-color: #c0c0c0;
+            padding: 0 4px;
+            font-weight: bold;
+        }
+
+        /* Contenedor de Vista Previa Grande */
+        .cover-preview-large {
+            width: 120px;
+            height: 140px;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            object-fit: cover;
+            background-color: #000;
+        }
+
+        /* Resultados del Scraper */
+        .scraper-results {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 4px;
+            background: #fff;
+            border: 2px solid #808080;
+            border-right-color: #fff;
+            border-bottom-color: #fff;
+            max-height: 85px;
+        }
+
+        .scraper-thumb {
+            width: 45px;
+            height: 55px;
+            object-fit: cover;
+            cursor: pointer;
+            border: 1px solid #808080;
+        }
+
+        .scraper-thumb:hover {
+            border: 2px solid #000080;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="win31-window">
+        <!-- Barra de Título -->
+        <div class="title-bar">
+            <span>💾 RetroFloppy Manager 1.0 - [MS-DOS Library]</span>
+            <div class="title-bar-buttons">
+                <div class="win-btn-small">▲</div>
+                <div class="win-btn-small">▼</div>
+            </div>
+        </div>
+
+        <!-- Menú Principal -->
+        <div class="menu-bar">
+            <div class="menu-item"><span>A</span>rchivo</div>
+            <div class="menu-item"><span>O</span>pciones</div>
+            <div class="menu-item">A<span>y</span>uda</div>
+        </div>
+
+        <!-- Cuerpo Ventana -->
+        <div class="window-body">
+            
+            <div class="search-container">
+                <button class="btn-3d" onclick="document.getElementById('fileInput').click()">
+                    💾 <u>S</u>ubir Discos...
+                </button>
+                <input type="file" id="fileInput" multiple accept=".img,.dsk,.ima" style="display:none;" onchange="handleFileUpload(event)">
+
+                <span style="margin-left: auto;">Buscar:</span>
+                <input type="text" id="searchInput" oninput="renderLibrary()" placeholder="Monkey Island, Doom..." style="width:160px;">
+            </div>
+
+            <!-- Lista de Juegos -->
+            <div id="libraryContainer" class="sunken-box" style="max-height: 440px; overflow-y: scroll;"></div>
+
+        </div>
+
+        <!-- Barra de Estado -->
+        <div class="status-bar">
+            <span id="statusStats">Cargando datos...</span>
+            <span>Unidad A: 3.5" HD (1.44MB)</span>
+        </div>
+
+        <!-- MODAL PROPIEDADES DE CARÁTULA Y SCRAPER -->
+        <div id="coverModal" class="modal-overlay">
+            <div class="win31-dialog">
+                <div class="title-bar">
+                    <span id="modalGameTitle">Propiedades de Carátula</span>
+                </div>
+                <div class="dialog-body">
+                    
+                    <!-- Imagen Grande y Opciones -->
+                    <div class="dialog-content">
+                        
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <div>
+                                <img id="largeCoverPreview" src="" class="cover-preview-large">
+                            </div>
+
+                            <div style="flex-grow:1; display:flex; flex-direction:column; gap:8px;">
+                                <!-- Cargar Archivo Local -->
+                                <div class="group-box">
+                                    <span class="group-box-title">Archivo Local</span>
+                                    <input type="file" id="coverFileInput" accept="image/*" style="display:none;" onchange="handleCoverUpload(event)">
+                                    <button class="btn-3d" onclick="document.getElementById('coverFileInput').click()" style="width:100%;">
+                                        📁 Cargar Imagen...
+                                    </button>
+                                </div>
+
+                                <!-- Scraper en Línea -->
+                                <div class="group-box">
+                                    <span class="group-box-title">Buscar en Scraper</span>
+                                    <div style="display:flex; gap:4px; margin-top:2px;">
+                                        <input type="text" id="scraperQuery" placeholder="Nombre del juego..." style="width:100%;">
+                                        <button class="btn-3d" onclick="runScraper()">🔍</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resultados del Scraper -->
+                        <div class="group-box">
+                            <span class="group-box-title">Resultados Encontrados</span>
+                            <div id="scraperResults" class="scraper-results">
+                                <span style="color:#808080; padding:10px;">Presione '🔍' para buscar carátulas en línea.</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Botones laterales -->
+                    <div class="dialog-buttons">
+                        <button class="btn-3d" onclick="saveCoverChange()">Aceptar</button>
+                        <button class="btn-3d" onclick="closeCoverModal()">Cancelar</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let games = [
+            {
+                id: 1,
+                title: "The Secret of Monkey Island",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co2044.webp",
+                floppies: [
+                    { id: "f1", name: "DISK01.IMG (VGA/EGA)", readOnly: true, nfcId: "04:A1:3B:FE" },
+                    { id: "f2", name: "DISK02.IMG", readOnly: true, nfcId: "04:A1:3B:FF" },
+                    { id: "f3", name: "DISK03.IMG", readOnly: true, nfcId: "04:A1:3B:FG" }
+                ]
+            },
+            {
+                id: 2,
+                title: "Doom II: Hell on Earth",
+                cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co22i1.webp",
+                floppies: [
+                    { id: "f4", name: "DISK1_INSTALL.IMG", readOnly: true, nfcId: "04:B2:1C:11" },
+                    { id: "f5", name: "DISK2.IMG", readOnly: true, nfcId: "04:B2:1C:12" }
+                ]
+            }
+        ];
+
+        let activeGameId = null;
+        let selectedCoverUrl = "";
+
+        function renderLibrary() {
+            const container = document.getElementById('libraryContainer');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            const filtered = games.filter(g => g.title.toLowerCase().includes(search));
+
+            filtered.forEach(game => {
+                const group = document.createElement('div');
+                group.className = 'game-group';
+
+                let rowsHTML = game.floppies.map(f => `
+                    <tr>
+                        <td style="width:25px; text-align:center;">💾</td>
+                        <td><strong>${f.name}</strong></td>
+                        <td style="width:110px;">
+                            <button class="btn-3d" onclick="toggleReadOnly(${game.id}, '${f.id}')" style="font-size:10px; padding:1px 4px;">
+                                ${f.readOnly ? '🔒 Read-Only' : '🔓 Read-Write'}
+                            </button>
+                        </td>
+                        <td style="width:130px;">
+                            ${f.nfcId 
+                                ? `<span class="badge-nfc">NFC: ${f.nfcId}</span>` 
+                                : `<span class="badge-no-nfc">⚠️ Sin NFC</span>`
+                            }
+                        </td>
+                        <td style="width:140px; text-align:right;">
+                            <button class="btn-3d" onclick="writeNFC(${game.id}, '${f.id}')">Escribir NFC</button>
+                            <button class="btn-3d" onclick="deleteFloppy(${game.id}, '${f.id}')">🗑</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                group.innerHTML = `
+                    <div class="game-header">
+                        <div class="game-info">
+                            <img src="${game.cover}" class="cover-art-thumb" onclick="openCoverModal(${game.id})" title="Hacé clic para cambiar la carátula">
+                            <div>
+                                <span style="font-size:12px;">${game.title}</span><br>
+                                <span style="font-weight:normal; font-size:10px;">${game.floppies.length} disquete(s)</span>
+                            </div>
+                        </div>
+                        <div>
+                            <button class="btn-3d" onclick="openCoverModal(${game.id})" style="font-size:10px;">🖼️ Carátula...</button>
+                            <button class="btn-3d" onclick="addDisk(${game.id})" style="font-size:10px;">+ Disco</button>
+                        </div>
+                    </div>
+                    <table class="floppy-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Nombre de Archivo</th>
+                                <th>Atributo</th>
+                                <th>NFC ID</th>
+                                <th style="text-align:right;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHTML}</tbody>
+                    </table>
+                `;
+
+                container.appendChild(group);
+            });
+
+            document.getElementById('statusStats').innerText = `${games.length} Juegos registrados`;
+        }
+
+        /* Modal y Scraper Logic */
+        function openCoverModal(gameId) {
+            activeGameId = gameId;
+            const game = games.find(g => g.id === gameId);
+            selectedCoverUrl = game.cover;
+
+            document.getElementById('modalGameTitle').innerText = `Carátula - ${game.title}`;
+            document.getElementById('largeCoverPreview').src = game.cover;
+            document.getElementById('scraperQuery').value = game.title;
+            document.getElementById('scraperResults').innerHTML = `<span style="color:#808080; padding:10px;">Presione '🔍' para buscar carátulas en línea.</span>`;
+            
+            document.getElementById('coverModal').style.display = 'flex';
+        }
+
+        function closeCoverModal() {
+            document.getElementById('coverModal').style.display = 'none';
+        }
+
+        function saveCoverChange() {
+            const game = games.find(g => g.id === activeGameId);
+            game.cover = selectedCoverUrl;
+            closeCoverModal();
+            renderLibrary();
+        }
+
+        function handleCoverUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    selectedCoverUrl = e.target.result;
+                    document.getElementById('largeCoverPreview').src = selectedCoverUrl;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function runScraper() {
+            const query = document.getElementById('scraperQuery').value.toLowerCase();
+            const resultsBox = document.getElementById('scraperResults');
+            resultsBox.innerHTML = '<span style="padding:10px;">Buscando...</span>';
+
+            // Simulación de respuesta de scraper (API de metadatos retro)
+            setTimeout(() => {
+                const mockImages = [
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co2044.webp",
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co22i1.webp",
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xyp.webp",
+                    "https://images.igdb.com/igdb/image/upload/t_cover_big/co1x1e.webp"
+                ];
+
+                resultsBox.innerHTML = mockImages.map(url => `
+                    <img src="${url}" class="scraper-thumb" onclick="selectScraperImage('${url}')">
+                `).join('');
+            }, 500);
+        }
+
+        function selectScraperImage(url) {
+            selectedCoverUrl = url;
+            document.getElementById('largeCoverPreview').src = url;
+        }
+
+        /* Acciones auxiliares */
+        function toggleReadOnly(gId, fId) {
+            const f = games.find(g => g.id === gId).floppies.find(f => f.id === fId);
+            f.readOnly = !f.readOnly;
+            renderLibrary();
+        }
+
+        function writeNFC(gId, fId) {
+            const f = games.find(g => g.id === gId).floppies.find(f => f.id === fId);
+            f.nfcId = '04:' + Array.from({length: 3}, () => Math.floor(Math.random()*256).toString(16).padStart(2, '0').toUpperCase()).join(':');
+            renderLibrary();
+        }
+
+        function deleteFloppy(gId, fId) {
+            const g = games.find(g => g.id === gId);
+            g.floppies = g.floppies.filter(f => f.id !== fId);
+            renderLibrary();
+        }
+
+        function addDisk(gId) {
+            const name = prompt("Nombre del archivo floppy:");
+            if(name) {
+                games.find(g => g.id === gId).floppies.push({ id: 'f_' + Date.now(), name: name.toUpperCase(), readOnly: false, nfcId: null });
+                renderLibrary();
+            }
+        }
+
+        function handleFileUpload(e) {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            const title = prompt("Nombre del software:", files[0].name.split('.')[0].toUpperCase());
+            if (title) {
+                games.unshift({
+                    id: Date.now(),
+                    title: title,
+                    cover: "https://via.placeholder.com/48x56?text=DOS",
+                    floppies: files.map((f, i) => ({ id: 'f_' + Date.now() + '_' + i, name: f.name.toUpperCase(), readOnly: false, nfcId: null }))
+                });
+                renderLibrary();
+            }
+        }
+
+        renderLibrary();
+    </script>
+</body>
+</html>
