@@ -69,10 +69,11 @@ public sealed class RetroBoxCoverCache(
         var cover = $"{gameId}{extension}";
         Directory.CreateDirectory(coversRoot);
 
-        var stagedPath = Path.Combine(coversRoot, $".{gameId}-{Guid.NewGuid():N}{extension}");
+        var stagedPath = Path.Combine(coversRoot, $".{gameId}-{Guid.NewGuid():N}.download");
         try
         {
-            await DownloadToStagingAsync(source, stagedPath, extension, cancellationToken);
+            extension = await DownloadToStagingAsync(source, stagedPath, extension, cancellationToken);
+            cover = $"{gameId}{extension}";
 
             var updated = false;
             library.RunExclusively(() =>
@@ -161,7 +162,7 @@ public sealed class RetroBoxCoverCache(
         }
     }
 
-    private async Task DownloadToStagingAsync(
+    private async Task<string> DownloadToStagingAsync(
         Uri source,
         string stagedPath,
         string extension,
@@ -194,10 +195,14 @@ public sealed class RetroBoxCoverCache(
             await output.FlushAsync(timeout.Token);
         }
 
-        if (!RetroBoxCoverEndpoints.IsValidImage(stagedPath, extension))
+        extension = RetroBoxCoverEndpoints.DetectImageExtension(stagedPath) ?? extension;
+        if (!RetroBoxEndpoints.IsSupportedImageExtension(extension)
+            || !RetroBoxCoverEndpoints.IsValidImage(stagedPath, extension))
         {
             throw new InvalidDataException("The downloaded cover is not a valid image.");
         }
+
+        return extension;
     }
 
     private static string ResolveExtension(Uri source)
