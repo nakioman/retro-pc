@@ -81,7 +81,6 @@ retrobox boot    Start the configured VM; F12 opens the selector.
 retrobox daemon  Run the floppy/NFC hardware integration daemon.
 retrobox vm      List VMs and show/change the default.
 retrobox floppy  Manage cataloged floppy images.
-retrobox import  Import a floppy image from scratch into the catalog.
 retrobox nfc     Read or write NFC-backed floppy labels.
 ```
 

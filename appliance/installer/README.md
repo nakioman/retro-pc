@@ -5,7 +5,7 @@ Debian appliance onto the target machine's internal HDD/SSD.
 
 The installed system is a **writable-root** Debian 13 appliance with a mutable
 `/data` partition, a GPT disk layout with a 512 MiB EFI System Partition, GRUB
-installed as UEFI, SSH maintenance access, and a Samba scratch share — see
+installed as UEFI and SSH maintenance access — see
 [`../README.md`](../README.md) and [`../filesystem-layout.md`](../filesystem-layout.md).
 
 > **First functional slice.** This implements the end-to-end build → boot →
@@ -125,7 +125,7 @@ Re-running the installer over an existing appliance asks whether to keep your da
 - The `/data` partition is **not** reformatted. Only the read-only root
   filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
 - Everything on `/data` survives: VMs (`hdd.raw`), the VM catalog (`vms.yaml`),
-  floppies, snapshots, and Samba scratch.
+  floppies and snapshots.
 - OS-managed profile files (`86box.cfg`, EDID) **are** refreshed; `hdd.raw` and
   `.yaml` files are never overwritten.
 - Answer `n` (or press Enter) to the "Preserve /data?" prompt to fully wipe and
@@ -177,7 +177,7 @@ Automated (CI / local):
   `EFI/BOOT/BOOTX64.EFI` rather than a bare PE binary; that the ISO carries a
   GPT in its system area, which is what UEFI firmware reads once the image is
   `dd`'d to a USB stick; that `target-rootfs.squashfs` is valid; and that the
-  expected package binaries (`sshd`, `smbd`, `plymouth`, `grub-install`,
+  expected package binaries (`sshd`, `plymouth`, `grub-install`,
   `grub-mkimage`) are present.
 
 Manual (on real hardware / a spare disk):
@@ -198,7 +198,7 @@ Fully implemented: two-rootfs build + hybrid BIOS/UEFI ISO, safe disk
 selection, GPT partitioning (ESP + root + /data) with safe MBR→GPT migration
 for legacy installs, offline rootfs extract, UUID fstab (root, ESP, /data),
 read-only root via `ro` + tmpfs + `/var` overlay on `/data`, `retrobox` account
-(root locked) with prompted password, SSH, Samba scratch share, DHCP networking,
+(root locked) with prompted password, SSH, DHCP networking,
 Plymouth boot splash, GRUB-EFI install with hidden menu + recovery
 entry, zram + `/data` swapfile backstop for the low-RAM machine, the
 `retrobox-daemon` / `retrobox-boot` systemd units, and reinstall data

@@ -22,7 +22,7 @@ produced by the repository's publish task. Versions and checksums are pinned in
 This document defines the base layout. The bootable USB installer that turns it
 into an installed, read-only-root system on the appliance disk lives under
 [`installer/`](installer/README.md); the installer is the authoritative source
-for the systemd units, Samba share, read-only-root enforcement, and account
+for the systemd units, read-only-root enforcement, and account
 setup described below until the standalone child issues (#28, #29, #30) land.
 
 ## Machine selector
@@ -81,16 +81,6 @@ The `retrobox` password is set during installation (the installer prompts for
 it) and is required for SSH login and `sudo`. Maintenance is performed over SSH
 as `retrobox`; `PermitRootLogin` is disabled.
 
-Samba exposes only the floppy import drop directory:
-
-```text
-/data/floppies/scratch/
-```
-
-The Samba share must not expose the complete `/data` tree. Imported images are
-moved by `retrobox` into `/data/floppies/cataloged/`; cataloged images,
-configuration, VM disks, and snapshots are not general-purpose network shares.
-
 ## WiFi
 
 The appliance detects a `wl*` interface at boot (`retrobox-wifi-firstboot`).
@@ -125,10 +115,8 @@ the immutable application tree.
 An administrator connecting over SSH should be able to:
 
 1. Inspect `retrobox` YAML catalogs under `/data/retrobox`.
-2. Copy floppy images into `/data/floppies/scratch` through the restricted
-   Samba share or an approved SSH transfer.
-3. Run the published `/opt/retrobox/retrobox` CLI for catalog/import maintenance.
-4. Inspect VM directories and snapshots without changing the base OS.
+2. Use the web panel to upload and manage floppy images.
+3. Inspect VM directories and snapshots without changing the base OS.
 5. Collect service and hardware diagnostics once the systemd units exist.
 
 No DOS, Windows, drivers, games, floppy images, or other copyrighted media are

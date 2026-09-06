@@ -6,7 +6,7 @@
 #   /boot/efi  vfat (EFI System Partition, GRUB-EFI)
 #   /data      rw   (mutable application + system state)
 #   /tmp       tmpfs
-#   /var       overlay with the writable upperdir on /data, so logs, Samba state,
+#   /var       overlay with the writable upperdir on /data, so logs and service state,
 #              DHCP leases, and ALSA state persist without a writable root.
 # SSH host keys and machine-id are generated at install time into the image.
 #

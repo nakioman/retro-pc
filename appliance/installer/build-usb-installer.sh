@@ -298,7 +298,7 @@ unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
 # dialog covers the first-boot prompt; wpa_supplicant + iw are the actual WiFi
 # association backend (systemd-networkd has no native WPA2-PSK); the rtw88 blob
 # confirms firmware-realtek was bundled.
-for bin in usr/sbin/sshd usr/sbin/smbd usr/bin/plymouth usr/sbin/grub-install \
+for bin in usr/sbin/sshd usr/bin/plymouth usr/sbin/grub-install \
            usr/bin/grub-mkimage usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
            usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
     grep -q "/$bin$" "$WORK/target.list" \

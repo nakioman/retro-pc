@@ -7,7 +7,7 @@ Status: Accepted
 
 The appliance should behave like an embedded console, not a general-purpose
 Linux box. Users must not be able to break the base OS while playing, and
-install-time configuration (SSH, Samba, users) should be reproducible across
+install-time configuration (SSH and users) should be reproducible across
 reinstalls.
 
 ## Decision
