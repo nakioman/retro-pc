@@ -20,4 +20,5 @@
 *.dll binary
 *.pdb binary
 *.png binary
+*.stl binary
 *.glsl text

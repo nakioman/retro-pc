@@ -11,8 +11,8 @@ Source: [`floppy-nfc.scad`](floppy-nfc.scad). The shells (`top.stl` +
 and are committed here under that licence. They arrive already positioned as an
 assembly — the base's walls rise to z = 2.4 and the top sits exactly on that
 plane — so the union produces the closed disk with no repositioning. The
-rendered `floppy-nfc.stl` is generated (`mise run floppy-stl`) and stays out of
-git.
+rendered `floppy-nfc.stl` is committed; regenerate it with
+`mise run floppy-stl` after changing the source.
 
 ## What the model does
 

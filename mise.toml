@@ -46,3 +46,8 @@ run = "scripts/retrofloppy-nfc-test.sh"
 [tasks.floppy-stl]
 description = "Render the printable NFC floppy to STL"
 run = "openscad -o hardware/floppy-nfc-blank/floppy-nfc.stl hardware/floppy-nfc-blank/floppy-nfc.scad"
+
+[tasks.case-stl]
+description = "Render Mac Classic case parts to STL (pass part names, or none for all)"
+raw_args = true
+run = "scripts/render-case-stl.sh"

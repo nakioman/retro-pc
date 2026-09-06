@@ -23,8 +23,9 @@ Tech stack: .NET 10 (C# 13), solution `RetroBox.slnx`. Components:
 - `tests/RetroBox.Tests` — xUnit suite for Core, Daemon, and CLI.
 - `firmware/retrofloppy-esp8266` — ESP8266 (NodeMCU) Arduino firmware + vendored
   PN532 libraries, pinned via `sketch.yaml`.
-- `hardware/` — printable parts (parametric OpenSCAD), currently the NFC floppy
-  disk that carries a tag into the drive.
+- `hardware/` — printable parts (parametric OpenSCAD): the Macintosh Classic
+  style case that houses the PC (`mac-classic-case/`) and the NFC floppy disk
+  that carries a tag into the drive (`floppy-nfc-blank/`).
 - `appliance/` — Debian 13 read-only-root appliance layout and the bootable USB
   installer (`appliance/installer/`).
 
@@ -42,6 +43,8 @@ directly for normal project workflows.
 - Compile firmware: `mise run firmware-compile`
 - Upload firmware: `mise run firmware-upload -- <port>`
 - Render the printable NFC floppy: `mise run floppy-stl`
+- Render Mac Classic case parts: `mise run case-stl -- <part> [...]` (no
+  arguments renders every part; slow)
 - Bench-test the NFC path over serial: `mise run nfc-test -- <command>`
 
 `mise.toml` is the source of truth for the .NET tool version and project
@@ -108,6 +111,8 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
   installer.
 - `hardware/floppy-nfc-blank/README.md` — printable NFC floppy: BOM, print
   settings, fit checklist.
+- `hardware/mac-classic-case/README.md` — printable Macintosh Classic style
+  case: BOM, print notes, assembly order.
 
 ## CI
 
