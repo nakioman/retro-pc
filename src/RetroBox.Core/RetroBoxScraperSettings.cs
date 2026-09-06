@@ -20,6 +20,10 @@ public sealed record RetroBoxScraperSettings
 
     public string[] LanguagePriority { get; set; } = [.. DefaultLanguagePriority];
 
+    public int RequestTimeoutSeconds { get; set; } = 60;
+
+    public int MaxDownloadMegabytes { get; set; } = 16;
+
     [YamlIgnore]
     public bool IsDeveloperConfigured => HasValue(DevId) && HasValue(DevPassword);
 

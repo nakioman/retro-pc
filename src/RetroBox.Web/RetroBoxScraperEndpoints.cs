@@ -68,6 +68,16 @@ public static class RetroBoxScraperEndpoints
             {
                 settings.LanguagePriority = patch.LanguagePriority;
             }
+            if (patch.RequestTimeoutSeconds is not null)
+            {
+                settings.RequestTimeoutSeconds = patch.RequestTimeoutSeconds.Value;
+            }
+            if (patch.MaxDownloadMegabytes is not null)
+            {
+                settings.MaxDownloadMegabytes = patch.MaxDownloadMegabytes.Value;
+            }
+            settings.RequestTimeoutSeconds = Math.Clamp(settings.RequestTimeoutSeconds, 5, 600);
+            settings.MaxDownloadMegabytes = Math.Clamp(settings.MaxDownloadMegabytes, 1, 64);
         });
         return Results.Json(
             RetroBoxScraperSettingsView.From(settings),
@@ -127,7 +137,10 @@ public static class RetroBoxScraperEndpoints
         {
             var results = await coverSourceFactory().SearchAsync(query, cancellationToken);
             var response = results.Where(result => result.Media.Any(RetroBoxCoverSelector.IsUsableBox2D))
-                .Select(result => new RetroBoxScraperSearchResultView(result.ScreenScraperId, result.Title))
+                .Select(result => new RetroBoxScraperSearchResultView(
+                    result.ScreenScraperId,
+                    result.Title,
+                    result.Media.FirstOrDefault(RetroBoxCoverSelector.IsUsableBox2D)?.Url))
                 .ToArray();
             return Results.Json(response, RetroBoxWebJsonContext.Default.RetroBoxScraperSearchResultViewArray);
         }

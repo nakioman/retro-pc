@@ -78,6 +78,8 @@ const STRINGS = {
     ssPassword: "Contraseña de ScreenScraper",
     regionPriority: "Prioridad de región",
     languagePriority: "Prioridad de idioma",
+    requestTimeout: "Tiempo máximo de respuesta (segundos)",
+    maxDownload: "Límite de portada descargada (MB)",
     save: "Guardar",
     saved: "Configuración guardada.",
     testCredentials: "Probar credenciales",
@@ -183,6 +185,8 @@ const STRINGS = {
     ssPassword: "ScreenScraper password",
     regionPriority: "Region priority",
     languagePriority: "Language priority",
+    requestTimeout: "Request timeout (seconds)",
+    maxDownload: "Downloaded cover limit (MB)",
     save: "Save",
     saved: "Settings saved.",
     testCredentials: "Test credentials",
@@ -285,6 +289,8 @@ function applyScraperSettings(settings) {
     input.value = "";
     input.dataset.dirty = "false";
   }
+  document.getElementById("request-timeout").value = settings.requestTimeoutSeconds;
+  document.getElementById("max-download").value = settings.maxDownloadMegabytes;
 }
 
 function renderScraperSummary() {
@@ -358,7 +364,9 @@ async function loadScraperSettings() {
 function scraperPayload() {
   const payload = {
     regionPriority: scraperSettings.regionPriority,
-    languagePriority: scraperSettings.languagePriority
+    languagePriority: scraperSettings.languagePriority,
+    requestTimeoutSeconds: Number(document.getElementById("request-timeout").value),
+    maxDownloadMegabytes: Number(document.getElementById("max-download").value)
   };
   for (const input of document.querySelectorAll("#scraper-settings input")) {
     if (input.dataset.dirty === "true") {
@@ -622,7 +630,15 @@ async function searchCovers(event, gameId, input, results, status, button) {
     for (const match of matches) {
       const choice = document.createElement("button");
       choice.type = "button";
-      choice.textContent = t("coverChoose") + ": " + match.title;
+      if (match.thumbnailUrl) {
+        const image = document.createElement("img");
+        image.src = match.thumbnailUrl;
+        image.alt = match.title;
+        image.loading = "lazy";
+        image.className = "cover-result-thumbnail";
+        choice.appendChild(image);
+      }
+      choice.append(t("coverChoose") + ": " + match.title);
       choice.addEventListener("click", () => chooseCover(gameId, match.screenScraperId, choice, status));
       results.appendChild(choice);
     }

@@ -13,6 +13,7 @@ public sealed class RetroBoxCoverCache(
     public const long MaxDownloadBytes = RetroBoxLibraryEndpoints.MaxUploadBytes;
 
     private readonly TimeSpan copyTimeout = copyTimeout ?? RetroBoxScreenScraperCoverSource.RequestTimeout;
+    public long MaximumDownloadBytes { get; set; } = 16 * 1024 * 1024;
 
     public string CreateStagingPath(string extension)
     {
@@ -182,7 +183,7 @@ public sealed class RetroBoxCoverCache(
                 }
 
                 downloaded += read;
-                if (downloaded > MaxDownloadBytes)
+                if (downloaded > MaximumDownloadBytes)
                 {
                     throw new InvalidDataException("The downloaded cover exceeds the size limit.");
                 }

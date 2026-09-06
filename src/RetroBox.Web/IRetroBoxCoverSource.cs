@@ -12,4 +12,5 @@ public sealed record RetroBoxCoverSearchResult(
     string Title,
     IReadOnlyList<RetroBoxCoverMedia> Media);
 
+
 public sealed record RetroBoxCoverMedia(string Type, string? Url, string? Region, string? Language);

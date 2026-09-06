@@ -33,14 +33,16 @@ public sealed record RetroBoxScraperSettingsView(
     bool DeveloperConfigured,
     bool UserConfigured,
     string[] RegionPriority,
-    string[] LanguagePriority)
+    string[] LanguagePriority,
+    int RequestTimeoutSeconds,
+    int MaxDownloadMegabytes)
 {
     public static RetroBoxScraperSettingsView From(RetroBoxScraperSettings settings) => new(
         settings.IsConfigured,
         settings.IsDeveloperConfigured,
         settings.IsUserConfigured,
-        settings.RegionPriority,
-        settings.LanguagePriority);
+        settings.RegionPriority, settings.LanguagePriority,
+        settings.RequestTimeoutSeconds, settings.MaxDownloadMegabytes);
 }
 
 public sealed record RetroBoxScraperSettingsPatch(
@@ -49,9 +51,11 @@ public sealed record RetroBoxScraperSettingsPatch(
     string? SsId,
     string? SsPassword,
     string[]? RegionPriority,
-    string[]? LanguagePriority);
+    string[]? LanguagePriority,
+    int? RequestTimeoutSeconds,
+    int? MaxDownloadMegabytes);
 
-public sealed record RetroBoxScraperSearchResultView(string ScreenScraperId, string Title);
+public sealed record RetroBoxScraperSearchResultView(string ScreenScraperId, string Title, string? ThumbnailUrl);
 
 public sealed record RetroBoxCoverRequest(string? ScreenScraperId);
 

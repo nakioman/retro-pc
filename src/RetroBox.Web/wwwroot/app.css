@@ -192,6 +192,8 @@ legend { padding: 0 0.25rem; color: var(--muted); font-size: 0.75rem; }
 .cover-controls { display: grid; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
 .cover-search, .cover-upload, .cover-results { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .cover-search input { flex: 1; min-width: 12rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: 0.25rem; background: var(--inset); color: var(--text); font: inherit; }
+.cover-results button { display: inline-flex; align-items: center; gap: 0.5rem; }
+.cover-result-thumbnail { width: 3rem; height: 4rem; object-fit: contain; background: var(--inset); }
 
 @media (max-width: 34rem) {
   body { padding: 1rem; }
