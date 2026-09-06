@@ -40,6 +40,11 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         // handler drives shutdown, not this host's lifetime messages.
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         builder.Services.Configure<ConsoleLifetimeOptions>(lifetime => lifetime.SuppressStatusMessages = true);
+        builder.Services.AddHttpClient(RetroBoxScreenScraperCoverSource.HttpClientName, client =>
+        {
+            client.BaseAddress = RetroBoxScreenScraperCoverSource.ApiBaseAddress;
+            client.Timeout = RetroBoxScreenScraperCoverSource.RequestTimeout;
+        });
 
         // Bound to every interface on purpose: the panel is useless if it is not reachable from
         // a phone on the LAN.
