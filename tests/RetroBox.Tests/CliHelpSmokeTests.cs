@@ -48,6 +48,8 @@ public sealed class CliHelpSmokeTests
             "daemon",
             "--config-root",
             "/tmp/retrobox-config",
+            "--floppy-root",
+            "/tmp/retrobox-floppies",
             "--floppy-control-socket",
             "/Users/nacho/Games/86Box/86box.socket",
         ]).Invoke();
@@ -55,6 +57,7 @@ public sealed class CliHelpSmokeTests
         Assert.Equal(0, exitCode);
         Assert.NotNull(request);
         Assert.Equal("/tmp/retrobox-config", request.ConfigRoot);
+        Assert.Equal("/tmp/retrobox-floppies", request.FloppyRoot);
         Assert.Equal("/Users/nacho/Games/86Box/86box.socket", request.FloppyControlSocketPath);
     }
 
@@ -79,6 +82,7 @@ public sealed class CliHelpSmokeTests
 
         Assert.Equal(0, exitCode);
         Assert.NotNull(request);
+        Assert.Equal(RetroBoxFloppyImporter.DefaultFloppyRoot, request.FloppyRoot);
         Assert.Equal("/dev/ttyUSB0", request.SerialPort);
         Assert.Equal(9600, request.SerialBaud);
         Assert.True(request.Echo);
@@ -97,6 +101,7 @@ public sealed class CliHelpSmokeTests
         var help = output.ToString();
         Assert.Contains("--serial-port", help);
         Assert.Contains("--serial-baud", help);
+        Assert.Contains("--floppy-root", help);
         Assert.Contains("--echo", help);
     }
 
@@ -397,6 +402,81 @@ public sealed class CliHelpSmokeTests
             if (Directory.Exists(missingRoot))
             {
                 Directory.Delete(missingRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Daemon_uploads_floppies_under_the_configured_floppy_root()
+    {
+        var layout = TestRetroBoxLayout.Create("retrobox-daemon-floppy-root");
+        var floppyRoot = Path.Combine(layout.Root, "custom-floppies");
+        var originalIn = Console.In;
+        var originalError = Console.Error;
+        const int maxAttempts = 6;
+
+        try
+        {
+            using var client = new HttpClient();
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var stderr = new StringWriter();
+                var input = new PipeTextReader();
+                Console.SetIn(input);
+                Console.SetError(stderr);
+
+                var port = ReserveFreeTcpPort();
+                var url = $"http://127.0.0.1:{port}";
+                var command = CliCommandFactory.CreateRootCommand();
+                using var cancellation = new CancellationTokenSource();
+                var invokeTask = Task.Run(() => command.Parse([
+                    "daemon",
+                    "--config-root",
+                    layout.ConfigRoot,
+                    "--floppy-root",
+                    floppyRoot,
+                    "--web-port",
+                    port.ToString(),
+                ]).InvokeAsync(cancellationToken: cancellation.Token));
+
+                var poll = await WaitForCatalogResponse(client, $"{url}/api/catalog", stderr);
+                if (poll.LostPortRace)
+                {
+                    cancellation.Cancel();
+                    input.Complete();
+                    await AwaitWithinBound(invokeTask);
+                    continue;
+                }
+
+                using var upload = new MultipartFormDataContent
+                {
+                    { new ByteArrayContent([1, 2, 3, 4]), "file", "local.img" },
+                };
+                using var response = await client.PostAsync($"{url}/api/floppies", upload);
+
+                Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+                Assert.True(File.Exists(Path.Combine(floppyRoot, "cataloged", "local.img")));
+                var catalog = File.ReadAllText(Path.Combine(layout.ConfigRoot, "floppies.yaml"));
+                Assert.Contains(Path.Combine(floppyRoot, "cataloged", "local.img"), catalog, StringComparison.Ordinal);
+                Assert.DoesNotContain(RetroBoxFloppyImporter.DefaultCatalogedRoot, catalog, StringComparison.Ordinal);
+
+                cancellation.Cancel();
+                input.Complete();
+                Assert.Equal(0, await AwaitWithinBound(invokeTask));
+                return;
+            }
+
+            Assert.Fail($"Lost the --web-port reservation race {maxAttempts} times in a row.");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetError(originalError);
+
+            if (Directory.Exists(layout.Root))
+            {
+                Directory.Delete(layout.Root, recursive: true);
             }
         }
     }
@@ -756,7 +836,14 @@ public sealed class CliHelpSmokeTests
                 new MutableCatalogSource(
                     FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", "ro")),
                 new RecordingFloppyControlClient(),
-                new RetroBoxDaemonCommandRequest(missingRoot, null, "/dev/retrobox-tracker-reset-test", null, false, 0),
+                new RetroBoxDaemonCommandRequest(
+                    missingRoot,
+                    RetroBoxFloppyImporter.DefaultFloppyRoot,
+                    null,
+                    "/dev/retrobox-tracker-reset-test",
+                    null,
+                    false,
+                    0),
                 new RetroBoxSerialDeviceOptions("/dev/retrobox-tracker-reset-test", 115200),
                 panelIsRunning: true,
                 driveState,

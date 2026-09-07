@@ -12,6 +12,7 @@ namespace RetroBox.Cli;
 
 public sealed record RetroBoxDaemonCommandRequest(
     string ConfigRoot,
+    string FloppyRoot,
     string? FloppyControlSocketPath,
     string? SerialPort,
     int? SerialBaud,
@@ -58,6 +59,11 @@ public static class CliCommandFactory
         Func<RetroBoxSerialDeviceOptions, CancellationToken, Task<RetroBoxSerialDevice>>? serialDeviceOpener)
     {
         var configRootOption = ConfigRootOption();
+        var floppyRootOption = new Option<string>("--floppy-root")
+        {
+            Description = "Root directory for scratch and cataloged floppy images.",
+            DefaultValueFactory = _ => RetroBoxFloppyImporter.DefaultFloppyRoot,
+        };
         var socketPathOption = new Option<string?>("--floppy-control-socket")
         {
             Description = "86Box floppy control Unix socket path.",
@@ -89,6 +95,7 @@ public static class CliCommandFactory
         var command = new Command("daemon", "Run the long-lived Retro PC hardware integration daemon.")
         {
             configRootOption,
+            floppyRootOption,
             socketPathOption,
             serialPortOption,
             serialBaudOption,
@@ -100,6 +107,7 @@ public static class CliCommandFactory
         {
             var request = new RetroBoxDaemonCommandRequest(
                 parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath,
+                parseResult.GetValue(floppyRootOption) ?? RetroBoxFloppyImporter.DefaultFloppyRoot,
                 parseResult.GetValue(socketPathOption),
                 parseResult.GetValue(serialPortOption),
                 parseResult.GetValue(serialBaudOption),
@@ -168,7 +176,7 @@ public static class CliCommandFactory
                 // --serial-port even when it detected no controller, so opening the device first
                 // would abort before the panel ever bound its port.
                 var webHost = await TryStartWebHost(
-                    request.WebPort, request.ConfigRoot, catalogSource, driveState, channelHolder,
+                    request.WebPort, request.ConfigRoot, request.FloppyRoot, catalogSource, driveState, channelHolder,
                     cancellation.Token);
 
                 try
@@ -383,6 +391,7 @@ public static class CliCommandFactory
     private static async Task<RetroBoxWebHost?> TryStartWebHost(
         int port,
         string configRoot,
+        string floppyRoot,
         IRetroBoxCatalogSource catalogSource,
         IRetroBoxDriveState driveState,
         IRetroBoxNfcCommandChannel nfcChannel,
@@ -396,7 +405,13 @@ public static class CliCommandFactory
         try
         {
             return await RetroBoxWebHost.StartAsync(
-                new RetroBoxWebOptions { Port = port, ConfigRoot = configRoot },
+                new RetroBoxWebOptions
+                {
+                    Port = port,
+                    ConfigRoot = configRoot,
+                    ScratchRoot = Path.Combine(floppyRoot, "scratch"),
+                    CatalogedRoot = Path.Combine(floppyRoot, "cataloged"),
+                },
                 catalogSource,
                 cancellationToken,
                 driveState,

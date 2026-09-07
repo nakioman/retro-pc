@@ -23,8 +23,9 @@ public sealed record RetroBoxFloppyImportResult(string Id, string ImagePath);
 
 public sealed class RetroBoxFloppyImporter
 {
-    public const string DefaultScratchRoot = "/data/floppies/scratch";
-    public const string DefaultCatalogedRoot = "/data/floppies/cataloged";
+    public const string DefaultFloppyRoot = "/data/floppies";
+    public const string DefaultScratchRoot = DefaultFloppyRoot + "/scratch";
+    public const string DefaultCatalogedRoot = DefaultFloppyRoot + "/cataloged";
 
     public RetroBoxFloppyImportResult Import(RetroBoxFloppyImportRequest request)
     {
