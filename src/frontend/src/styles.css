@@ -586,6 +586,14 @@ legend {
   min-height: 85px;
   align-items: center;
 }
+.cover-search-status {
+  min-height: 20px;
+  margin-bottom: 8px;
+  padding: 3px 6px;
+  border: 1px solid;
+  border-color: var(--shadow) var(--white) var(--white) var(--shadow);
+  background: var(--white);
+}
 .cover-option {
   height: 112px;
   width: 83px;

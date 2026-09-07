@@ -223,11 +223,10 @@ export function FloppiesPage() {
         target={nfcTarget}
         t={t}
         onClose={() => setNfcTarget(null)}
-        onDone={(message) => {
+        onDone={() => {
           setNfcTarget(null);
-          notifyAfterReload(message);
+          void reload();
         }}
-        onError={setError}
       />
       <CoverDialog
         target={coverTarget}

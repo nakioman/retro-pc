@@ -3,60 +3,85 @@ import { api } from "../../../../api/client";
 import { isApiError } from "../../../../api/types/ApiError";
 import type { Floppy } from "../../../../api/types/Floppy";
 import { Dialog } from "../../../../components/Dialog";
-import type { MessageKey } from "../../../../i18n";
+import { MessageBox } from "../../../../components/MessageBox";
+import type { Translator } from "../../../../components/shell/AppShellContext";
 
 export function NfcDialog({
   target,
   t,
   onClose,
   onDone,
-  onError,
 }: {
   target: Floppy | null;
-  t: (key: MessageKey) => string;
+  t: Translator;
   onClose: () => void;
-  onDone: (message: string) => void;
-  onError: (message: string) => void;
+  onDone: () => void;
 }) {
   const [ready, setReady] = useState(false);
   const [uid, setUid] = useState<string>();
+  const [status, setStatus] = useState<string>(t("detecting"));
+  const [reassignment, setReassignment] = useState<{ uid: string; owner: string } | null>(null);
 
   useEffect(() => {
+    if (!target) return;
+
+    let active = true;
     setReady(false);
     setUid(undefined);
-  }, [target]);
+    setStatus(t("detecting"));
+    setReassignment(null);
+    const detect = async () => {
+      try {
+        const drive = await api.drive();
+        if (!active) return;
+        if (drive.state === "blankTag" || drive.state === "loaded") {
+          setReady(true);
+          setUid(drive.tagUid ?? undefined);
+          setStatus(t("ready"));
+          return;
+        }
+        setReady(false);
+        setUid(undefined);
+        setStatus(t("detecting"));
+      } catch {
+        if (!active) return;
+        setReady(false);
+        setUid(undefined);
+        setStatus(t("nfcDriveUnavailable"));
+      }
+    };
 
-  const detect = async () => {
+    void detect();
+    const interval = window.setInterval(() => void detect(), 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [t, target]);
+
+  const write = async (confirm = false, tagUid = uid) => {
+    if (!target) return;
     try {
-      const drive = await api.drive();
-      if (drive.state === "blankTag" || drive.state === "loaded") {
-        setReady(true);
-        setUid(drive.tagUid ?? undefined);
+      await api.writeNfc(target.id, confirm, tagUid);
+      onDone();
+    } catch (value) {
+      if (isApiError(value) && value.code === "tag-already-assigned" && value.tagUid) {
+        setReassignment({
+          uid: value.tagUid,
+          owner: value.previousFloppyId ?? "",
+        });
         return;
       }
-      onError("No hay un disquete disponible en la unidad.");
-    } catch {
-      onError("No se pudo consultar la unidad.");
+      setReady(false);
+      setStatus(isApiError(value) ? value.message : t("nfcWriteFailed"));
     }
   };
 
-  const write = async (confirm = false) => {
-    if (!target) return;
-    try {
-      await api.writeNfc(target.id, confirm, uid);
-      onDone(t("save"));
-    } catch (value) {
-      if (
-        isApiError(value) &&
-        value.code === "tag-already-assigned" &&
-        window.confirm(value.message)
-      ) {
-        setUid(value.tagUid ?? undefined);
-        await write(true);
-        return;
-      }
-      onError(isApiError(value) ? value.message : "No se pudo escribir la etiqueta.");
-    }
+  const confirmReassignment = async () => {
+    if (!reassignment) return;
+    const { uid: tagUid } = reassignment;
+    setReassignment(null);
+    await write(true, tagUid);
   };
 
   return (
@@ -76,9 +101,31 @@ export function NfcDialog({
       <p>{target?.label}</p>
       <p>{t("nfcInstructions")}</p>
       <div className="inset">
-        <p>{ready ? t("ready") : t("detecting")}</p>
-        <button onClick={() => void detect()}>{t("detect")}</button>
+        <p>{status}</p>
       </div>
+      <MessageBox
+        presentation="embedded"
+        message={
+          reassignment
+            ? {
+                title: t("confirmNfc"),
+                text: t("nfcAlreadyAssigned", { name: reassignment.owner }),
+                kind: "warning",
+              }
+            : null
+        }
+        onDismiss={() => setReassignment(null)}
+        actions={
+          reassignment ? (
+            <>
+              <button onClick={() => void confirmReassignment()}>{t("reassignNfc")}</button>
+              <button autoFocus onClick={() => setReassignment(null)}>
+                {t("cancel")}
+              </button>
+            </>
+          ) : undefined
+        }
+      />
     </Dialog>
   );
 }

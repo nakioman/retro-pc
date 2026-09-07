@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { TitleBar } from "./shell/TitleBar";
 
 export type MessageBoxKind = "error" | "info" | "warning";
@@ -13,24 +13,28 @@ export function MessageBox({
   message,
   onDismiss,
   presentation = "modal",
+  actions,
 }: {
   message: MessageBoxMessage | null;
   onDismiss: () => void;
   presentation?: "embedded" | "modal";
+  actions?: ReactNode;
 }) {
   if (presentation === "embedded") {
-    return <EmbeddedMessageBox message={message} onDismiss={onDismiss} />;
+    return <EmbeddedMessageBox message={message} onDismiss={onDismiss} actions={actions} />;
   }
 
-  return <ModalMessageBox message={message} onDismiss={onDismiss} />;
+  return <ModalMessageBox message={message} onDismiss={onDismiss} actions={actions} />;
 }
 
 function ModalMessageBox({
   message,
   onDismiss,
+  actions,
 }: {
   message: MessageBoxMessage | null;
   onDismiss: () => void;
+  actions?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const dismiss = () => {
@@ -67,11 +71,13 @@ function ModalMessageBox({
           <p>{message?.text}</p>
         </div>
         <div className="message-box-actions">
-          <form method="dialog">
-            <button autoFocus type="submit">
-              Aceptar
-            </button>
-          </form>
+          {actions ?? (
+            <form method="dialog">
+              <button autoFocus type="submit">
+                Aceptar
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </dialog>
@@ -81,9 +87,11 @@ function ModalMessageBox({
 function EmbeddedMessageBox({
   message,
   onDismiss,
+  actions,
 }: {
   message: MessageBoxMessage | null;
   onDismiss: () => void;
+  actions?: ReactNode;
 }) {
   if (!message) return null;
 
@@ -101,9 +109,11 @@ function EmbeddedMessageBox({
             <p>{message.text}</p>
           </div>
           <div className="message-box-actions">
-            <button autoFocus type="button" onClick={onDismiss}>
-              Aceptar
-            </button>
+            {actions ?? (
+              <button autoFocus type="button" onClick={onDismiss}>
+                Aceptar
+              </button>
+            )}
           </div>
         </div>
       </section>
