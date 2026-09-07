@@ -89,6 +89,19 @@ retrobox floppy  Manage cataloged floppy images.
 retrobox nfc     Read or write NFC-backed floppy labels.
 ```
 
+To run the daemon from source without writing floppy uploads under `/data`,
+configure the YAML catalog and floppy image roots independently:
+
+```bash
+mise run cli -- daemon \
+  --config-root ../appliance/installer/payload/retrobox \
+  --floppy-root ./local-data/floppies
+```
+
+Uploaded images are staged under `<floppy-root>/scratch` and moved to
+`<floppy-root>/cataloged`. If omitted, `--floppy-root` defaults to
+`/data/floppies` for the appliance.
+
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — system overview and data flow.
