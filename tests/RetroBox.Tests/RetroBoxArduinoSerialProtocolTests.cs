@@ -156,6 +156,7 @@ public sealed class RetroBoxArduinoSerialProtocolTests
     [Theory]
     [InlineData("bad id", "ro")]
     [InlineData("monkey1-disk1", "bad")]
+    [InlineData("123456789012345678901234567890", "ro")]
     public void Build_write_command_rejects_invalid_payload(string id, string mode)
     {
         Assert.Throws<RetroBoxArduinoSerialProtocolException>(() =>

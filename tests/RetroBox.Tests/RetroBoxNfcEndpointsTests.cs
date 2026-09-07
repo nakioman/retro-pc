@@ -41,6 +41,21 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_rejects_a_legacy_id_that_exceeds_the_NFC_payload_limit()
+    {
+        const string id = "123456789012345678901234567890";
+        WriteCatalog(id);
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, id, confirm: false);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("nfc-payload-too-long", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(channel.Calls);
+    }
+
+    [Fact]
     public async Task Write_assigns_a_blank_tag()
     {
         var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };

@@ -57,6 +57,14 @@ public static class RetroBoxNfcEndpoints
             return RetroBoxWebResults.Error(StatusCodes.Status404NotFound, "unknown-floppy", $"Unknown floppy '{request.FloppyId}'.");
         }
 
+        if (!RetroBoxFloppyId.FitsNfcPayload(request.FloppyId, floppy.Mode))
+        {
+            return RetroBoxWebResults.Error(
+                StatusCodes.Status400BadRequest,
+                "nfc-payload-too-long",
+                $"The floppy ID is too long for the {RetroBoxFloppyId.NfcPayloadMaxBytes}-byte NFC tag payload.");
+        }
+
         // Every serial exchange happens outside RetroBoxFloppyLibrary's lock. Each is bounded at
         // five seconds, and that lock is also taken by upload, delete and rename — holding it
         // across two round trips would freeze the whole library on a wedged controller.

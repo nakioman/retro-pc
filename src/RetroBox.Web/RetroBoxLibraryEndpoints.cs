@@ -64,12 +64,6 @@ public static class RetroBoxLibraryEndpoints
                 "Only .img, .ima and .dsk images can be imported.");
         }
 
-        var slug = RetroBoxCatalogRules.Slugify(Path.GetFileNameWithoutExtension(fileName));
-        if (slug.Length == 0)
-        {
-            return RetroBoxWebResults.Error(StatusCodes.Status400BadRequest, "unusable-name", "The filename yields no usable catalog ID.");
-        }
-
         Directory.CreateDirectory(options.ScratchRoot);
 
         // Staged under a name nothing can collide on: the ID this upload will get is not known
@@ -98,7 +92,7 @@ public static class RetroBoxLibraryEndpoints
                 // reported to the uploader as "your file was bad."
                 library.EnsureCatalogIsLoadable();
 
-                var resolvedId = ResolveFreeId(slug, catalogSource);
+                var resolvedId = ResolveFreeId(catalogSource);
 
                 // Both the scratch and the cataloged filename come from the resolved ID, not the
                 // uploaded name: RetroBoxFloppyImporter targets catalogedRoot/Path.GetFileName(source),
@@ -222,22 +216,17 @@ public static class RetroBoxLibraryEndpoints
         return Results.NoContent();
     }
 
-    private static string ResolveFreeId(string slug, IRetroBoxCatalogSource catalogSource)
+    private static string ResolveFreeId(IRetroBoxCatalogSource catalogSource)
     {
         var existing = catalogSource.Current.Floppies;
-        if (!existing.ContainsKey(slug))
+        string candidate;
+        do
         {
-            return slug;
+            candidate = RetroBoxFloppyId.Create();
         }
+        while (existing.ContainsKey(candidate));
 
-        for (var suffix = 2; ; suffix++)
-        {
-            var candidate = $"{slug}-{suffix}";
-            if (!existing.ContainsKey(candidate))
-            {
-                return candidate;
-            }
-        }
+        return candidate;
     }
 
     // The catalog file just changed underneath us. The watcher would notice, but only after its
