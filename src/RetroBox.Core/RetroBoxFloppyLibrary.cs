@@ -21,7 +21,16 @@ public sealed class RetroBoxFloppyLibrary(RetroBoxConfigStore store, Action<stri
 
             var floppies = new Dictionary<string, RetroBoxFloppy>(data.Floppies, StringComparer.Ordinal);
             floppies.Remove(id);
-            store.Save(data with { Floppies = floppies });
+            var games = new Dictionary<string, RetroBoxGame>(data.Games, StringComparer.Ordinal);
+            foreach (var (gameId, game) in data.Games)
+            {
+                if (game.FloppyIds.Contains(id, StringComparer.Ordinal))
+                {
+                    games[gameId] = game with { FloppyIds = [.. game.FloppyIds.Where(floppyId => floppyId != id)] };
+                }
+            }
+
+            store.Save(data with { Floppies = floppies, Games = games });
 
             try
             {

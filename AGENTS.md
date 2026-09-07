@@ -20,6 +20,9 @@ Tech stack: .NET 10 (C# 13), solution `RetroBox.slnx`. Components:
   `CliCommandFactory.cs`).
 - `src/RetroBox.Daemon` — long-lived floppy/NFC event loop driving the 86Box
   floppy control socket.
+- `src/frontend` — React, Vite, TypeScript, BrowserRouter and the embedded
+  desktop panel source. Its production output is generated into
+  `src/RetroBox.Web/wwwroot`.
 - `tests/RetroBox.Tests` — xUnit suite for Core, Daemon, and CLI.
 - `firmware/retrofloppy-esp8266` — ESP8266 (NodeMCU) Arduino firmware + vendored
   PN532 libraries, pinned via `sketch.yaml`.
@@ -35,6 +38,10 @@ Use `mise` tasks as the project command interface. Do not invoke `dotnet`
 directly for normal project workflows.
 
 - Restore dependencies: `mise run restore`
+- Install frontend dependencies: `mise run frontend-install`
+- Lint frontend: `mise run frontend-lint`
+- Verify frontend formatting: `mise run frontend-format-check`
+- Build/type-check frontend: `mise run frontend-build`
 - Run tests: `mise run test`
 - Apply formatting: `mise run format`
 - Verify formatting: `mise run format-check`
@@ -50,6 +57,12 @@ directly for normal project workflows.
 `mise.toml` is the source of truth for the .NET tool version and project
 commands. If a command needs to change, update `mise.toml` first and keep this
 file aligned.
+
+The React panel is packaged into the appliance binary: do not hand-edit files
+under `src/RetroBox.Web/wwwroot`; edit `src/frontend` and run
+`mise run frontend-build`. Lint and Prettier verification are required by both
+`mise run format-check` and CI. Keep public routes compatible with the
+BrowserRouter fallback in `RetroBoxWebHost`; API paths must remain under `/api`.
 
 ## Verification
 

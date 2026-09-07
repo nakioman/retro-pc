@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroManager 3.1 - Message Boxes Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "MS Sans Serif", Tahoma, Geneva, sans-serif;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        body {
+            background-color: #008080;
+            margin: 0;
+            padding: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .win31-window {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 98vw;
+            height: 96vh;
+            padding: 3px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .title-bar {
+            background-color: #000080;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .btn-3d {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            padding: 4px 14px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #000000;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 75px;
+        }
+
+        .btn-3d:active {
+            border: 2px solid #000000;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 5px 13px 3px 15px;
+        }
+
+        .sunken-box {
+            background-color: #ffffff;
+            border: 2px solid #808080;
+            border-right-color: #ffffff;
+            border-bottom-color: #ffffff;
+            padding: 12px;
+        }
+
+        /* --- ESTILOS DE MESSAGE BOX (WINDOWS 3.1) --- */
+        .msgbox-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.2);
+            z-index: 500;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .msgbox-dialog {
+            background-color: #c0c0c0;
+            border: 2px solid #ffffff;
+            border-right-color: #000000;
+            border-bottom-color: #000000;
+            box-shadow: 2px 2px 0px #000;
+            width: 420px;
+            padding: 3px;
+        }
+
+        .msgbox-body {
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .msgbox-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        /* Iconos vectoriales retro pixel-art con SVG puro */
+        .msgbox-icon {
+            width: 32px;
+            height: 32px;
+            flex-shrink: 0;
+        }
+
+        .msgbox-text {
+            color: #000000;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+            padding-top: 4px;
+        }
+
+        .msgbox-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="win31-window">
+        <div class="title-bar">
+            <span>💾 RetroManager 3.1 - Pruebas de Diálogos de Sistema</span>
+        </div>
+
+        <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+            <h3>Probar Message Boxes de Windows 3.1:</h3>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-3d" onclick="showErrorBox()">⛔ Mostrar Error (Stop)</button>
+                <button class="btn-3d" onclick="showWarningBox()">⚠️ Mostrar Warning (Exclamation)</button>
+                <button class="btn-3d" onclick="showInfoBox()">ℹ️ Mostrar Info (Information)</button>
+            </div>
+
+            <div class="sunken-box" style="margin-top: 20px;">
+                <strong>Estado:</strong> <span id="logState">Esperando acción del usuario...</span>
+            </div>
+        </div>
+
+        <!-- MODAL GENÉRICO DE MESSAGE BOX -->
+        <div id="msgBoxOverlay" class="msgbox-overlay">
+            <div class="msgbox-dialog">
+                <div class="title-bar">
+                    <span id="msgBoxTitle">Título del Mensaje</span>
+                </div>
+                <div class="msgbox-body">
+                    <div class="msgbox-content">
+                        <!-- Contenedor del Icono -->
+                        <div id="msgBoxIconContainer" class="msgbox-icon"></div>
+                        <!-- Texto del Mensaje -->
+                        <div id="msgBoxText" class="msgbox-text">Texto de prueba...</div>
+                    </div>
+                    <!-- Botones dinámicos -->
+                    <div id="msgBoxButtons" class="msgbox-buttons"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- SVGs estilo Windows 3.1 Pixel Art ---
+        const retroIcons = {
+            error: `
+                <svg viewBox="0 0 32 32" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" fill="#cc0000" stroke="#000000" stroke-width="2"/>
+                    <rect x="6" y="13" width="20" height="6" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+                </svg>
+            `,
+            warning: `
+                <svg viewBox="0 0 32 32" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                    <polygon points="16,2 30,28 2,28" fill="#fce94f" stroke="#000000" stroke-width="2"/>
+                    <rect x="14" y="10" width="4" height="9" fill="#000000"/>
+                    <rect x="14" y="21" width="4" height="4" fill="#000000"/>
+                </svg>
+            `,
+            info: `
+                <svg viewBox="0 0 32 32" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" fill="#3465a4" stroke="#000000" stroke-width="2"/>
+                    <rect x="14" y="7" width="4" height="4" fill="#ffffff"/>
+                    <rect x="14" y="13" width="4" height="11" fill="#ffffff"/>
+                </svg>
+            `
+        };
+
+        function showMessageBox({ title, message, type = 'info', buttons = [{ label: 'Aceptar', callback: null }] }) {
+            document.getElementById('msgBoxTitle').innerText = title;
+            document.getElementById('msgBoxText').innerText = message;
+            document.getElementById('msgBoxIconContainer').innerHTML = retroIcons[type] || retroIcons.info;
+
+            const btnContainer = document.getElementById('msgBoxButtons');
+            btnContainer.innerHTML = '';
+
+            buttons.forEach(btnConfig => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-3d';
+                btn.innerText = btnConfig.label;
+                btn.onclick = () => {
+                    closeMessageBox();
+                    if (btnConfig.callback) btnConfig.callback();
+                };
+                btnContainer.appendChild(btn);
+            });
+
+            document.getElementById('msgBoxOverlay').style.display = 'flex';
+        }
+
+        function closeMessageBox() {
+            document.getElementById('msgBoxOverlay').style.display = 'none';
+        }
+
+        // --- Ejemplos de uso ---
+        function showErrorBox() {
+            showMessageBox({
+                title: "Error de 86Box",
+                message: "No se pudo acceder al archivo de imagen 'win95_disk.vhdx'. El archivo está bloqueado por otro proceso o no existe.",
+                type: "error",
+                buttons: [
+                    { label: "Reintentar", callback: () => log("Reintentando lectura de VHDX...") },
+                    { label: "Cancelar", callback: () => log("Operación cancelada por el usuario.") }
+                ]
+            });
+        }
+
+        function showWarningBox() {
+            showMessageBox({
+                title: "Advertencia de Backup",
+                message: "Esta acción reemplazará la configuración actual de 86box.cfg con la copia elegida. ¿Desea continuar?",
+                type: "warning",
+                buttons: [
+                    { label: "Sí", callback: () => log("Backup restaurado correctamente.") },
+                    { label: "No", callback: () => log("Restauración cancelada.") }
+                ]
+            });
+        }
+
+        function showInfoBox() {
+            showMessageBox({
+                title: "RetroManager 3.1",
+                message: "La copia de seguridad 'Instalación limpia Win95' (2.1 GB) fue descargada exitosamente en su equipo.",
+                type: "info",
+                buttons: [
+                    { label: "Aceptar", callback: () => log("Confirmación de información.") }
+                ]
+            });
+        }
+
+        function log(msg) {
+            document.getElementById('logState').innerText = msg;
+        }
+    </script>
+</body>
+</html>

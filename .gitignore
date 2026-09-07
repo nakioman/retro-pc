@@ -3,6 +3,7 @@ bin/
 obj/
 **/bin/
 **/obj/
+**/node_modules/
 
 # Test and coverage outputs
 TestResults/
