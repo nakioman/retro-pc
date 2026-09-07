@@ -6,7 +6,9 @@ import type { Game } from "../../../../api/types/Game";
 import type { ScraperResult } from "../../../../api/types/ScraperResult";
 import { CoverSample } from "../../../../components/GameGroup";
 import { Dialog } from "../../../../components/Dialog";
-import type { MessageKey } from "../../../../i18n";
+import type { Translator } from "../../../../components/shell/AppShellContext";
+
+type CoverSearchState = "idle" | "loading" | "empty" | "results" | "error";
 
 export function CoverDialog({
   target,
@@ -16,7 +18,7 @@ export function CoverDialog({
   onError,
 }: {
   target: Game | null;
-  t: (key: MessageKey) => string;
+  t: Translator;
   onClose: () => void;
   onDone: () => void;
   onError: (message: string) => void;
@@ -26,12 +28,14 @@ export function CoverDialog({
   const [selected, setSelected] = useState<ScraperResult | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [searchState, setSearchState] = useState<CoverSearchState>("idle");
 
   useEffect(() => {
     setQuery(target?.label ?? "");
     setResults([]);
     setSelected(null);
     setFile(null);
+    setSearchState("idle");
   }, [target]);
 
   useEffect(() => {
@@ -46,10 +50,15 @@ export function CoverDialog({
 
   const search = async (event: FormEvent) => {
     event.preventDefault();
+    setSearchState("loading");
+    setResults([]);
+    setSelected(null);
     try {
-      setResults(await api.searchCovers(query));
-    } catch (value) {
-      onError(isApiError(value) ? value.message : "No se pudieron buscar carátulas.");
+      const nextResults = await api.searchCovers(query);
+      setResults(nextResults);
+      setSearchState(nextResults.length === 0 ? "empty" : "results");
+    } catch {
+      setSearchState("error");
     }
   };
 
@@ -107,14 +116,27 @@ export function CoverDialog({
                 {t("name")}
                 <input value={query} onChange={(event) => setQuery(event.target.value)} />
               </label>
-              <button>{t("searchCover")}</button>
+              <button disabled={searchState === "loading"}>
+                {searchState === "loading" ? t("searchingCovers") : t("searchCover")}
+              </button>
             </form>
           </fieldset>
         </div>
       </div>
       <fieldset>
-        <legend>Resultados</legend>
-        <div className="cover-results">
+        <legend>{t("coverSearchResults")}</legend>
+        {searchState !== "idle" && (
+          <p
+            className={`cover-search-status${searchState === "error" ? " error" : ""}`}
+            aria-live="polite"
+          >
+            {searchState === "loading" && t("searchingCovers")}
+            {searchState === "empty" && t("noCoverResults")}
+            {searchState === "results" && t("coverResultsFound", { count: results.length })}
+            {searchState === "error" && t("coverSearchFailed")}
+          </p>
+        )}
+        <div className="cover-results" aria-busy={searchState === "loading"}>
           {results.map((result) => (
             <button
               className="cover-option"
