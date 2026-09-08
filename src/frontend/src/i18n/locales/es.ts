@@ -70,6 +70,7 @@ export const es = {
   editCover: "Propiedades de carátula",
   localFile: "Archivo local",
   searchCover: "Buscar en ScreenScraper",
+  savingCover: "Guardando…",
   searchingCovers: "Buscando carátulas…",
   coverSearchResults: "Resultados",
   coverResultsFound: "Se encontraron {count} carátula(s).",

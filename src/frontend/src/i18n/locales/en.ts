@@ -72,6 +72,7 @@ export const en: Record<keyof typeof es, string> = {
   editCover: "Cover properties",
   localFile: "Local file",
   searchCover: "Search ScreenScraper",
+  savingCover: "Saving…",
   searchingCovers: "Searching covers…",
   coverSearchResults: "Results",
   coverResultsFound: "Found {count} cover(s).",

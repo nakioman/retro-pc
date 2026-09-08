@@ -29,6 +29,7 @@ export function CoverDialog({
   const [file, setFile] = useState<File | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [searchState, setSearchState] = useState<CoverSearchState>("idle");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setQuery(target?.label ?? "");
@@ -36,6 +37,7 @@ export function CoverDialog({
     setSelected(null);
     setFile(null);
     setSearchState("idle");
+    setIsSaving(false);
   }, [target]);
 
   useEffect(() => {
@@ -63,7 +65,8 @@ export function CoverDialog({
   };
 
   const save = async () => {
-    if (!target) return;
+    if (!target || isSaving) return;
+    setIsSaving(true);
     try {
       if (file) await api.uploadCover(target.id, file);
       else if (selected) await api.selectCover(target.id, selected.screenScraperId);
@@ -71,6 +74,8 @@ export function CoverDialog({
       onDone();
     } catch (value) {
       onError(isApiError(value) ? value.message : "No se pudo guardar la carátula.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -81,10 +86,12 @@ export function CoverDialog({
       onClose={onClose}
       actions={
         <>
-          <button onClick={() => void save()} disabled={!selected && !file}>
-            {t("accept")}
+          <button onClick={() => void save()} disabled={isSaving || (!selected && !file)}>
+            {isSaving ? t("savingCover") : t("accept")}
           </button>
-          <button onClick={onClose}>{t("cancel")}</button>
+          <button disabled={isSaving} onClick={onClose}>
+            {t("cancel")}
+          </button>
         </>
       }
     >
@@ -106,6 +113,7 @@ export function CoverDialog({
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp"
+              disabled={isSaving}
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </fieldset>
@@ -114,9 +122,13 @@ export function CoverDialog({
             <form onSubmit={search}>
               <label>
                 {t("name")}
-                <input value={query} onChange={(event) => setQuery(event.target.value)} />
+                <input
+                  value={query}
+                  disabled={isSaving}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
               </label>
-              <button disabled={searchState === "loading"}>
+              <button disabled={isSaving || searchState === "loading"}>
                 {searchState === "loading" ? t("searchingCovers") : t("searchCover")}
               </button>
             </form>
@@ -141,6 +153,7 @@ export function CoverDialog({
             <button
               className="cover-option"
               key={result.screenScraperId}
+              disabled={isSaving}
               aria-pressed={selected?.screenScraperId === result.screenScraperId}
               onClick={() => {
                 setSelected(result);
