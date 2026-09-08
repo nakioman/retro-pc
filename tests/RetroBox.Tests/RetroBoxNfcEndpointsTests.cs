@@ -41,6 +41,21 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_rejects_a_legacy_id_that_exceeds_the_NFC_payload_limit()
+    {
+        const string id = "123456789012345678901234567890";
+        WriteCatalog(id);
+        var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
+        await using var context = await StartAsync(channel);
+
+        using var response = await PostAsync(context, id, confirm: false);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("nfc-payload-too-long", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(channel.Calls);
+    }
+
+    [Fact]
     public async Task Write_assigns_a_blank_tag()
     {
         var channel = new StubNfcCommandChannel { TagIdResponse = new NfcResponse.TagId("04A13BFE") };
@@ -67,6 +82,9 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         }
 
+        new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root)).UpdateLabelAndMode("disk1", "Monkey Island", null);
+        context.Source.TryReload();
+
         channel.Calls.Clear();
         using var second = await PostAsync(context, "disk2", confirm: false);
 
@@ -74,6 +92,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         var body = await second.Content.ReadAsStringAsync();
         Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
         Assert.Contains("disk1", body, StringComparison.Ordinal);
+        Assert.Contains("\"previousFloppyLabel\":\"Monkey Island\"", body, StringComparison.Ordinal);
 
         // The uid has to travel on the 409: RetroBoxDriveEndpoints deliberately returns a null
         // tagUid for the loaded state, so the panel has no other way to learn which tag the

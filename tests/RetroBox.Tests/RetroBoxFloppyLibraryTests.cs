@@ -63,6 +63,24 @@ public sealed class RetroBoxFloppyLibraryTests : IDisposable
     }
 
     [Fact]
+    public void Delete_removes_the_floppy_from_its_game_before_saving_the_catalog()
+    {
+        WriteCatalog("disk1", "disk2");
+        File.WriteAllText(
+            Path.Combine(root, "games.yaml"),
+            "games:\n  game:\n    label: Game\n    floppyIds: [disk1, disk2]\n");
+        var image = Path.Combine(root, "disk2.img");
+        var library = new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root));
+
+        library.Delete("disk2");
+
+        var catalog = new RetroBoxConfigStore(root).Load();
+        Assert.Equal(["disk1"], catalog.Games["game"].FloppyIds);
+        Assert.DoesNotContain("disk2", catalog.Floppies.Keys);
+        Assert.False(File.Exists(image));
+    }
+
+    [Fact]
     public void DeleteGame_removes_its_floppies_before_ignoring_an_image_cleanup_failure()
     {
         WriteCatalog("disk1");

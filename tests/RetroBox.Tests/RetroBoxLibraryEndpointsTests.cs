@@ -39,11 +39,12 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("MONKEY1.IMG"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Contains("monkey1", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
+        var id = GetCreatedId(response);
+        Assert.True(RetroBoxCatalogRules.IsValidId(id));
+        Assert.True(RetroBoxFloppyId.FitsNfcPayload(id, RetroBoxFloppyCatalogRules.ReadWriteMode));
+        Assert.Contains($"\"id\":\"{id}\"", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
 
-        // The cataloged filename is derived from the resolved ID and the (lowercased) extension,
-        // not the raw upload name — see Post_floppies_uploads_the_same_filename_twice for why.
-        Assert.True(File.Exists(Path.Combine(root, "cataloged", "monkey1.img")));
+        Assert.True(File.Exists(Path.Combine(root, "cataloged", id + ".img")));
     }
 
     [Fact]
@@ -74,7 +75,7 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Post_floppies_suffixes_a_colliding_id()
+    public async Task Post_floppies_generates_distinct_compact_ids_for_matching_filenames()
     {
         await using var context = await StartAsync();
 
@@ -84,9 +85,12 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         Assert.Equal(HttpStatusCode.Created, second.StatusCode);
 
+        var firstId = GetCreatedId(first);
+        var secondId = GetCreatedId(second);
+        Assert.NotEqual(firstId, secondId);
         var catalog = await context.Client.GetStringAsync("/api/catalog");
-        Assert.Contains("\"id\":\"disk\"", catalog, StringComparison.Ordinal);
-        Assert.Contains("\"id\":\"disk-2\"", catalog, StringComparison.Ordinal);
+        Assert.Contains($"\"id\":\"{firstId}\"", catalog, StringComparison.Ordinal);
+        Assert.Contains($"\"id\":\"{secondId}\"", catalog, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,54 +101,45 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         using var first = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img"));
         using var second = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img"));
 
-        // Both uploads share an original filename. RetroBoxFloppyImporter targets
-        // catalogedRoot/Path.GetFileName(source), so without deriving the scratch/cataloged
-        // filename from the resolved ID, the second upload's File.Move would collide with the
-        // first's cataloged/disk.img even though the two catalog IDs (disk, disk-2) don't collide.
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         Assert.Equal(HttpStatusCode.Created, second.StatusCode);
 
+        var firstId = GetCreatedId(first);
+        var secondId = GetCreatedId(second);
+        Assert.NotEqual(firstId, secondId);
         var catalog = await context.Client.GetStringAsync("/api/catalog");
-        Assert.Contains("\"id\":\"disk\"", catalog, StringComparison.Ordinal);
-        Assert.Contains("\"id\":\"disk-2\"", catalog, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(root, "cataloged", "disk.img")));
-        Assert.True(File.Exists(Path.Combine(root, "cataloged", "disk-2.img")));
+        Assert.Contains($"\"id\":\"{firstId}\"", catalog, StringComparison.Ordinal);
+        Assert.Contains($"\"id\":\"{secondId}\"", catalog, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(root, "cataloged", firstId + ".img")));
+        Assert.True(File.Exists(Path.Combine(root, "cataloged", secondId + ".img")));
     }
 
     [Fact]
-    public async Task Post_floppies_reports_a_scratch_name_collision_without_deleting_the_existing_file()
+    public async Task Post_floppies_accepts_a_filename_without_a_catalog_id()
     {
         await using var context = await StartAsync();
 
-        // A file with the exact name this upload will resolve to can already be sitting in the
-        // scratch root before the request ever arrives.
-        var preExisting = Path.Combine(root, "scratch", "disk.img");
-        var preExistingContent = new byte[] { 1, 2, 3, 4 };
-        File.WriteAllBytes(preExisting, preExistingContent);
+        using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("!!!.img"));
 
-        using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img"));
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Contains("scratch-name-taken", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-
-        // The assertion that actually matters: the file this request did not create is untouched.
-        Assert.True(File.Exists(preExisting));
-        Assert.Equal(preExistingContent, File.ReadAllBytes(preExisting));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.True(RetroBoxCatalogRules.IsValidId(GetCreatedId(response)));
     }
 
     [Fact]
     public async Task Delete_floppy_removes_it_from_the_catalog()
     {
         await using var context = await StartAsync();
+        string id;
         using (var upload = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img")))
         {
             Assert.Equal(HttpStatusCode.Created, upload.StatusCode);
+            id = GetCreatedId(upload);
         }
 
-        using var response = await context.Client.DeleteAsync("/api/floppies/disk");
+        using var response = await context.Client.DeleteAsync($"/api/floppies/{id}");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.DoesNotContain("\"id\":\"disk\"", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
+        Assert.DoesNotContain($"\"id\":\"{id}\"", await context.Client.GetStringAsync("/api/catalog"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -162,13 +157,15 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     public async Task Patch_floppy_changing_the_mode_clears_nfc()
     {
         await using var context = await StartAsync();
+        string id;
         using (var upload = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img")))
         {
             Assert.Equal(HttpStatusCode.Created, upload.StatusCode);
+            id = GetCreatedId(upload);
         }
 
         using var patch = await context.Client.PatchAsync(
-            "/api/floppies/disk",
+            $"/api/floppies/{id}",
             new StringContent("{\"mode\":\"rw\"}", Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.NoContent, patch.StatusCode);
@@ -182,13 +179,15 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     public async Task Patch_floppy_rejects_an_invalid_mode()
     {
         await using var context = await StartAsync();
+        string id;
         using (var upload = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img")))
         {
             Assert.Equal(HttpStatusCode.Created, upload.StatusCode);
+            id = GetCreatedId(upload);
         }
 
         using var patch = await context.Client.PatchAsync(
-            "/api/floppies/disk",
+            $"/api/floppies/{id}",
             new StringContent("{\"mode\":\"rx\"}", Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
@@ -198,9 +197,11 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
     public async Task Patch_does_not_misreport_a_load_failure_as_an_invalid_patch()
     {
         await using var context = await StartAsync();
+        string id;
         using (var upload = await context.Client.PostAsync("/api/floppies", BuildUpload("disk.img")))
         {
             Assert.Equal(HttpStatusCode.Created, upload.StatusCode);
+            id = GetCreatedId(upload);
         }
 
         // Break a second, unrelated entry directly on disk (bypassing the API): its missing image
@@ -209,16 +210,16 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         // everything else by matching "Unknown floppy" on the exception message, so this load
         // failure fell into the same bucket as "the mode was invalid" and was reported as a 400
         // invalid-patch — blaming the client for a perfectly valid patch.
-        var diskImage = Path.Combine(root, "cataloged", "disk.img");
+        var diskImage = Path.Combine(root, "cataloged", id + ".img");
         var missingImage = Path.Combine(root, "cataloged", "missing.img");
         File.WriteAllText(
             Path.Combine(root, "floppies.yaml"),
             "floppies:\n" +
-            $"  disk:\n    label: disk\n    image: {diskImage}\n    mode: ro\n    size: 1.44M\n" +
+            $"  {id}:\n    label: disk\n    image: {diskImage}\n    mode: ro\n    size: 1.44M\n" +
             $"  broken:\n    label: broken\n    image: {missingImage}\n    mode: ro\n    size: 1.44M\n");
 
         using var patch = await context.Client.PatchAsync(
-            "/api/floppies/disk",
+            $"/api/floppies/{id}",
             new StringContent("{\"mode\":\"rw\"}", Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.InternalServerError, patch.StatusCode);
@@ -254,6 +255,14 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         var file = new ByteArrayContent(new byte[sizeBytes]);
         file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         return new MultipartFormDataContent { { file, "file", fileName } };
+    }
+
+    private static string GetCreatedId(HttpResponseMessage response)
+    {
+        var location = response.Headers.Location?.OriginalString
+            ?? throw new InvalidOperationException("The upload response did not include a floppy location.");
+
+        return location.TrimEnd('/').Split('/').Last();
     }
 
     private async Task<EndpointContext> StartAsync()

@@ -67,7 +67,12 @@ public sealed record RetroBoxCoverView(string Cover, int? ScreenScraperId);
 /// </param>
 public sealed record RetroBoxNfcWriteRequest(string FloppyId, bool Confirm, string? TagUid);
 
-public sealed record RetroBoxNfcWriteResult(string Code, string? PreviousFloppyId, string? Message, string? TagUid);
+public sealed record RetroBoxNfcWriteResult(
+    string Code,
+    string? PreviousFloppyId,
+    string? PreviousFloppyLabel,
+    string? Message,
+    string? TagUid);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]

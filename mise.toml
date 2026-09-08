@@ -1,6 +1,30 @@
 [tools]
 dotnet = "10"
+node = "24"
 "aqua:arduino/arduino-cli" = "1.5.1"
+
+[tasks.frontend-install]
+description = "Install the pinned frontend dependencies"
+dir = "src/frontend"
+run = "npm ci"
+
+[tasks.frontend-lint]
+description = "Lint the React frontend"
+depends = ["frontend-install"]
+dir = "src/frontend"
+run = "npm run lint"
+
+[tasks.frontend-format-check]
+description = "Verify React frontend formatting"
+depends = ["frontend-install"]
+dir = "src/frontend"
+run = "npm run format:check"
+
+[tasks.frontend-build]
+description = "Type-check and build the embedded React frontend"
+depends = ["frontend-install"]
+dir = "src/frontend"
+run = "npm run build"
 
 [tasks.restore]
 description = "Restore .NET dependencies"
@@ -8,6 +32,7 @@ run = "dotnet restore RetroBox.slnx"
 
 [tasks.test]
 description = "Run the .NET test suite"
+depends = ["frontend-lint", "frontend-format-check", "frontend-build"]
 run = "dotnet test RetroBox.slnx"
 
 [tasks.format]
@@ -16,7 +41,7 @@ run = "dotnet format RetroBox.slnx"
 
 [tasks.format-check]
 description = "Verify formatting compliance without changing files"
-depends = ["restore"]
+depends = ["restore", "frontend-lint", "frontend-format-check"]
 run = "dotnet format RetroBox.slnx --verify-no-changes --no-restore"
 
 [tasks.cli]
@@ -26,6 +51,7 @@ run = "dotnet run --project src/RetroBox.Cli/RetroBox.Cli.csproj --"
 
 [tasks.publish-linux-x64]
 description = "Publish retrobox as a Linux x64 Native AOT binary"
+depends = ["frontend-build"]
 run = "dotnet publish src/RetroBox.Cli/RetroBox.Cli.csproj -c Release -r linux-x64 -p:PublishAot=true -warnaserror"
 
 [tasks.firmware-compile]

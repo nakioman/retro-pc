@@ -3,6 +3,10 @@ bin/
 obj/
 **/bin/
 **/obj/
+**/node_modules/
+
+# Generated Vite bundle, embedded by the .NET build after mise runs frontend-build.
+src/RetroBox.Web/wwwroot/
 
 # Test and coverage outputs
 TestResults/

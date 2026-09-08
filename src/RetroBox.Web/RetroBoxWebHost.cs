@@ -89,14 +89,14 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         RetroBoxGameEndpoints.Map(app, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
         RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library, driveState);
-        app.MapGet("/", () => ServeAsset("index.html"));
+        app.MapGet("/", ServeApplication);
 
         // A catch-all rather than "/{asset}": the panel's own assets sit at the root today, but a
         // single segment turns any future nested reference into a 404 that looks like a missing
         // file. Widening it is safe because RetroBoxStaticAssets.TryGet is an allow-list -- it
         // rejects "..", and only names that resolve to an embedded resource ever return content,
         // so nothing here can reach the filesystem.
-        app.MapGet("/{*asset}", (string asset) => ServeAsset(asset));
+        app.MapGet("/{*asset}", (string asset) => ServeAssetOrApplication(asset));
 
         await app.StartAsync(cancellationToken);
 
@@ -119,6 +119,21 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         {
             await app.DisposeAsync();
         }
+    }
+
+    private static IResult ServeApplication() => ServeAsset("index.html");
+
+    private static IResult ServeAssetOrApplication(string relativePath)
+    {
+        if (RetroBoxStaticAssets.TryGet(relativePath, out var content, out var contentType))
+        {
+            return Results.Bytes(content, contentType);
+        }
+
+        // BrowserRouter needs the application document on a direct visit or refresh of a client
+        // route. Static assets have extensions, so a missing bundle remains a 404 rather than
+        // silently receiving HTML; API routes are mapped above this fallback.
+        return Path.HasExtension(relativePath) ? Results.NotFound() : ServeApplication();
     }
 
     private static IResult ServeAsset(string relativePath)

@@ -74,6 +74,21 @@ public sealed class RetroBoxWebHostTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_floppies_serves_the_spa_document_for_browser_router()
+    {
+        var source = new RetroBoxStaticCatalogSource(
+            FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        await using var host = await RetroBoxWebHost.StartAsync(new RetroBoxWebOptions { Port = 0 }, source);
+        using var client = new HttpClient { BaseAddress = host.BaseAddress };
+
+        using var response = await client.GetAsync("/floppies");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("id=\"root\"", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Get_unknown_asset_returns_not_found()
     {
         var source = new RetroBoxStaticCatalogSource(

@@ -44,6 +44,10 @@ public static class RetroBoxStaticAssets
             ".css" => "text/css; charset=utf-8",
             ".js" => "text/javascript; charset=utf-8",
             ".svg" => "image/svg+xml",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            ".ico" => "image/x-icon",
             _ => "application/octet-stream",
         };
     }

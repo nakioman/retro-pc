@@ -456,9 +456,10 @@ public sealed class CliHelpSmokeTests
                 using var response = await client.PostAsync($"{url}/api/floppies", upload);
 
                 Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-                Assert.True(File.Exists(Path.Combine(floppyRoot, "cataloged", "local.img")));
+                var catalogedImages = Directory.GetFiles(Path.Combine(floppyRoot, "cataloged"), "*.img");
+                Assert.Single(catalogedImages);
                 var catalog = File.ReadAllText(Path.Combine(layout.ConfigRoot, "floppies.yaml"));
-                Assert.Contains(Path.Combine(floppyRoot, "cataloged", "local.img"), catalog, StringComparison.Ordinal);
+                Assert.Contains(catalogedImages[0], catalog, StringComparison.Ordinal);
                 Assert.DoesNotContain(RetroBoxFloppyImporter.DefaultCatalogedRoot, catalog, StringComparison.Ordinal);
 
                 cancellation.Cancel();

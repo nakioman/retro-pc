@@ -62,6 +62,12 @@ public static class RetroBoxArduinoSerialProtocol
         RequireValidId(id);
         RequireValidMode(mode, id);
 
+        if (!RetroBoxFloppyId.FitsNfcPayload(id, mode))
+        {
+            throw new RetroBoxArduinoSerialProtocolException(
+                $"Arduino NFC payload '{id},{mode}' exceeds {RetroBoxFloppyId.NfcPayloadMaxBytes} bytes.");
+        }
+
         return $"WRITE {id},{mode}";
     }
 
