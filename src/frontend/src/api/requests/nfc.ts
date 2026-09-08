@@ -6,6 +6,7 @@ export const writeNfc = (floppyId: string, confirm = false, tagUid?: string) =>
   request<{
     code: string;
     previousFloppyId: string | null;
+    previousFloppyLabel: string | null;
     message: string | null;
     tagUid: string | null;
   }>("/api/nfc/write", json({ floppyId, confirm, tagUid: tagUid ?? null }, "POST"));

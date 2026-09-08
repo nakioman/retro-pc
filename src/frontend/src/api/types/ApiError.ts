@@ -2,6 +2,7 @@ export interface ApiError {
   code: string;
   message: string;
   previousFloppyId?: string | null;
+  previousFloppyLabel?: string | null;
   tagUid?: string | null;
 }
 

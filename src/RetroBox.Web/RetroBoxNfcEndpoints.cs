@@ -97,16 +97,17 @@ public static class RetroBoxNfcEndpoints
             // many seconds old by now (quarantine wait plus the five second command timeout), and
             // an assignment that landed in between would otherwise be invisible here. AssignTag
             // re-reads under its own lock, so only the warning was ever at stake.
-            var previousFloppyId = FindOwner(
+            var previousOwner = FindOwner(
                 catalogSource.Snapshot.Catalog, tagUid, request.FloppyId, driveState);
 
-            if (previousFloppyId is not null && !request.Confirm)
+            if (previousOwner is not null && !request.Confirm)
             {
                 return Results.Json(
                     new RetroBoxNfcWriteResult(
                         "tag-already-assigned",
-                        previousFloppyId,
-                        $"This tag is already assigned to '{previousFloppyId}'. Confirm to reassign it.",
+                        previousOwner.Id,
+                        previousOwner.Label,
+                        $"This tag is already assigned to '{previousOwner.Label}'. Confirm to reassign it.",
                         tagUid),
                     RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult,
                     statusCode: StatusCodes.Status409Conflict);
@@ -179,14 +180,14 @@ public static class RetroBoxNfcEndpoints
         }
 
         return Results.Json(
-            new RetroBoxNfcWriteResult("written", null, null, tagUid),
+            new RetroBoxNfcWriteResult("written", null, null, null, tagUid),
             RetroBoxWebJsonContext.Default.RetroBoxNfcWriteResult);
     }
 
     /// <summary>
-    /// Names the floppy that already owns <paramref name="tagUid"/>, or null when nothing does.
+    /// Identifies the floppy that already owns <paramref name="tagUid"/>, or null when nothing does.
     /// </summary>
-    private static string? FindOwner(
+    private static NfcOwner? FindOwner(
         RetroBoxCatalogData catalog,
         string tagUid,
         string requestedFloppyId,
@@ -199,7 +200,7 @@ public static class RetroBoxNfcEndpoints
 
         if (recorded.Key is not null)
         {
-            return recorded.Key;
+            return new NfcOwner(recorded.Key, recorded.Value.Label);
         }
 
         // AssignTag is the only writer of NfcUid, so on an appliance that predates this phase
@@ -209,9 +210,16 @@ public static class RetroBoxNfcEndpoints
         // observed, whatever the catalog happens to have written down. This branch only ever
         // adds a warning the recorded check missed, so an Unknown tracker (no controller has
         // reported yet) degrades to exactly the recorded-only behaviour.
-        return driveState?.Current is RetroBoxDriveState.Loaded loaded
-            && !string.Equals(loaded.FloppyId, requestedFloppyId, StringComparison.Ordinal)
-            ? loaded.FloppyId
-            : null;
+        if (driveState?.Current is not RetroBoxDriveState.Loaded loaded
+            || string.Equals(loaded.FloppyId, requestedFloppyId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return catalog.Floppies.TryGetValue(loaded.FloppyId, out var loadedFloppy)
+            ? new NfcOwner(loaded.FloppyId, loadedFloppy.Label)
+            : new NfcOwner(loaded.FloppyId, loaded.FloppyId);
     }
+
+    private sealed record NfcOwner(string Id, string Label);
 }

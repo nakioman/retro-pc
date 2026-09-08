@@ -68,7 +68,7 @@ export function NfcDialog({
       if (isApiError(value) && value.code === "tag-already-assigned" && value.tagUid) {
         setReassignment({
           uid: value.tagUid,
-          owner: value.previousFloppyId ?? "",
+          owner: value.previousFloppyLabel ?? value.previousFloppyId ?? "",
         });
         return;
       }

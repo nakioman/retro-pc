@@ -82,6 +82,9 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         }
 
+        new RetroBoxFloppyLibrary(new RetroBoxConfigStore(root)).UpdateLabelAndMode("disk1", "Monkey Island", null);
+        context.Source.TryReload();
+
         channel.Calls.Clear();
         using var second = await PostAsync(context, "disk2", confirm: false);
 
@@ -89,6 +92,7 @@ public sealed class RetroBoxNfcEndpointsTests : IDisposable
         var body = await second.Content.ReadAsStringAsync();
         Assert.Contains("tag-already-assigned", body, StringComparison.Ordinal);
         Assert.Contains("disk1", body, StringComparison.Ordinal);
+        Assert.Contains("\"previousFloppyLabel\":\"Monkey Island\"", body, StringComparison.Ordinal);
 
         // The uid has to travel on the 409: RetroBoxDriveEndpoints deliberately returns a null
         // tagUid for the loaded state, so the panel has no other way to learn which tag the

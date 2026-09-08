@@ -473,7 +473,7 @@ table th:last-child {
 }
 .embedded-message-box-backdrop {
   position: absolute;
-  inset: 0;
+  inset: 10px;
   z-index: 1;
   display: grid;
   place-items: center;
