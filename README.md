@@ -52,6 +52,31 @@ stores VMs, catalogs, and persistent configuration under `/data`.
 > The installer may erase or repartition the selected disk. Use it on a
 > dedicated machine and verify the target disk before confirming.
 
+## Web panel
+
+The appliance includes a web panel for managing the floppy library and game
+catalog. Once the appliance is running, open this address from a computer on
+the same network:
+
+```text
+http://<appliance-hostname-or-ip>:8080
+```
+
+The panel's main library view and cover-art workflow:
+
+![RetroBox web panel — cover art workflow](docs/images/web-panel-cover-demo.gif)
+
+The panel can list, upload, rename, re-mode, group, and delete floppy images.
+With the NFC controller connected, it can also show the current drive state and
+write a catalog entry to the tag inside a floppy. The panel is hosted by the
+daemon and remains available even when the floppy controller is disconnected;
+the NFC actions are simply disabled in that case.
+
+The default port is `8080` and can be changed with the daemon's `--web-port`
+option. Set `WEB_PORT=0` in `/etc/retrobox/daemon.env` to disable the panel.
+The panel intentionally has no authentication or TLS and is designed for a
+trusted home LAN. Do not expose it directly to the internet.
+
 ## Build your own RetroBox
 
 This repository contains the source code, 86Box profiles, and fabrication files
