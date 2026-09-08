@@ -1,125 +1,171 @@
 # RetroBox
 
-Retro PC appliance control tooling: a Debian-based appliance that boots into a
-fullscreen 86Box virtual machine like a real DOS-era computer, with physical
-hardware integration — a modified floppy drive with NFC-labeled disks, a real
-CD-ROM, and a boot-time machine selector.
+RetroBox is a self-contained retro computer: a Debian appliance that boots
+straight into [86Box](https://86box.net/) fullscreen and lets you choose
+between three virtual PCs. It is designed to feel like a physical computer
+from the 1980s and 1990s, with the flexibility of a modern emulator.
 
-RetroBox is built from four parts that live in this repository:
+ Front  | Rear
+:------------------:|:------------------:
+![RetroBox front view](docs/images/pc_front.png) | ![RetroBox rear view](docs/images/pc_back.png)
 
-| Area | Path | Description |
-| --- | --- | --- |
-| CLI | [`src/RetroBox.Cli`](src/RetroBox.Cli) | `retrobox` command-line entry point (System.CommandLine). |
-| Core | [`src/RetroBox.Core`](src/RetroBox.Core) | Domain logic: YAML catalogs, boot selection, floppy import/control, NFC, serial protocol. |
-| Daemon | [`src/RetroBox.Daemon`](src/RetroBox.Daemon) | Long-lived floppy/NFC event loop that drives the 86Box floppy socket. |
-| Firmware | [`firmware/retrofloppy-esp8266`](firmware/retrofloppy-esp8266/README.md) | ESP8266 (NodeMCU) firmware that reads/writes NFC tags in floppy shells. |
-| Appliance | [`appliance/`](appliance/README.md) | Debian 13 base layout, read-only root, and the bootable USB installer. |
-| Hardware | [`hardware/`](hardware/) | 3D-printable parts: the Macintosh Classic style case and the NFC floppy blank. |
-| Tests | [`tests/RetroBox.Tests`](tests/RetroBox.Tests) | xUnit test suite for Core, Daemon, and CLI. |
+## The project at a glance
 
-## What it does
+The reference build uses an Intel Core i3-14100, 8 GB of RAM, integrated
+graphics, and an MSI PRO H610M-S DDR4 motherboard. Everything is installed in
+a 3D-printed Macintosh Classic-style case, together with a real floppy drive,
+an optical drive, and an LCD panel.
 
-- **Boot a VM like a console.** On power-on the appliance boots straight into
-  the default 86Box VM fullscreen. Pressing F12 during the boot window opens a
-  plain-text machine selector. See [`appliance/README.md`](appliance/README.md)
-  and [`docs/vm-profiles.md`](docs/vm-profiles.md).
-- **NFC-labeled floppy disks.** A physical floppy carries an NFC tag encoding
-  `<catalog-id>,<mode>`. Inserting it makes the daemon mount the matching image
-  in 86Box; ejecting unmounts it. The firmware and serial protocol are documented
-  in [`firmware/retrofloppy-esp8266/README.md`](firmware/retrofloppy-esp8266/README.md)
-  and [`docs/floppy-controller-wiring.md`](docs/floppy-controller-wiring.md).
-- **Physical CD-ROM passthrough.** The installer detects the host optical drive
-  and wires the first active slot in each VM profile to it. See
-  [`docs/cdrom-passthrough.md`](docs/cdrom-passthrough.md).
-- **Read-only-root appliance.** The installed system is a minimal Debian 13 with
-  immutable root and persistent state under `/data`. See
-  [`appliance/filesystem-layout.md`](appliance/filesystem-layout.md).
-- **WiFi first-boot.** Detects a USB WiFi NIC, prompts for SSID + password on
-  first boot, and auto-connects via `wpa_supplicant` + systemd-networkd
-  (DHCP). See [`appliance/README.md`](appliance/README.md).
-- **A Macintosh Classic shell.** The whole PC — micro-ATX board, ATX PSU,
-  floppy, DVD drive, and a 9.7" retina LCD — lives inside a full-size
-  3D-printed Macintosh Classic style case that fits on a 250 mm print bed.
-  See [`hardware/mac-classic-case/README.md`](hardware/mac-classic-case/README.md).
+The appliance includes three 86Box profiles:
 
-## Prerequisites
+| Profile | Intended use |
+| --- | --- |
+| 386SX-16 | DOS and early software; 54 MB blank disk. |
+| Pentium 100 | Mid-1990s games, Sound Blaster, and CD-ROM. |
+| Pentium II 350 | Windows 98 SE, Voodoo3 3000 AGP, AWE64 Gold, and an approximately 20 GB disk. |
 
-- [mise](https://mise.jdx.dev/) — pins the .NET SDK (10) and `arduino-cli`.
-  All project commands go through `mise run`, never bare `dotnet`.
+On startup, RetroBox launches the default VM fullscreen. Press F12 to open a
+text-based selector and switch machines without rebooting. The modified floppy
+drive uses an ESP8266 and a PN532 reader: each floppy contains an NFC tag with
+the image identifier, so inserting it automatically mounts the matching image
+in 86Box. The physical CD-ROM can also be passed through to the VMs.
 
-## Quickstart
+Left | Right 
+:----:|:----:
+![Left side](docs/images/pc_left.png) | ![Right side](docs/images/pc_right.png) 
+
+## Use a prepared installation
+
+Download the installer ISO from the [GitHub Releases](https://github.com/nakioman/retro-pc/releases)
+page. Each release contains a hybrid installer that supports legacy BIOS and
+UEFI.
+
+1. Download `retropc-installer-*.iso` from the selected release.
+2. Flash it to a USB drive with Raspberry Pi Imager, balenaEtcher, or an equivalent tool.
+3. Boot the target computer from the USB drive and follow the installer.
+4. Remove the USB drive and reboot when installation is complete.
+
+The installer configures Wi-Fi when a compatible adapter is available and
+detects the optical drive. The installed system uses a read-only root and
+stores VMs, catalogs, and persistent configuration under `/data`.
+
+> The installer may erase or repartition the selected disk. Use it on a
+> dedicated machine and verify the target disk before confirming.
+
+## Build your own RetroBox
+
+This repository contains the source code, 86Box profiles, and fabrication files
+needed to reproduce the project. You can build the reference system or adapt
+the motherboard, display, power supply, and floppy drive to your own hardware.
+
+### Macintosh Classic case
+
+[`hardware/mac-classic-case/`](hardware/mac-classic-case/) contains the
+parametric OpenSCAD model, rendered STLs, bill of materials, assembly guide,
+and parameters for adapting the motherboard, power supply, LCD, drives, and
+floppy drive. Every part fits on a 250 × 250 × 250 mm print bed.
 
 ```bash
-mise install          # install pinned tools (dotnet, arduino-cli)
-mise run restore      # restore .NET dependencies
-mise run test         # run the xUnit suite
-mise run format-check # verify dotnet format compliance
-mise run cli -- --help
+mise run case-stl                 # all parts
+mise run case-stl -- front-upper  # one part
 ```
 
-Publish the Linux x64 Native AOT binary:
+### NFC floppy
+
+<img src="docs/images/nfc_floppy.png " width="200"  alt="NFC Floppy">
+
+[`hardware/floppy-nfc-blank/`](hardware/floppy-nfc-blank/) contains the
+printable floppy model, NFC tag seat, bill of materials, parameters, and read
+tests. The tag stores raw bytes in the `<id>,<mode>` format; it does not use
+NDEF.
+
+```bash
+mise run floppy-stl
+```
+
+The reader electronics and firmware are in
+[`firmware/retrofloppy-esp8266/`](firmware/retrofloppy-esp8266/README.md).
+
+## Development
+
+### Requirements and commands
+
+- [mise](https://mise.jdx.dev/), which pins the project tools.
+- Docker to build the ISO on macOS or Linux.
+- An ESP8266 connected when compiling or flashing firmware.
+
+```bash
+mise install
+mise run restore
+mise run test
+mise run format-check
+```
+
+You do not need to invoke `dotnet` directly; supported workflows go through
+`mise`.
+
+| Area | Location | Responsibility |
+| --- | --- | --- |
+| Core | [`src/RetroBox.Core`](src/RetroBox.Core) | YAML catalogs, VM selection, NFC, serial, and the 86Box socket. |
+| CLI | [`src/RetroBox.Cli`](src/RetroBox.Cli) | `boot`, `daemon`, `vm`, `floppy`, `import`, and `nfc` commands. |
+| Daemon/web | [`src/RetroBox.Daemon`](src/RetroBox.Daemon) | Floppy events, 86Box mounting, and the web panel. |
+| Frontend | [`src/frontend`](src/frontend) | React/Vite panel, packaged by `RetroBox.Web`. |
+| Firmware | [`firmware/retrofloppy-esp8266`](firmware/retrofloppy-esp8266) | NFC read/write over USB serial. |
+| Appliance | [`appliance`](appliance/README.md) | Debian 13, systemd, read-only root, and USB installer. |
+| Tests | [`tests/RetroBox.Tests`](tests/RetroBox.Tests) | xUnit tests. |
+
+### Development loop
+
+```bash
+mise run frontend-install
+mise run frontend-lint
+mise run frontend-format-check
+mise run frontend-build
+mise run test
+mise run format-check
+```
+
+Build the Linux x64 runtime and firmware:
 
 ```bash
 mise run publish-linux-x64
-```
-
-Build and flash the firmware (see the firmware README for ports):
-
-```bash
 mise run firmware-compile
 mise run firmware-upload -- /dev/cu.usbserial-XXXX
 ```
 
-Build the bootable USB installer image (see
-[`appliance/installer/README.md`](appliance/installer/README.md)):
+### Build the installer ISO
 
 ```bash
 docker build --platform linux/amd64 -t retropc-builder appliance/installer
-docker run --rm --platform linux/amd64 --privileged -v "$PWD:/work" \
-    retropc-builder /work/appliance/installer/build-usb-installer.sh
+docker run --rm --platform linux/amd64 --privileged \
+  -v "$PWD:/work" retropc-builder \
+  /work/appliance/installer/build-usb-installer.sh
 ```
 
-## CLI overview
+The result is written to `appliance/installer/out/retropc-installer.iso`. The
+GitHub Actions workflow performs the same build, publishes the artifact, and
+attaches the ISO to each release. See
+[`appliance/installer/README.md`](appliance/installer/README.md) for detailed
+flashing, installation, and validation instructions.
 
-```text
-retrobox boot    Start the configured VM; F12 opens the selector.
-retrobox daemon  Run the floppy/NFC hardware integration daemon.
-retrobox vm      List VMs and show/change the default.
-retrobox floppy  Manage cataloged floppy images.
-retrobox nfc     Read or write NFC-backed floppy labels.
-```
+## Technical documentation
 
-To run the daemon from source without writing floppy uploads under `/data`,
-configure the YAML catalog and floppy image roots independently:
-
-```bash
-mise run cli -- daemon \
-  --config-root ../appliance/installer/payload/retrobox \
-  --floppy-root ./local-data/floppies
-```
-
-Uploaded images are staged under `<floppy-root>/scratch` and moved to
-`<floppy-root>/cataloged`. If omitted, `--floppy-root` defaults to
-`/data/floppies` for the appliance.
-
-## Documentation
-
-- [`docs/architecture.md`](docs/architecture.md) — system overview and data flow.
-- [`docs/vm-profiles.md`](docs/vm-profiles.md) — 386SX-16 and Pentium 100 profiles.
-- [`docs/86box-floppy-control-socket-contract.md`](docs/86box-floppy-control-socket-contract.md) — the 86Box floppy control socket protocol.
-- [`docs/86box-floppy-control-integration-verification.md`](docs/86box-floppy-control-integration-verification.md) — end-to-end verification guide.
-- [`docs/floppy-controller-wiring.md`](docs/floppy-controller-wiring.md) — physical floppy drive build.
-- [`docs/cdrom-passthrough.md`](docs/cdrom-passthrough.md) — physical CD-ROM validation.
-- [`hardware/mac-classic-case/README.md`](hardware/mac-classic-case/README.md) — the printable Macintosh Classic style case: BOM, print notes, assembly.
-- [`docs/decisions/`](docs/decisions/) — architecture decision records.
-- [`appliance/README.md`](appliance/README.md) — appliance base layout and runtime behavior.
-- [`appliance/installer/README.md`](appliance/installer/README.md) — the USB installer.
+- [`docs/architecture.md`](docs/architecture.md) — architecture and runtime flow.
+- [`docs/vm-profiles.md`](docs/vm-profiles.md) — the three VM configurations.
+- [`docs/floppy-controller-wiring.md`](docs/floppy-controller-wiring.md) — electronics.
+- [`docs/cdrom-passthrough.md`](docs/cdrom-passthrough.md) — physical CD-ROM.
+- [`docs/86box-floppy-control-socket-contract.md`](docs/86box-floppy-control-socket-contract.md) — 86Box protocol.
+- [`hardware/mac-classic-case/README.md`](hardware/mac-classic-case/README.md) — case fabrication.
+- [`hardware/floppy-nfc-blank/README.md`](hardware/floppy-nfc-blank/README.md) — NFC floppy fabrication.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution and style guidelines.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow, command conventions,
-and code style. AI agents should start with [`AGENTS.md`](AGENTS.md).
+Create a branch, add or update tests, run `mise run test` and
+`mise run format-check`, and follow Conventional Commits. Important
+architectural decisions are recorded in [`docs/decisions/`](docs/decisions/).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Ignacio Glinsek.
+The code is licensed under MIT; see [`LICENSE`](LICENSE). The case and floppy
+also include the attributions and licenses for their original models.
