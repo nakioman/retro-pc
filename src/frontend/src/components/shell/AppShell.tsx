@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { translate, type Locale } from "../../i18n";
 import { getUiPreferences, updateUiPreferences } from "../../state/uiPreferences";
 import { SettingsDialog } from "../settings/SettingsDialog";
-import { MessageBox, type MessageBoxMessage } from "../MessageBox";
+import { MessageBox, type MessageBoxAction, type MessageBoxMessage } from "../MessageBox";
 import { AppTabs } from "./AppTabs";
 import { AppMenu } from "./AppMenu";
 import { MenuBar } from "./MenuBar";
@@ -15,10 +15,17 @@ import { useAppShell } from "../../hooks/useAppShell";
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>(() => getUiPreferences().locale);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [message, setMessage] = useState<MessageBoxMessage | null>(null);
+  const [message, setMessage] = useState<{
+    content: MessageBoxMessage;
+    actions?: readonly MessageBoxAction[];
+  } | null>(null);
   const t = useCallback<Translator>((key, values) => translate(locale, key, values), [locale]);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
-  const showMessage = useCallback((nextMessage: MessageBoxMessage) => setMessage(nextMessage), []);
+  const showMessage = useCallback(
+    (content: MessageBoxMessage, actions?: readonly MessageBoxAction[]) =>
+      setMessage({ content, actions }),
+    [],
+  );
   const changeLocale = useCallback((value: Locale) => {
     setLocale(value);
     updateUiPreferences({ locale: value });
@@ -38,7 +45,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         onLocale={changeLocale}
         onClose={() => setSettingsOpen(false)}
       />
-      <MessageBox message={message} onDismiss={() => setMessage(null)} />
+      <MessageBox
+        message={message?.content ?? null}
+        actions={message?.actions}
+        onDismiss={() => setMessage(null)}
+      />
     </AppShellContext>
   );
 }

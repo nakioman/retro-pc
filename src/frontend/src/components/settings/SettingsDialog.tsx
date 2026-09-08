@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { isApiError } from "../../api/types/ApiError";
 import type { ScraperSettings } from "../../api/types/ScraperSettings";
+import { useAppShell } from "../../hooks/useAppShell";
 import { getUiPreferences, updateUiPreferences } from "../../state/uiPreferences";
 import { Dialog } from "../Dialog";
-import { MessageBox, type MessageBoxKind } from "../MessageBox";
 import type { Locale, MessageKey } from "../../i18n";
 
 const credentialFields = [
@@ -30,18 +30,23 @@ export function SettingsDialog({
   const [settings, setSettings] = useState<ScraperSettings | null>(null);
   const [dirty, setDirty] = useState<Record<string, string>>({});
   const [collapsed, setCollapsed] = useState(false);
-  const [message, setMessage] = useState<{ text: string; kind: MessageBoxKind } | null>(null);
+  const { showMessage } = useAppShell();
 
   useEffect(() => {
     if (!open) return;
     void api
       .settings()
       .then(setSettings)
-      .catch(() => setMessage({ text: "No se pudo cargar la configuración.", kind: "error" }));
+      .catch(() =>
+        showMessage({
+          title: "RetroBox",
+          text: "No se pudo cargar la configuración.",
+          kind: "error",
+        }),
+      );
     setDirty({});
-    setMessage(null);
     setCollapsed(getUiPreferences().startCollapsed);
-  }, [open]);
+  }, [open, showMessage]);
 
   const save = async () => {
     if (!settings) return;
@@ -56,7 +61,8 @@ export function SettingsDialog({
       updateUiPreferences({ startCollapsed: collapsed });
       onClose();
     } catch (value) {
-      setMessage({
+      showMessage({
+        title: "RetroBox",
         text: isApiError(value) ? value.message : "No se pudo guardar la configuración.",
         kind: "error",
       });
@@ -74,9 +80,9 @@ export function SettingsDialog({
   const testCredentials = async () => {
     try {
       await api.testSettings();
-      setMessage({ text: t("credentialsTestSucceeded"), kind: "info" });
+      showMessage({ title: "RetroBox", text: t("credentialsTestSucceeded"), kind: "info" });
     } catch {
-      setMessage({ text: t("credentialsTestFailed"), kind: "error" });
+      showMessage({ title: "RetroBox", text: t("credentialsTestFailed"), kind: "error" });
     }
   };
 
@@ -183,11 +189,6 @@ export function SettingsDialog({
           </div>
         </>
       ) : null}
-      <MessageBox
-        presentation="embedded"
-        message={message ? { title: "RetroBox", ...message } : null}
-        onDismiss={() => setMessage(null)}
-      />
     </Dialog>
   );
 }

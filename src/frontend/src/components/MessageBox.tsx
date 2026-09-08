@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { TitleBar } from "./shell/TitleBar";
 
 export type MessageBoxKind = "error" | "info" | "warning";
@@ -9,37 +9,28 @@ export type MessageBoxMessage = {
   kind?: MessageBoxKind;
 };
 
+export type MessageBoxAction = {
+  label: string;
+  onClick?: () => void;
+  autoFocus?: boolean;
+};
+
 export function MessageBox({
   message,
   onDismiss,
-  presentation = "modal",
   actions,
 }: {
   message: MessageBoxMessage | null;
   onDismiss: () => void;
-  presentation?: "embedded" | "modal";
-  actions?: ReactNode;
-}) {
-  if (presentation === "embedded") {
-    return <EmbeddedMessageBox message={message} onDismiss={onDismiss} actions={actions} />;
-  }
-
-  return <ModalMessageBox message={message} onDismiss={onDismiss} actions={actions} />;
-}
-
-function ModalMessageBox({
-  message,
-  onDismiss,
-  actions,
-}: {
-  message: MessageBoxMessage | null;
-  onDismiss: () => void;
-  actions?: ReactNode;
+  actions?: readonly MessageBoxAction[];
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const dismiss = () => {
     const dialog = ref.current;
-    if (dialog?.open) dialog.close();
+    if (dialog?.open) {
+      dialog.close();
+      return;
+    }
     onDismiss();
   };
 
@@ -71,53 +62,22 @@ function ModalMessageBox({
           <p>{message?.text}</p>
         </div>
         <div className="message-box-actions">
-          {actions ?? (
-            <form method="dialog">
-              <button autoFocus type="submit">
-                Aceptar
-              </button>
-            </form>
-          )}
+          {(actions ?? [{ label: "Aceptar", autoFocus: true }]).map((action) => (
+            <button
+              autoFocus={action.autoFocus}
+              key={action.label}
+              type="button"
+              onClick={() => {
+                action.onClick?.();
+                dismiss();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       </div>
     </dialog>
-  );
-}
-
-function EmbeddedMessageBox({
-  message,
-  onDismiss,
-  actions,
-}: {
-  message: MessageBoxMessage | null;
-  onDismiss: () => void;
-  actions?: ReactNode;
-}) {
-  if (!message) return null;
-
-  return (
-    <div className="embedded-message-box-backdrop">
-      <section className="message-box message-box-embedded" role="alertdialog" aria-modal="true">
-        <TitleBar title={message.title} level="h2">
-          <button className="close-button" type="button" onClick={onDismiss} aria-label="Cerrar">
-            ×
-          </button>
-        </TitleBar>
-        <div className="message-box-body">
-          <div className="message-box-content">
-            <MessageBoxIcon kind={message.kind ?? "info"} />
-            <p>{message.text}</p>
-          </div>
-          <div className="message-box-actions">
-            {actions ?? (
-              <button autoFocus type="button" onClick={onDismiss}>
-                Aceptar
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-    </div>
   );
 }
 

@@ -3,8 +3,8 @@ import { api } from "../../../../api/client";
 import { isApiError } from "../../../../api/types/ApiError";
 import type { Floppy } from "../../../../api/types/Floppy";
 import { Dialog } from "../../../../components/Dialog";
-import { MessageBox } from "../../../../components/MessageBox";
 import type { Translator } from "../../../../components/shell/AppShellContext";
+import { useAppShell } from "../../../../hooks/useAppShell";
 
 export function NfcDialog({
   target,
@@ -20,7 +20,7 @@ export function NfcDialog({
   const [ready, setReady] = useState(false);
   const [uid, setUid] = useState<string>();
   const [status, setStatus] = useState<string>(t("detecting"));
-  const [reassignment, setReassignment] = useState<{ uid: string; owner: string } | null>(null);
+  const { showMessage } = useAppShell();
 
   useEffect(() => {
     if (!target) return;
@@ -29,7 +29,6 @@ export function NfcDialog({
     setReady(false);
     setUid(undefined);
     setStatus(t("detecting"));
-    setReassignment(null);
     const detect = async () => {
       try {
         const drive = await api.drive();
@@ -66,22 +65,26 @@ export function NfcDialog({
       onDone();
     } catch (value) {
       if (isApiError(value) && value.code === "tag-already-assigned" && value.tagUid) {
-        setReassignment({
-          uid: value.tagUid,
-          owner: value.previousFloppyLabel ?? value.previousFloppyId ?? "",
-        });
+        const owner = value.previousFloppyLabel ?? value.previousFloppyId ?? "";
+        showMessage(
+          {
+            title: t("confirmNfc"),
+            text: t("nfcAlreadyAssigned", { name: owner }),
+            kind: "warning",
+          },
+          [
+            {
+              label: t("reassignNfc"),
+              onClick: () => void write(true, value.tagUid ?? undefined),
+            },
+            { label: t("cancel"), autoFocus: true },
+          ],
+        );
         return;
       }
       setReady(false);
       setStatus(isApiError(value) ? value.message : t("nfcWriteFailed"));
     }
-  };
-
-  const confirmReassignment = async () => {
-    if (!reassignment) return;
-    const { uid: tagUid } = reassignment;
-    setReassignment(null);
-    await write(true, tagUid);
   };
 
   return (
@@ -103,29 +106,6 @@ export function NfcDialog({
       <div className="inset">
         <p>{status}</p>
       </div>
-      <MessageBox
-        presentation="embedded"
-        message={
-          reassignment
-            ? {
-                title: t("confirmNfc"),
-                text: t("nfcAlreadyAssigned", { name: reassignment.owner }),
-                kind: "warning",
-              }
-            : null
-        }
-        onDismiss={() => setReassignment(null)}
-        actions={
-          reassignment ? (
-            <>
-              <button onClick={() => void confirmReassignment()}>{t("reassignNfc")}</button>
-              <button autoFocus onClick={() => setReassignment(null)}>
-                {t("cancel")}
-              </button>
-            </>
-          ) : undefined
-        }
-      />
     </Dialog>
   );
 }
