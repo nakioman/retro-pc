@@ -67,6 +67,8 @@ The panel's main library view and cover-art workflow:
 ![RetroBox web panel — cover art workflow](docs/images/web-panel-cover-demo.gif)
 
 The panel can list, upload, rename, re-mode, group, and delete floppy images.
+It also turns ZIP archives of DOS files into a 1.44 MiB FAT12 floppy image;
+archives that exceed one disk or contain unsafe paths are rejected.
 With the NFC controller connected, it can also show the current drive state and
 write a catalog entry to the tag inside a floppy. The panel is hosted by the
 daemon and remains available even when the floppy controller is disconnected;

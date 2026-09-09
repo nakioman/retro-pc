@@ -6,7 +6,7 @@ namespace RetroBox.Web;
 
 public static class RetroBoxLibraryEndpoints
 {
-    private static readonly string[] AllowedExtensions = [".img", ".ima", ".dsk"];
+    private static readonly string[] AllowedExtensions = [".img", ".ima", ".dsk", ".zip"];
 
     public const long MaxUploadBytes = 4 * 1024 * 1024;
 
@@ -24,9 +24,10 @@ public static class RetroBoxLibraryEndpoints
         WebApplication app,
         RetroBoxWebOptions options,
         IRetroBoxCatalogSource catalogSource,
-        RetroBoxFloppyLibrary library)
+        RetroBoxFloppyLibrary library,
+        IRetroBoxFloppyImageBuilder imageBuilder)
     {
-        app.MapPost("/api/floppies", (HttpRequest request) => UploadAsync(request, options, library, catalogSource));
+        app.MapPost("/api/floppies", (HttpRequest request) => UploadAsync(request, options, library, catalogSource, imageBuilder));
         app.MapDelete("/api/floppies/{id}", (string id) => Delete(id, library, catalogSource));
         app.MapPatch("/api/floppies/{id}", (string id, RetroBoxFloppyPatch patch) => Patch(id, patch, library, catalogSource));
     }
@@ -35,7 +36,8 @@ public static class RetroBoxLibraryEndpoints
         HttpRequest request,
         RetroBoxWebOptions options,
         RetroBoxFloppyLibrary library,
-        IRetroBoxCatalogSource catalogSource)
+        IRetroBoxCatalogSource catalogSource,
+        IRetroBoxFloppyImageBuilder imageBuilder)
     {
         if (!request.HasFormContentType)
         {
@@ -61,7 +63,7 @@ public static class RetroBoxLibraryEndpoints
             return RetroBoxWebResults.Error(
                 StatusCodes.Status400BadRequest,
                 "unsupported-extension",
-                "Only .img, .ima and .dsk images can be imported.");
+                "Only .img, .ima, .dsk and .zip files can be imported.");
         }
 
         Directory.CreateDirectory(options.ScratchRoot);
@@ -81,6 +83,7 @@ public static class RetroBoxLibraryEndpoints
         library.RunExclusively(() =>
         {
             string? finalScratchPath = null;
+            string? generatedImagePath = null;
             var moved = false;
 
             try
@@ -117,11 +120,19 @@ public static class RetroBoxLibraryEndpoints
                     return;
                 }
 
+                var imagePath = finalScratchPath;
+                if (extension == ".zip")
+                {
+                    generatedImagePath = Path.Combine(options.ScratchRoot, resolvedId + ".img");
+                    imageBuilder.BuildFromZip(finalScratchPath, generatedImagePath);
+                    imagePath = generatedImagePath;
+                }
+
                 new RetroBoxFloppyImporter().Import(new RetroBoxFloppyImportRequest
                 {
                     Id = resolvedId,
                     Label = Path.GetFileNameWithoutExtension(fileName),
-                    ImagePath = finalScratchPath,
+                    ImagePath = imagePath,
                     ConfigRoot = options.ConfigRoot,
                     ScratchRoot = options.ScratchRoot,
                     CatalogedRoot = options.CatalogedRoot,
@@ -138,6 +149,10 @@ public static class RetroBoxLibraryEndpoints
             {
                 failure = new UploadFailure(StatusCodes.Status400BadRequest, "import-failed", ex.Message);
             }
+            catch (RetroBoxFloppyImageBuildException ex)
+            {
+                failure = new UploadFailure(StatusCodes.Status400BadRequest, ex.Code, ex.Message);
+            }
             finally
             {
                 // Harmless once Import has moved the file: File.Delete on a path that no longer
@@ -151,6 +166,10 @@ public static class RetroBoxLibraryEndpoints
                 if (moved && finalScratchPath is not null)
                 {
                     SafeDelete(finalScratchPath);
+                }
+                if (generatedImagePath is not null)
+                {
+                    SafeDelete(generatedImagePath);
                 }
             }
         });

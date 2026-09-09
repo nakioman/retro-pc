@@ -105,7 +105,7 @@ export function UploadDialog({
           <input
             key={fileInputKey}
             type="file"
-            accept=".img,.ima,.dsk"
+            accept=".img,.ima,.dsk,.zip"
             multiple
             required
             onChange={(event) => setFiles(Array.from(event.target.files ?? []))}

@@ -31,7 +31,8 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         Func<CancellationToken, Task>? driveEventsWaitForNextPoll = null,
         RetroBoxFloppyLibrary? floppyLibrary = null,
         IRetroBoxCoverSource? coverSource = null,
-        Func<Uri, CancellationToken, Task<Stream>>? downloadCover = null)
+        Func<Uri, CancellationToken, Task<Stream>>? downloadCover = null,
+        IRetroBoxFloppyImageBuilder? imageBuilder = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
 
@@ -85,7 +86,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
             coverCache.TryGetCachedCover(cover, out var path, out var contentType)
                 ? Results.File(path, contentType)
                 : Results.NotFound());
-        RetroBoxLibraryEndpoints.Map(app, options, catalogSource, library);
+        RetroBoxLibraryEndpoints.Map(app, options, catalogSource, library, imageBuilder ?? new RetroBoxMtoolsFloppyImageBuilder());
         RetroBoxGameEndpoints.Map(app, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
         RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library, driveState);

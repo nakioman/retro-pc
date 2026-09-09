@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -56,6 +57,46 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("unsupported-extension", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Post_floppies_imports_a_zip_as_a_generated_image()
+    {
+        var builder = new RecordingImageBuilder();
+        await using var context = await StartAsync(builder);
+
+        using var response = await context.Client.PostAsync("/api/floppies", BuildZipUpload("monkey.zip", ("MONKEY/README.TXT", "hello")));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var id = GetCreatedId(response);
+        Assert.Equal(1, builder.BuildCount);
+        Assert.True(File.Exists(Path.Combine(root, "cataloged", id + ".img")));
+        Assert.False(File.Exists(Path.Combine(root, "cataloged", id + ".zip")));
+    }
+
+    [Fact]
+    public async Task Post_floppies_rejects_an_invalid_zip_without_cataloging_it()
+    {
+        await using var context = await StartAsync();
+
+        using var response = await context.Client.PostAsync("/api/floppies", BuildUpload("broken.zip"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid-zip", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "cataloged")));
+    }
+
+    [Fact]
+    public async Task Post_floppies_cleans_up_when_a_zip_does_not_fit()
+    {
+        await using var context = await StartAsync(new FailingImageBuilder("floppy-capacity-exceeded"));
+
+        using var response = await context.Client.PostAsync("/api/floppies", BuildZipUpload("large.zip", ("GAME.DAT", "hello")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("floppy-capacity-exceeded", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "cataloged")));
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "scratch")));
     }
 
     [Fact]
@@ -257,6 +298,23 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         return new MultipartFormDataContent { { file, "file", fileName } };
     }
 
+    private static MultipartFormDataContent BuildZipUpload(string fileName, params (string Name, string Contents)[] entries)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, contents) in entries)
+            {
+                using var writer = new StreamWriter(archive.CreateEntry(name).Open());
+                writer.Write(contents);
+            }
+        }
+
+        var file = new ByteArrayContent(stream.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        return new MultipartFormDataContent { { file, "file", fileName } };
+    }
+
     private static string GetCreatedId(HttpResponseMessage response)
     {
         var location = response.Headers.Location?.OriginalString
@@ -265,7 +323,7 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
         return location.TrimEnd('/').Split('/').Last();
     }
 
-    private async Task<EndpointContext> StartAsync()
+    private async Task<EndpointContext> StartAsync(IRetroBoxFloppyImageBuilder? imageBuilder = null)
     {
         var store = new RetroBoxConfigStore(root);
         var source = new RetroBoxWatchingCatalogSource(root, store.Load(), watchFileSystem: false);
@@ -277,7 +335,8 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
                 ScratchRoot = Path.Combine(root, "scratch"),
                 CatalogedRoot = Path.Combine(root, "cataloged"),
             },
-            source);
+            source,
+            imageBuilder: imageBuilder);
 
         return new EndpointContext(host, source, new HttpClient { BaseAddress = host.BaseAddress });
     }
@@ -292,6 +351,27 @@ public sealed class RetroBoxLibraryEndpointsTests : IDisposable
             Client.Dispose();
             await Host.DisposeAsync();
             Source.Dispose();
+        }
+    }
+
+    private sealed class RecordingImageBuilder : IRetroBoxFloppyImageBuilder
+    {
+        public int BuildCount { get; private set; }
+
+        public void BuildFromZip(string zipPath, string imagePath)
+        {
+            BuildCount++;
+            Assert.True(File.Exists(zipPath));
+            File.WriteAllBytes(imagePath, new byte[1_474_560]);
+        }
+    }
+
+    private sealed class FailingImageBuilder(string code) : IRetroBoxFloppyImageBuilder
+    {
+        public void BuildFromZip(string zipPath, string imagePath)
+        {
+            File.WriteAllBytes(imagePath, [1]);
+            throw new RetroBoxFloppyImageBuildException(code, "The files do not fit on one floppy.");
         }
     }
 }
