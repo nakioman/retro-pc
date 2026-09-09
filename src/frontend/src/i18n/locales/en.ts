@@ -38,7 +38,7 @@ export const en: Record<keyof typeof es, string> = {
   page: "Page {page} of {pages} · {count} game(s)",
   uploadTitle: "Upload floppies",
   groupName: "Game or software name",
-  files: "Choose files (.img, .ima, .dsk)",
+  files: "Choose files (.img, .ima, .dsk, .zip)",
   add: "Add",
   cancel: "Cancel",
   save: "Save",

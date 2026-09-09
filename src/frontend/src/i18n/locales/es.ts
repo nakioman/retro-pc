@@ -36,7 +36,7 @@ export const es = {
   page: "Página {page} de {pages} · {count} juego(s)",
   uploadTitle: "Subir disquetes",
   groupName: "Nombre del juego o software",
-  files: "Seleccionar archivos (.img, .ima, .dsk)",
+  files: "Seleccionar archivos (.img, .ima, .dsk, .zip)",
   add: "Agregar",
   cancel: "Cancelar",
   save: "Guardar",

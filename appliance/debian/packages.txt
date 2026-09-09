@@ -45,6 +45,7 @@ procps
 iproute2
 util-linux
 pciutils
+mtools
 
 # WiFi (first-boot configured via wpa_supplicant + systemd-networkd + dialog).
 # firmware-realtek ships the rtw88/rtw88xx blobs for the TPLink 2.4GHz dongle
