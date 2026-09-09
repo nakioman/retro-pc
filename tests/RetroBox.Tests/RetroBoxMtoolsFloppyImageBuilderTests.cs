@@ -21,6 +21,11 @@ public sealed class RetroBoxMtoolsFloppyImageBuilderTests : IDisposable
     public void BuildFromZip_strips_a_single_wrapper_directory_and_preserves_subdirectories()
     {
         var zipPath = CreateZip(("GAME/README.TXT", "read me"), ("GAME/DATA/LEVEL1.DAT", "level"));
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Update))
+        {
+            archive.CreateEntry("GAME/");
+        }
+
         var calls = new List<(string FileName, IReadOnlyList<string> Arguments)>();
         var builder = new RetroBoxMtoolsFloppyImageBuilder((fileName, arguments) => calls.Add((fileName, arguments)));
 

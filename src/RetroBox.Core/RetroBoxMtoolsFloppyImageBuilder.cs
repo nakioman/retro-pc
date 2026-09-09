@@ -67,12 +67,19 @@ public sealed class RetroBoxMtoolsFloppyImageBuilder : IRetroBoxFloppyImageBuild
             throw new RetroBoxFloppyImageBuildException("empty-archive", "The ZIP file does not contain any files.");
         }
 
-        var stripRoot = rawEntries.All(entry => entry.Segments.Length > 1)
-            && rawEntries.Select(entry => entry.Segments[0]).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1;
-        var entries = rawEntries.Select(entry => stripRoot ? entry with
-        {
-            Path = string.Join('/', entry.Segments.Skip(1)),
-        } : entry).ToList();
+        // ZIP creators commonly include a directory entry for the wrapper itself (for example
+        // "DRIVER/") as well as every file below it. That entry does not represent a root item
+        // that should keep the wrapper in the generated floppy.
+        var contentEntries = rawEntries.Where(entry => !entry.IsDirectory || entry.Segments.Length > 1).ToList();
+        var stripRoot = contentEntries.All(entry => entry.Segments.Length > 1)
+            && contentEntries.Select(entry => entry.Segments[0]).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1;
+        var entries = rawEntries
+            .Where(entry => !stripRoot || entry.Segments.Length > 1)
+            .Select(entry => stripRoot ? entry with
+            {
+                Path = string.Join('/', entry.Segments.Skip(1)),
+            } : entry)
+            .ToList();
 
         if (entries.Any(entry => entry.Path.Length == 0))
         {
