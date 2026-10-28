@@ -37,8 +37,11 @@ Floppy and CD media changes use QEMU's stock QMP (`blockdev-change-medium`,
 
 ## Target VM (`profiles/winxp`)
 
-- `-machine pc` (i440fx), `-accel kvm -cpu host` (fallback `core2duo`),
-  2 vCPUs, 2 GB RAM.
+- `-machine pc` (i440fx), `-accel kvm -cpu core2duo`, 2 vCPUs, 3 GB RAM
+  (32-bit XP cannot use much more). With KVM the model only sets the CPUID
+  the guest sees; games run at host speed.
+- Direct3D and OpenGL only. Glide is out of scope (no host Glide library or
+  guest Glide DLLs are shipped).
 - 20 GB qcow2 on IDE (XP has no inbox AHCI driver).
 - AC97 audio via `-audiodev alsa`, reusing the `.asoundrc` written by
   `retrobox-audio-setup`; the guest needs the Realtek AC97 driver.
@@ -52,8 +55,39 @@ Floppy and CD media changes use QEMU's stock QMP (`blockdev-change-medium`,
   later option.
 - Second CD slot: the "RetroBox XP Tools" ISO (qemu-3dfx wrappers,
   `FXPTL.SYS`, WineD3D DLLs, install notes).
-- 2D video card: decided in Phase 0 (`cirrus`, `vmware`, or `std` + VBEMP).
+- 2D video card: std VGA with a period monitor EDID,
+  `-vga none -device VGA,edid=on,xres=1024,yres=768,xmax=1024,ymax=768,vgamem_mb=16`;
+  the fork caps the VESA mode list at the EDID maximum, and the guest uses the
+  VBEMP VESA driver for 32-bit modes (XP's Cirrus driver has none).
+- Fullscreen output is stretched to 4:3 like a CRT (fork patch).
 - No XP media, drivers, or games in the payload, same as the other profiles.
+
+## Display findings and open issues
+
+Found during the Phase 0 spike on the reference box (UHD 730, 2048x1536 HDMI
+panel, SDL2 `kmsdrm`, no X). Each fix lives in `retrobox/patches/` of the
+fork.
+
+- QEMU's text consoles (monitor, serial, parallel) each open an SDL window
+  and the last one covers the VM: run with `-monitor none -serial none
+  -parallel none`.
+- A frame presented once never reaches the panel; it only shows after later
+  presents. QEMU presented only on guest updates, so static screens stayed
+  black. Fixed by re-presenting the 2D frame every refresh tick.
+- **The scanout honours alpha.** SDL2 `kmsdrm` scans out an ARGB8888
+  buffer and pixels with alpha 0 show as black, even with blending off.
+  QEMU mapped `x8r8g8b8` framebuffers (x byte = 0) to `ARGB8888`; the fork
+  maps every x-channel format to SDL's X formats.
+- **Open, must be checked when 3D is tested:** qemu-3dfx creates the game's
+  GL context with an 8-bit alpha channel (`GL_CONTEXTALPHA 1` on Linux,
+  `SDL_GL_ALPHA_SIZE 8`). Any pixel a game leaves with alpha < 1 will show
+  black or see-through on this scanout. Candidate fixes: drop the alpha
+  channel from the window context, or force alpha to 1.0 before each swap
+  (`glColorMask(0, 0, 0, 1)` + clear to alpha 1). Verify with OpenGL
+  (Quake III) and WineD3D titles.
+- Tests must run from the foreground VT (tty1/tty2 on the box). Launching
+  QEMU over SSH while a text console is active shows black even with a
+  working build.
 
 ## Phases
 
@@ -70,21 +104,34 @@ On the reference box running Debian 13:
    (Max Payne / 3DMark2001), with sound.
 3. Find the newest Wine release whose PE `wined3d`/`d3d9` loads on XP, or
    list the patches needed to make a newer one load.
-4. Confirm fullscreen GL output on the console without X (SDL KMSDRM);
-   otherwise use a minimal kiosk compositor (`cage`).
+4. Upstream's Linux mesa backend creates its GL context through GLX and needs
+   Xorg. Test both it and qemu-3dfx's unbuilt SDL backend
+   (`mglcntx_sdlgl.c`) running on KMS/DRM with no X, like 86Box.
 5. Pick the 2D video card; measure audio latency.
 
-Record the results in `docs/qemu-xp-spike.md`. **Go:** commit to qemu-3dfx +
+The spike tooling is throwaway and stays out of the repository; its results
+are recorded in this document. **Go:** commit to qemu-3dfx +
 WineD3D. **No-go on D3D:** decide between patching Wine for XP and the VFIO
 second-GPU fallback.
 
 ### Phase 1 — QEMU fork and guest tools (`ci`, `chore(appliance)`)
 
-- `nakioman/qemu`: qemu-3dfx rebased on a pinned QEMU, with release
-  tarballs, the same way the 86Box fork is maintained.
+- [`nakioman/qemu-3dfx`](https://github.com/nakioman/qemu-3dfx), branch
+  `retrobox`: a GitHub fork of qemu-3dfx (`master` mirrors upstream) with
+  RetroBox changes as commits and `retrobox/patches/` for QEMU-tree fixes,
+  maintained like the 86Box fork. `retrobox/build.sh` downloads the pinned
+  QEMU, applies everything, and produces the host tarball and the XP tools
+  ISO; CI releases them for `retrobox-*` tags.
 - CI that builds the host QEMU and the guest wrappers from the same commit
   (the wrappers' signature has to match the host build) plus the mingw WineD3D
   DLLs, and packages the XP Tools ISO.
+- Build the SDL GL context backend so QEMU runs on KMS/DRM without X, and
+  replace its GLX pbuffer path with FBOs or EGL pbuffers. Host Glide
+  (OpenGLide) gets the same treatment, or stays out of scope if no XP-era
+  Glide title matters.
+- Replace the prebuilt `FXPTL.SYS` (a binary-only build of the NT DDK
+  `MAPMEM` sample) with our own source-built driver: the same `\\.\MAPMEM`
+  IOCTL interface `fxlibnt.c` uses, compiled with mingw-w64's DDK headers.
 - `appliance/qemu.env` pins versions and SHA-256 sums; the installer unpacks
   everything to `/opt/qemu`.
 
@@ -105,6 +152,9 @@ second-GPU fallback.
 
 - `profiles/winxp` as described above, with a blank qcow2 created at install
   time (same idea as `retrobox-hdd-creation`).
+- Boots like a real PC: SeaBIOS boot menu (`-boot order=cd,menu=on`, ESC at
+  power-on to pick disk, CD, or floppy), optionally with a RetroBox POST
+  logo (`-boot splash=`).
 - `vms.yaml` entry with `engine: qemu`.
 - `docs/vm-profiles.md` and `docs/qemu-xp.md` (installing XP and the XP Tools,
   copying wrappers into each game's folder).
