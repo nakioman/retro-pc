@@ -31,6 +31,9 @@ _install_systemd_units() {
         "$TARGET_MNT/etc/systemd/system/retrobox-wifi-firstboot.service"
     install -m 0644 "$PAYLOAD_DIR/units/hdmi-fix.service" \
         "$TARGET_MNT/etc/systemd/system/hdmi-fix.service"
+    # Started by 90-retrobox-cdrom.rules on disc changes; never enabled.
+    install -m 0644 "$PAYLOAD_DIR/units/retrobox-cdrom-refresh@.service" \
+        "$TARGET_MNT/etc/systemd/system/retrobox-cdrom-refresh@.service"
     install -m 0644 "$PAYLOAD_DIR/units/retrobox-tmpfiles.conf" \
         "$TARGET_MNT/etc/tmpfiles.d/retrobox.conf"
 
@@ -38,6 +41,8 @@ _install_systemd_units() {
     in_target visudo -cf /etc/sudoers.d/retrobox >/dev/null
     install -m 0644 "$PAYLOAD_DIR/udev/60-gpiochip.rules" \
         "$TARGET_MNT/etc/udev/rules.d/60-gpiochip.rules"
+    install -m 0644 "$PAYLOAD_DIR/udev/90-retrobox-cdrom.rules" \
+        "$TARGET_MNT/etc/udev/rules.d/90-retrobox-cdrom.rules"
     install -m 0644 "$PAYLOAD_DIR/modprobe/retrobox-kvm.conf" \
         "$TARGET_MNT/etc/modprobe.d/retrobox-kvm.conf"
     # Lets retrobox-boot start Xorg (xinit) for QEMU VMs; see the file.

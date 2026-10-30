@@ -1,3 +1,4 @@
+using RetroBox.Cli;
 using RetroBox.Core;
 
 namespace RetroBox.Tests;
@@ -45,6 +46,25 @@ public sealed class RetroBoxPayloadCatalogTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Cdrom_refresh_unit_runs_a_valid_cli_command_as_the_qmp_socket_owner()
+    {
+        var payload = Path.Combine(FindRepositoryRoot(), "appliance", "installer", "payload");
+        var unit = File.ReadAllLines(Path.Combine(payload, "units", "retrobox-cdrom-refresh@.service"));
+        var rule = File.ReadAllText(Path.Combine(payload, "udev", "90-retrobox-cdrom.rules"));
+
+        Assert.Contains("User=retrobox", unit);
+        Assert.Contains($"ConditionPathExists={RetroBoxQemuLauncher.DefaultQmpSocketPath}", unit);
+        Assert.Contains("restart retrobox-cdrom-refresh@%k.service", rule, StringComparison.Ordinal);
+
+        var execStart = Assert.Single(unit, line => line.StartsWith("ExecStart=", StringComparison.Ordinal));
+        var argv = execStart["ExecStart=".Length..].Replace("%I", "sr0", StringComparison.Ordinal).Split(' ');
+        Assert.Equal("/opt/retrobox/retrobox", argv[0]);
+        var parseResult = CliCommandFactory.CreateRootCommand().Parse(argv[1..]);
+        Assert.Empty(parseResult.Errors);
+        Assert.Equal("refresh", parseResult.CommandResult.Command.Name);
     }
 
     private static string FindRepositoryRoot()

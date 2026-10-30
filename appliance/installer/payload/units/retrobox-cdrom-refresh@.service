@@ -1,0 +1,15 @@
+[Unit]
+Description=Show the new disc in /dev/%I to the running QEMU VM
+Documentation=https://github.com/nakioman/retro-pc/blob/main/docs/cdrom-passthrough.md
+# Started by /etc/udev/rules.d/90-retrobox-cdrom.rules on media changes. QEMU
+# creates this socket while a QEMU VM runs; 86Box VMs need no refresh.
+ConditionPathExists=/run/retrobox/qemu-qmp.sock
+
+[Service]
+Type=oneshot
+# QEMU runs as retrobox (retrobox-boot.service) and owns the QMP socket; the
+# cdrom group lets the refresh read the drive's status.
+User=retrobox
+Group=retrobox
+ExecStart=/opt/retrobox/retrobox cdrom refresh --device /dev/%I
+TimeoutStartSec=60
