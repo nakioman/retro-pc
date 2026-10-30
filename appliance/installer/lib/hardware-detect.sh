@@ -264,7 +264,9 @@ EOF
 }
 
 write_install_report() {
-    local by_id="" link target report="$TARGET_MNT/data/retrobox/install-report.txt"
+    local by_id="" link target report="$TARGET_MNT/data/retrobox/install-report.txt" cdrom_qemu="NONE"
+    # QEMU VMs attach the drive from hardware.env at launch (RetroBoxHostHardware).
+    [ "$CDROM_STATUS" = "DETECTED" ] && cdrom_qemu="ATTACHED"
     # Find a stable by-id path that resolves to the target disk (avoid ls|awk,
     # which trips pipefail when the directory is absent).
     target="$(readlink -f "$TARGET_DISK" 2>/dev/null || printf '%s' "$TARGET_DISK")"
@@ -283,6 +285,7 @@ target.root.uuid=$ROOT_UUID
 target.data.uuid=$DATA_UUID
 cdrom.device=$CDROM_DEVICE
 cdrom.status=$CDROM_STATUS
+cdrom.qemu=$cdrom_qemu
 serial.device=$SERIAL_DEVICE
 serial.baud=$SERIAL_BAUD
 serial.status=$SERIAL_STATUS
