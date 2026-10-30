@@ -481,6 +481,7 @@ public static class CliCommandFactory
         });
         command.Subcommands.Add(CreateVmListCommand());
         command.Subcommands.Add(defaultCommand);
+        command.Subcommands.Add(CreateVmCreateDisksCommand());
         command.SetAction(_ => 0);
         return command;
     }
@@ -506,6 +507,75 @@ public static class CliCommandFactory
             {
                 return WriteError(parseResult, ex);
             }
+        });
+        return command;
+    }
+
+    private static Command CreateVmCreateDisksCommand()
+    {
+        var configRootOption = ConfigRootOption();
+        var vmArgument = new Argument<string?>("id")
+        {
+            Description = "Only create the disks of this VM.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var qemuImgOption = new Option<string>("--qemu-img")
+        {
+            Description = "qemu-img executable used for qcow2 disks.",
+            DefaultValueFactory = _ => RetroBoxQemuBundle.DefaultImgBinaryPath,
+        };
+        var command = new Command("create-disks", "Create the missing disks declared in vms.yaml; existing disks are never touched.")
+        {
+            vmArgument,
+            configRootOption,
+            qemuImgOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            IEnumerable<KeyValuePair<string, RetroBoxVm>> vms;
+            try
+            {
+                var catalog = new RetroBoxConfigStore(
+                    parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath).Load();
+                var vmId = parseResult.GetValue(vmArgument);
+                if (vmId is not null && !catalog.Vms.ContainsKey(vmId))
+                {
+                    throw new RetroBoxCatalogException($"Unknown VM '{vmId}'.");
+                }
+
+                vms = catalog.Vms
+                    .Where(entry => vmId is null || entry.Key == vmId)
+                    .OrderBy(entry => entry.Key, StringComparer.Ordinal);
+            }
+            catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+            {
+                return WriteError(parseResult, ex);
+            }
+
+            var output = parseResult.InvocationConfiguration.Output;
+            var creator = new RetroBoxVmDiskCreator(
+                new RetroBoxProcessRunner(),
+                parseResult.GetValue(qemuImgOption) ?? RetroBoxQemuBundle.DefaultImgBinaryPath);
+            var exitCode = 0;
+            foreach (var (id, vm) in vms)
+            {
+                try
+                {
+                    foreach (var plan in RetroBoxVmDiskPlanner.Plan(id, vm))
+                    {
+                        output.WriteLine(creator.Create(plan) == RetroBoxVmDiskOutcome.Created
+                            ? $"{id}\tcreated\t{plan.Path}\t{plan.SizeBytes}"
+                            : $"{id}\tkept\t{plan.Path}");
+                    }
+                }
+                catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+                {
+                    parseResult.InvocationConfiguration.Error.WriteLine($"{id}: {ex.Message}");
+                    exitCode = 1;
+                }
+            }
+
+            return exitCode;
         });
         return command;
     }
