@@ -4,7 +4,7 @@
 
 # Hardware groups the appliance user should be in when they exist in the image.
 _retrobox_groups() {
-    local want=(sudo audio video input dialout cdrom plugdev gpio) have=()
+    local want=(sudo audio video input dialout cdrom plugdev gpio kvm render) have=()
     local g
     for g in "${want[@]}"; do
         if in_target getent group "$g" >/dev/null 2>&1; then

@@ -79,4 +79,5 @@ serial.baud=115200
 serial.status=DETECTED
 retrobox.binary=installed
 box86.appimage=installed
+qemu.package=installed
 ```

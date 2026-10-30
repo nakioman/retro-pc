@@ -61,13 +61,38 @@ iw
 
 ca-certificates
 
+# QEMU host stack for the Windows XP VM (ADR 0008). QEMU's GTK display
+# (gl=on) runs in a bare Xorg; SDL on KMS/DRM conflicted with dxvk-native.
+# Installed without Recommends: the root partition is kept small (3 GiB).
+# xserver-xorg-legacy ships the setuid Xorg.wrap, because the appliance has no
+# logind sessions to hand Xorg the DRM and input devices. The modesetting
+# video driver is built into xserver-xorg-core.
+xserver-xorg-core
+xserver-xorg-input-libinput
+xserver-xorg-legacy
+xinit
+# Kiosk window manager that honours QEMU's fullscreen request.
+matchbox-window-manager
+# GTK 3 runtime for QEMU's display. dbus-x11 gives GTK's dconf a session bus
+# without dbus-user-session, which would pull in libpam-systemd and start
+# logind sessions, changing console/Xorg behaviour for retrobox-boot and 86Box.
+libgtk-3-0t64
+dbus-x11
+# Vulkan for dxvk-native (SVGA3D -> Vulkan). The build trims
+# mesa-vulkan-drivers to Intel's ICD with dpkg-vulkan-intel-only.cfg.
+libvulkan1
+mesa-vulkan-drivers
+# User-mode NAT networking (-netdev user) for the XP guest.
+libslirp0
+
 # Deliberately excluded from this base manifest:
 # - .NET SDK, compilers, and build tools
 # - Docker or container tooling
-# - desktop environments and window managers
-# - X11/Wayland/SDL/DRM/graphics packages for 86Box
+# - desktop environments, display managers, and full window managers (the
+#   bare Xorg + matchbox above exists only to host QEMU's fullscreen window)
+# - SDL and Wayland packages
 # - DOS, Windows, drivers, games, or other copyrighted media
 #
-# 86Box is supplied as an AppImage. Its graphics dependencies and any
-# additional host libraries required by the selected AppImage must be decided
-# during the physical graphics integration work, not added speculatively here.
+# 86Box is supplied as an AppImage and QEMU as a tarball under /opt (both
+# pinned in ../86box.env). Host libraries they need beyond this list must be
+# added here explicitly, with the reason, rather than speculatively.

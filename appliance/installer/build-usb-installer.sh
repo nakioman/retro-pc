@@ -18,6 +18,7 @@
 #   BOX86_APPIMAGE   optional local override for the pinned 86Box AppImage
 #   BOX86_ROMS_ARCHIVE optional local override for the pinned ROM tarball
 #   GLSL_SHADERS_ARCHIVE optional local override for the pinned GLSL shader tarball
+#   QEMU_ARCHIVE     optional local override for the pinned QEMU package tarball
 
 set -euo pipefail
 
@@ -27,6 +28,7 @@ MIRROR="${MIRROR:-https://deb.debian.org/debian}"
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 PKG_LIST="$REPO_ROOT/appliance/debian/packages.txt"
+DPKG_FILTERS="$REPO_ROOT/appliance/debian/dpkg-vulkan-intel-only.cfg"
 ARTIFACT_ENV="$REPO_ROOT/appliance/86box.env"
 OUT_DIR="${OUT_DIR:-$SELF_DIR/out}"
 ISOLINUX_LIB="/usr/lib/ISOLINUX"
@@ -40,6 +42,7 @@ latest() { printf '%s\n' "$@" | sort -V | tail -n1; }
 
 [ "$(id -u)" = "0" ] || die "Must run as root (mmdebstrap needs it). Use sudo or the privileged builder container."
 [ -f "$PKG_LIST" ] || die "Package manifest not found: $PKG_LIST"
+[ -f "$DPKG_FILTERS" ] || die "dpkg path filters not found: $DPKG_FILTERS"
 command -v mmdebstrap >/dev/null || die "mmdebstrap not installed."
 command -v mksquashfs >/dev/null || die "squashfs-tools not installed."
 command -v xorriso    >/dev/null || die "xorriso not installed."
@@ -57,6 +60,7 @@ command -v tar         >/dev/null || die "tar not installed."
 [[ "$BOX86_APPIMAGE_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid AppImage SHA256 in $ARTIFACT_ENV"
 [[ "$BOX86_ROMS_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid ROMs SHA256 in $ARTIFACT_ENV"
 [[ "$GLSL_SHADERS_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid GLSL shaders SHA256 in $ARTIFACT_ENV"
+[[ "$QEMU_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || die "Invalid QEMU SHA256 in $ARTIFACT_ENV"
 
 download_and_verify() {
     local source="$1" url="$2" expected="$3" label="$4"
@@ -81,10 +85,14 @@ mkdir -p "$ISO/live" "$ISO/install" "$ISO/isolinux" "$ISO/install/roms" "$OUT_DI
 # --- 1. Target appliance rootfs (the deployed OS) --------------------------
 log "Building target appliance rootfs from $(basename "$PKG_LIST")"
 TARGET_PKGS="$(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$PKG_LIST" | tr '\n' ',' | sed 's/,$//')"
+# No Recommends: keep the root small (3 GiB). The dpkg filters keep only the
+# Intel Vulkan driver out of mesa-vulkan-drivers.
 mmdebstrap \
     --variant=minbase \
     --arch=amd64 \
     --components=main,non-free-firmware \
+    --aptopt='Apt::Install-Recommends "false"' \
+    --dpkgopt="$DPKG_FILTERS" \
     --include="$TARGET_PKGS,linux-image-amd64,ca-certificates" \
     "$SUITE" "$TGT" "$MIRROR"
 
@@ -205,9 +213,11 @@ fi
 APPIMAGE_CACHE="${BOX86_APPIMAGE:-$WORK/$BOX86_APPIMAGE_NAME}"
 ROMS_CACHE="${BOX86_ROMS_ARCHIVE:-$WORK/86box-roms-${BOX86_ROMS_VERSION}.tar.gz}"
 SHADERS_CACHE="${GLSL_SHADERS_ARCHIVE:-$WORK/glsl-shaders-${GLSL_SHADERS_COMMIT}.tar.gz}"
+QEMU_CACHE="${QEMU_ARCHIVE:-$WORK/$QEMU_ARCHIVE_NAME}"
 download_and_verify "$APPIMAGE_CACHE" "$BOX86_APPIMAGE_URL" "$BOX86_APPIMAGE_SHA256" "86Box AppImage"
 download_and_verify "$ROMS_CACHE" "$BOX86_ROMS_URL" "$BOX86_ROMS_SHA256" "86Box ROM tarball"
 download_and_verify "$SHADERS_CACHE" "$GLSL_SHADERS_URL" "$GLSL_SHADERS_SHA256" "GLSL shaders"
+download_and_verify "$QEMU_CACHE" "$QEMU_URL" "$QEMU_SHA256" "QEMU package"
 install -m 0755 "$APPIMAGE_CACHE" "$ISO/install/86box.AppImage"
 tar -xzf "$ROMS_CACHE" --strip-components=1 -C "$ISO/install/roms"
 [ -n "$(find "$ISO/install/roms" -type f -print -quit)" ] \
@@ -216,6 +226,14 @@ mkdir -p "$ISO/install/shaders"
 tar -xzf "$SHADERS_CACHE" --strip-components=1 -C "$ISO/install/shaders"
 [ -f "$ISO/install/shaders/stock.glsl" ] \
     || die "GLSL shaders archive extracted no stock.glsl"
+# Staged as the tarball (unpacked on the target) so DXVK's symlinks and the
+# binaries' modes survive; ISO9660 does not guarantee either.
+tar -tzf "$QEMU_CACHE" > "$WORK/qemu.list"
+for member in bin/qemu-system-i386 lib/libdxvk_d3d9.so.0; do
+    grep -qxE "(\./)?$member" "$WORK/qemu.list" \
+        || die "QEMU package is missing $member"
+done
+install -m 0644 "$QEMU_CACHE" "$ISO/install/qemu-retrobox.tar.gz"
 cp -a "$SELF_DIR/payload/retrobox/vms.yaml" "$ISO/install/vms.yaml"
 cp -a "$SELF_DIR/payload/profiles" "$ISO/install/"
 found_profile=0
@@ -228,7 +246,7 @@ for profile in "$ISO/install"/profiles/*/; do
         || die "ISO payload profile $vm is missing 86box.cfg"
 done
 [ "$found_profile" = "1" ] || die "ISO payload contains no VM profiles"
-log "Staged runtime, ROMs, VM catalog, and profiles"
+log "Staged runtime, ROMs, QEMU, VM catalog, and profiles"
 
 # --- 6. ISOLINUX BIOS boot files + config ----------------------------------
 log "Staging ISOLINUX BIOS boot files"
@@ -300,15 +318,28 @@ unsquashfs -l "$ISO/install/target-rootfs.squashfs" > "$WORK/target.list"
 # confirms firmware-realtek was bundled.
 for bin in usr/sbin/sshd usr/bin/plymouth usr/sbin/grub-install \
            usr/bin/grub-mkimage usr/bin/dialog usr/sbin/wpa_supplicant usr/sbin/iw \
-           usr/lib/firmware/rtw88/rtw8822c_fw.bin; do
+           usr/lib/firmware/rtw88/rtw8822c_fw.bin \
+           usr/lib/xorg/Xorg usr/lib/xorg/Xorg.wrap usr/bin/xinit \
+           usr/bin/matchbox-window-manager usr/bin/dbus-launch \
+           usr/lib/x86_64-linux-gnu/libvulkan_intel.so \
+           usr/share/vulkan/icd.d/intel_icd.json; do
     grep -q "/$bin$" "$WORK/target.list" \
         || die "Expected package binary missing from target rootfs: /$bin"
+done
+# The dpkg filters dropped the other Vulkan drivers, and nothing pulled in
+# pam_systemd (logind sessions would change how Xorg and retrobox-boot run).
+for bin in usr/lib/x86_64-linux-gnu/libvulkan_radeon.so \
+           usr/lib/x86_64-linux-gnu/security/pam_systemd.so; do
+    if grep -q "/$bin$" "$WORK/target.list"; then
+        die "Unexpected file in target rootfs: /$bin"
+    fi
 done
 [ -f "$ISO/install/retrobox" ] || die "ISO is missing /install/retrobox"
 [ -f "$ISO/install/libSystem.IO.Ports.Native.so" ] \
     || warn "ISO is missing /install/libSystem.IO.Ports.Native.so (stale runtime artifact)"
 [ -f "$ISO/install/86box.AppImage" ] || die "ISO is missing /install/86box.AppImage"
 [ -f "$ISO/install/shaders/stock.glsl" ] || die "ISO is missing /install/shaders/stock.glsl"
+[ -f "$ISO/install/qemu-retrobox.tar.gz" ] || die "ISO is missing /install/qemu-retrobox.tar.gz"
 [ -f "$ISO/install/vms.yaml" ] || die "ISO is missing vms.yaml"
 [ -d "$ISO/install/profiles" ] || die "ISO is missing VM profiles"
 
