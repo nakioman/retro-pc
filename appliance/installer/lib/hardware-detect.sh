@@ -3,7 +3,8 @@
 # target, and record an install report. Detection never aborts the install: an
 # absent device yields a clearly-marked placeholder. See hardware-detect.md.
 #
-# Consumes globals: TARGET_DISK, ROOT_UUID, DATA_UUID, RETROBOX_STATUS, BOX86_STATUS.
+# Consumes globals: TARGET_DISK, ROOT_UUID, DATA_UUID, RETROBOX_STATUS, BOX86_STATUS,
+# QEMU_STATUS.
 
 detect_cdrom() {
     local d
@@ -284,6 +285,7 @@ serial.baud=$SERIAL_BAUD
 serial.status=$SERIAL_STATUS
 retrobox.binary=$RETROBOX_STATUS
 box86.appimage=$BOX86_STATUS
+qemu.package=$QEMU_STATUS
 EOF
 }
 

@@ -69,7 +69,9 @@ jobs:
       - name: Build installer image
         env:
           RETROBOX_BIN: ${{ github.workspace }}/.artifacts/retrobox/retrobox
-        run: sudo -E bash appliance/installer/build-usb-installer.sh
+        # sudo-rs (Ubuntu 26.04 runners) does not keep the caller's environment
+        # with -E, so hand the variable to the root shell explicitly.
+        run: sudo env RETROBOX_BIN="$RETROBOX_BIN" bash appliance/installer/build-usb-installer.sh
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
