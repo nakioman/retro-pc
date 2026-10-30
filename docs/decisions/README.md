@@ -22,6 +22,7 @@ and maintainers can reconstruct *why* the code works the way it does.
 - [0007-uefi-boot.md](0007-uefi-boot.md) — UEFI GPT/ESP target with hybrid BIOS/UEFI installer image.
 - [0008-qemu-xorg-gtk-on-the-appliance.md](0008-qemu-xorg-gtk-on-the-appliance.md) — QEMU (vmvga + dxvk-native) with a bare Xorg + GTK for the XP VM.
 - [0009-native-profile-per-engine.md](0009-native-profile-per-engine.md) — per-engine native profile (`86box.cfg` / `qemu.args`) is authoritative; disks declared in `vms.yaml`.
+- [0010-qemu-cdrom-refresh-via-udev.md](0010-qemu-cdrom-refresh-via-udev.md) — QEMU disc changes: udev rule restarts a `retrobox`-owned oneshot that reloads the drive over QMP.
 
 ## Template
 
