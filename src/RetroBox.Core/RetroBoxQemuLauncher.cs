@@ -28,6 +28,10 @@ public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
     public const string SessionArgumentsFileName = "qemu-session.args";
     public const string SessionCommandName = "qemu-session";
 
+    /// <summary>Fullscreen GTK scaled on the GPU; Ctrl+Alt+G releases the grabbed input.</summary>
+    public const string KioskDisplay =
+        "gtk,gl=on,full-screen=on,show-menubar=off,show-tabs=off,zoom-to-fit=on,grab-on-hover=on,window-close=off";
+
     /// <summary>Profile arguments describe the hardware; only host-specific ones are appended.</summary>
     public static IReadOnlyList<string> BuildQemuArguments(
         IReadOnlyList<string> profileArguments,
@@ -36,6 +40,15 @@ public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
         List<string> arguments =
         [
             .. profileArguments,
+            "-display",
+            KioskDisplay,
+            // GTK shows each text console as a tab or window that would cover the VM.
+            "-monitor",
+            "none",
+            "-serial",
+            "none",
+            "-parallel",
+            "none",
             "-qmp",
             $"unix:{Path.Combine(request.RunDirectory, QmpSocketFileName)},server=on,wait=off",
         ];
