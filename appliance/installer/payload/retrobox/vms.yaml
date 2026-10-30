@@ -22,3 +22,11 @@ vms:
     engine: 86box
     disks:
       - file: hdd.raw
+  core2duo:
+    label: "Core 2 Duo"
+    path: "/data/vms/core2duo"
+    engine: qemu
+    disks:
+      - file: hdd.qcow2
+        size: 120G
+        format: qcow2

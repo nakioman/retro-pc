@@ -2,8 +2,9 @@
 
 RetroBox is a self-contained retro computer: a Debian appliance that boots
 straight into [86Box](https://86box.net/) fullscreen and lets you choose
-between three virtual PCs. It is designed to feel like a physical computer
-from the 1980s and 1990s, with the flexibility of a modern emulator.
+between four virtual PCs, the last one a Windows XP machine on QEMU/KVM. It is
+designed to feel like a physical computer from the 1980s to the 2000s, with
+the flexibility of a modern emulator.
 
  Front  | Rear
 :------------------:|:------------------:
@@ -16,13 +17,14 @@ graphics, and an MSI PRO H610M-S DDR4 motherboard. Everything is installed in
 a 3D-printed Macintosh Classic-style case, together with a real floppy drive,
 an optical drive, and an LCD panel.
 
-The appliance includes three 86Box profiles:
+The appliance includes three 86Box profiles and one QEMU profile:
 
 | Profile | Intended use |
 | --- | --- |
 | 386SX-16 | DOS and early software; 54 MB blank disk. |
 | Pentium 100 | Mid-1990s games, Sound Blaster, and CD-ROM. |
 | Pentium II 350 | Windows 98 SE, Voodoo3 3000 AGP, AWE64 Gold, and an approximately 20 GB disk. |
+| Core 2 Duo | Windows XP on QEMU/KVM: VMware SVGA II with Direct3D, AC97, RTL8139, and a 120 GB disk. |
 
 On startup, RetroBox launches the default VM fullscreen. Press F12 to open a
 text-based selector and switch machines without rebooting. The modified floppy
@@ -81,7 +83,7 @@ trusted home LAN. Do not expose it directly to the internet.
 
 ## Build your own RetroBox
 
-This repository contains the source code, 86Box profiles, and fabrication files
+This repository contains the source code, VM profiles, and fabrication files
 needed to reproduce the project. You can build the reference system or adapt
 the motherboard, display, power supply, and floppy drive to your own hardware.
 
@@ -178,7 +180,8 @@ flashing, installation, and validation instructions.
 ## Technical documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — architecture and runtime flow.
-- [`docs/vm-profiles.md`](docs/vm-profiles.md) — the three VM configurations.
+- [`docs/vm-profiles.md`](docs/vm-profiles.md) — the VM configurations.
+- [`docs/windows-xp.md`](docs/windows-xp.md) — installing Windows XP on the Core 2 Duo VM.
 - [`docs/floppy-controller-wiring.md`](docs/floppy-controller-wiring.md) — electronics.
 - [`docs/cdrom-passthrough.md`](docs/cdrom-passthrough.md) — physical CD-ROM.
 - [`docs/86box-floppy-control-socket-contract.md`](docs/86box-floppy-control-socket-contract.md) — 86Box protocol.
