@@ -715,7 +715,7 @@ public static class CliCommandFactory
             request.VmPath,
             Environment.ProcessPath ?? throw new InvalidOperationException("Cannot resolve the retrobox executable for the X session."))
         {
-            OpticalDrivePath = Path.Exists(RetroBoxQemuLauncher.DefaultOpticalDrivePath) ? RetroBoxQemuLauncher.DefaultOpticalDrivePath : null,
+            OpticalDrivePath = RetroBoxHostHardware.ReadOpticalDrive(),
             VirtualTerminal = RetroBoxQemuLauncher.VirtualTerminalFromTty(RetroBoxQemuLauncher.ReadStandardInputTty()),
         });
     }

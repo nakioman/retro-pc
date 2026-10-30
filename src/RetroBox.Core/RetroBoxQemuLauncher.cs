@@ -10,6 +10,7 @@ public sealed record RetroBoxQemuLaunchRequest(
 {
     public string RunDirectory { get; init; } = RetroBoxQemuLauncher.DefaultRunDirectory;
 
+    /// <summary>The installer-detected drive (<see cref="RetroBoxHostHardware"/>); null attaches none.</summary>
     public string? OpticalDrivePath { get; init; }
 
     public int VirtualTerminal { get; init; } = 1;
@@ -23,7 +24,6 @@ public sealed record RetroBoxQemuLaunchRequest(
 public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
 {
     public const string DefaultRunDirectory = "/run/retrobox";
-    public const string DefaultOpticalDrivePath = "/dev/sr0";
     public const string QmpSocketFileName = "qemu-qmp.sock";
     public const string SessionArgumentsFileName = "qemu-session.args";
     public const string SessionCommandName = "qemu-session";

@@ -212,8 +212,9 @@ second-GPU fallback.
 **Implemented** (plan: `docs/superpowers/plans/2026-10-30-xp-phase-2-multi-engine-boot.md`):
 
 - `RetroBoxBoot` became `RetroBox86BoxLauncher`; `RetroBoxQemuLauncher` reads
-  `qemu.args` and appends only the QMP socket and, when present, `/dev/sr0`
-  on IDE index 2. KVM and the audiodev stay in the profile (they are the VM's
+  `qemu.args` and appends only the QMP socket and the installer-detected
+  optical drive (`CDROM_DEVICE` in `/etc/retrobox/hardware.env`, now with
+  `CDROM_STATUS`) on IDE index 2, when detected and still present. KVM and the audiodev stay in the profile (they are the VM's
   hardware, like the spike's command line).
 - QEMU starts with `xinit <retrobox> qemu-session --binary ... --args-file
   /run/retrobox/qemu-session.args --vm-path ... -- :0 vt<N> -keeptty -nolisten
@@ -240,8 +241,9 @@ second-GPU fallback.
 
 ### Phase 4 — CD-ROM and installer host setup (`feat(appliance)`)
 
-- `lib/hardware-detect.sh` writes the detected drive into the QEMU profile
-  alongside today's `ioctl://` 86Box setup.
+- Done in Phase 2: `lib/hardware-detect.sh` records the detected drive and
+  its status in `/etc/retrobox/hardware.env`, and the QEMU launcher attaches
+  it (alongside today's `ioctl://` 86Box setup); QEMU profiles stay portable.
 - `retrobox` joins the `kvm` group; the installer checks that VT-x is enabled
   and reports it in `install-report.txt`.
 - `docs/cdrom-passthrough.md` covers the QEMU path.

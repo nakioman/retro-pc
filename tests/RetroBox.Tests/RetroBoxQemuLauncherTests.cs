@@ -109,9 +109,9 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
     [Fact]
     public void Qemu_arguments_attach_host_optical_drive_when_present()
     {
-        var arguments = RetroBoxQemuLauncher.BuildQemuArguments(SpikeArguments, Request() with { OpticalDrivePath = "/dev/sr0" });
+        var arguments = RetroBoxQemuLauncher.BuildQemuArguments(SpikeArguments, Request() with { OpticalDrivePath = "/dev/disk/by-id/ata-HL-DT-ST_DVDRAM" });
 
-        Assert.Equal(["-drive", "file=/dev/sr0,if=ide,index=2,media=cdrom"], arguments.TakeLast(2));
+        Assert.Equal(["-drive", "file=/dev/disk/by-id/ata-HL-DT-ST_DVDRAM,if=ide,index=2,media=cdrom"], arguments.TakeLast(2));
     }
 
     [Fact]

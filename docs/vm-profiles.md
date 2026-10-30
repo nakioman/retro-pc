@@ -64,8 +64,11 @@ QEMU runs with the profile as its working directory, so relative disk paths
 work. The launcher adds only host-specific arguments:
 
 - `-qmp unix:/run/retrobox/qemu-qmp.sock,server=on,wait=off`
-- `-drive file=/dev/sr0,if=ide,index=2,media=cdrom` when the host has an
-  optical drive (keep IDE index 2 free in the profile).
+- `-drive file=<CDROM_DEVICE>,if=ide,index=2,media=cdrom` with the optical
+  drive the installer detected (`/etc/retrobox/hardware.env`, the same
+  detection that writes `ioctl://` into 86Box profiles). It is attached only
+  when `CDROM_STATUS=DETECTED` and the device still exists, so a removed drive
+  never stops the VM from starting. Keep IDE index 2 free in the profile.
 
 `retrobox boot` writes the complete argument list to
 `/run/retrobox/qemu-session.args` and runs

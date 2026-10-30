@@ -20,8 +20,12 @@ extend to QEMU's qcow2 disks.
   comments and blank lines ignored, no shell quoting). YAML still never
   describes hardware.
 - The QEMU launcher appends only host-specific arguments to `qemu.args`: the
-  QMP socket (`/run/retrobox/qemu-qmp.sock`) and the host optical drive
-  (`/dev/sr0` on IDE index 2) when present. QEMU runs fullscreen in a bare
+  QMP socket (`/run/retrobox/qemu-qmp.sock`) and the host optical drive on
+  IDE index 2. The drive is the one the installer detected and recorded in
+  `/etc/retrobox/hardware.env` (`CDROM_DEVICE`, attached only when
+  `CDROM_STATUS=DETECTED` and the device still exists), the same detection
+  that writes `ioctl://` into 86Box profiles; RetroBox never guesses a
+  device name. QEMU runs fullscreen in a bare
   Xorg started by `xinit`, with `retrobox qemu-session` as the X client.
 - `vms.yaml` declares each VM's disks (`disks: [{file, size, format}]`), for
   every engine. `retrobox vm create-disks` creates the missing ones (raw:

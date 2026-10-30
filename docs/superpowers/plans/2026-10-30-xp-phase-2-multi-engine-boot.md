@@ -99,8 +99,9 @@ every change and which must not depend on profile files.
 - `RetroBoxQemuLauncher`:
   1. builds QEMU's argv = profile arguments + host arguments
      (`-qmp unix:<run dir>/qemu-qmp.sock,server=on,wait=off`, plus
-     `-drive file=<drive>,if=ide,index=2,media=cdrom` when the host has an
-     optical drive);
+     `-drive file=<drive>,if=ide,index=2,media=cdrom` with the drive the
+     installer detected into `/etc/retrobox/hardware.env`, when its
+     `CDROM_STATUS` is `DETECTED` and the device exists);
   2. writes it to `<run dir>/qemu-session.args` (same one-per-line format; it
      doubles as a record of the last launch);
   3. runs `xinit <retrobox> qemu-session --binary <qemu> --args-file <file>
@@ -176,7 +177,7 @@ tests `RetroBox86BoxLauncherTests.cs` (renamed), `RetroBoxQemuLauncherTests.cs`.
 
 - [x] Tests: `qemu.args` parsing (comments, blanks, trimming, missing file);
   the spike's XP arguments as a fixture produce the expected QEMU argv with
-  QMP and, only with a drive, `/dev/sr0`; xinit argv and args file content;
+  QMP and, only with a detected drive, that device; xinit argv and args file content;
   session order (xset → WM start → QEMU with env/working directory → WM
   stop) and QEMU's exit code returned; VT detection fallback.
 - [x] Implement; 86Box launcher test unchanged apart from the name.
