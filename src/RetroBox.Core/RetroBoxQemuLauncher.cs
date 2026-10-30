@@ -25,6 +25,10 @@ public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
 {
     public const string DefaultRunDirectory = "/run/retrobox";
     public const string QmpSocketFileName = "qemu-qmp.sock";
+    public const string DefaultQmpSocketPath = DefaultRunDirectory + "/" + QmpSocketFileName;
+
+    /// <summary>QEMU's id for the host optical drive attached at IDE index 2 (secondary master).</summary>
+    public const string OpticalDriveId = "ide1-cd0";
     public const string SessionArgumentsFileName = "qemu-session.args";
     public const string SessionCommandName = "qemu-session";
 
@@ -42,7 +46,9 @@ public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
         if (request.OpticalDrivePath is not null)
         {
             arguments.Add("-drive");
-            arguments.Add($"file={request.OpticalDrivePath},if=ide,index=2,media=cdrom");
+            // format=raw: QEMU would otherwise probe each disc's format, and the disc-change
+            // refresh (RetroBoxQemuCdromRefresher) reopens the drive as raw too.
+            arguments.Add($"file={request.OpticalDrivePath},if=ide,index=2,media=cdrom,format=raw");
         }
 
         return arguments;

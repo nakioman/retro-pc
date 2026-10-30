@@ -19,6 +19,27 @@ public static class RetroBoxHostHardware
             : null;
     }
 
+    /// <summary>
+    /// True when both paths name the same device node once symlinks are resolved, e.g. the kernel's
+    /// /dev/sr0 and the installer's /dev/disk/by-id/* link to it.
+    /// </summary>
+    public static bool IsSameDevice(string first, string second)
+    {
+        var resolvedFirst = Resolve(first);
+        return resolvedFirst is not null && resolvedFirst == Resolve(second);
+    }
+
+    private static string? Resolve(string path)
+    {
+        if (!Path.Exists(path))
+        {
+            return null;
+        }
+
+        var target = File.ResolveLinkTarget(path, returnFinalTarget: true);
+        return Path.GetFullPath(target?.FullName ?? path);
+    }
+
     private static Dictionary<string, string> ReadEnv(string path)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

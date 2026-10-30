@@ -58,6 +58,33 @@ public sealed class RetroBoxHostHardwareTests : IDisposable
         Assert.Null(RetroBoxHostHardware.ReadOpticalDrive(Path.Combine(root, "missing.env")));
     }
 
+    [Fact]
+    public void Same_device_matches_itself_and_symlinks_to_it()
+    {
+        var device = Path.Combine(root, "sr0");
+        File.WriteAllText(device, string.Empty);
+        var byId = Path.Combine(root, "by-id");
+        Directory.CreateDirectory(byId);
+        var link = Path.Combine(byId, "ata-HL-DT-ST_DVDRAM");
+        File.CreateSymbolicLink(link, Path.Combine("..", "sr0"));
+
+        Assert.True(RetroBoxHostHardware.IsSameDevice(device, device));
+        Assert.True(RetroBoxHostHardware.IsSameDevice(device, link));
+        Assert.True(RetroBoxHostHardware.IsSameDevice(link, device));
+    }
+
+    [Fact]
+    public void Different_devices_do_not_match()
+    {
+        var sr0 = Path.Combine(root, "sr0");
+        var sr1 = Path.Combine(root, "sr1");
+        File.WriteAllText(sr0, string.Empty);
+        File.WriteAllText(sr1, string.Empty);
+
+        Assert.False(RetroBoxHostHardware.IsSameDevice(sr0, sr1));
+        Assert.False(RetroBoxHostHardware.IsSameDevice(sr0, Path.Combine(root, "missing")));
+    }
+
     private string WriteEnv(string content)
     {
         var path = Path.Combine(root, "hardware.env");
