@@ -6,8 +6,9 @@ uses the physical CD-ROM, has guest networking, and — as a stretch — works
 with the NFC floppy drive.
 
 **Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
-on the vmvga path described below. Phase 1 (QEMU package on the appliance) is
-implemented; see its section. The PR plans for phases 1–5 are written
+on the vmvga path described below. Phase 1 (QEMU package on the appliance) and
+Phase 2 (multi-engine boot, declared disks) are implemented; see their
+sections. The PR plans for phases 1–5 are written
 after it, and Phase 1's fork content changes accordingly.
 
 ## Why not 86Box
@@ -232,10 +233,33 @@ decision record: ADR 0008.
   source of truth.
 - Tests first: catalog parsing, engine selection, argument building.
 
+**Implemented** (plan: `docs/superpowers/plans/2026-10-30-xp-phase-2-multi-engine-boot.md`):
+
+- `RetroBoxBoot` became `RetroBox86BoxLauncher`; `RetroBoxQemuLauncher` reads
+  `qemu.args` and appends only the QMP socket and the installer-detected
+  optical drive (`CDROM_DEVICE` in `/etc/retrobox/hardware.env`, now with
+  `CDROM_STATUS`) on IDE index 2, when detected and still present. KVM and
+  the audiodev stay in the profile (they are the VM's hardware, like the
+  spike's command line).
+- QEMU starts with `xinit <retrobox> qemu-session --binary ... --args-file
+  /run/retrobox/qemu-session.args --vm-path ... -- :0 vt<N> -keeptty -nolisten
+  tcp`. The argv goes through a file because xinit splits client and server
+  arguments at `--`. `qemu-session` (hidden) runs `xset s off -dpms`, starts
+  matchbox, and runs QEMU with `NO_AT_BRIDGE=1` and
+  `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. The splash is covered before
+  xinit and quit before the selector, as for 86Box.
+- `/etc/X11/Xwrapper.config` (payload `x11/Xwrapper.config`):
+  `allowed_users=anybody`, `needs_root_rights=yes`, so the boot service can
+  start Xorg without a logind session.
+- Disks moved into `vms.yaml` for every engine (`disks: [{file, size,
+  format}]`); `retrobox vm create-disks` replaces `retrobox-hdd-creation` in
+  the installer. 86Box sizes come from the `.cfg` geometry (ADR 0009).
+
 ### Phase 3 — XP profile, audio, networking (`feat(appliance)`)
 
-- `profiles/winxp` as described above, with a blank qcow2 created at install
-  time (same idea as `retrobox-hdd-creation`).
+- `profiles/winxp` as described above (`qemu.args`), with its 20 GB qcow2
+  declared under `disks:` in `vms.yaml` so `retrobox vm create-disks`
+  creates it at install time.
 - Boots like a real PC: SeaBIOS boot menu (`-boot order=cd,menu=on`, ESC at
   power-on to pick disk, CD, or floppy), optionally with a RetroBox POST
   logo (`-boot splash=`).
@@ -245,8 +269,9 @@ decision record: ADR 0008.
 
 ### Phase 4 — CD-ROM and installer host setup (`feat(appliance)`)
 
-- `lib/hardware-detect.sh` writes the detected drive into the QEMU profile
-  alongside today's `ioctl://` 86Box setup.
+- Done in Phase 2: `lib/hardware-detect.sh` records the detected drive and
+  its status in `/etc/retrobox/hardware.env`, and the QEMU launcher attaches
+  it (alongside today's `ioctl://` 86Box setup); QEMU profiles stay portable.
 - The installer checks that VT-x is enabled and reports it in
   `install-report.txt` (`retrobox` already joined `kvm` in Phase 1).
 - `docs/cdrom-passthrough.md` covers the QEMU path.

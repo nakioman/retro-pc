@@ -40,6 +40,10 @@ _install_systemd_units() {
         "$TARGET_MNT/etc/udev/rules.d/60-gpiochip.rules"
     install -m 0644 "$PAYLOAD_DIR/modprobe/retrobox-kvm.conf" \
         "$TARGET_MNT/etc/modprobe.d/retrobox-kvm.conf"
+    # Lets retrobox-boot start Xorg (xinit) for QEMU VMs; see the file.
+    mkdir -p "$TARGET_MNT/etc/X11"
+    install -m 0644 "$PAYLOAD_DIR/x11/Xwrapper.config" \
+        "$TARGET_MNT/etc/X11/Xwrapper.config"
 
     install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-wifi-firstboot" \
         "$TARGET_MNT/usr/local/sbin/retrobox-wifi-firstboot"

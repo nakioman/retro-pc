@@ -24,7 +24,9 @@ public sealed record RetroBoxBootCommandRequest(
     string BinaryPath,
     string RomPath,
     string VmId,
-    string VmPath);
+    string VmPath,
+    string Engine,
+    string QemuBinaryPath);
 
 public static class CliCommandFactory
 {
@@ -46,6 +48,7 @@ public static class CliCommandFactory
             "floppy",
             "Manage cataloged floppy images."));
         rootCommand.Subcommands.Add(CreateNfcCommand(nfcClientFactory));
+        rootCommand.Subcommands.Add(CreateQemuSessionCommand());
 
         rootCommand.SetAction(_ => 0);
 
@@ -481,6 +484,7 @@ public static class CliCommandFactory
         });
         command.Subcommands.Add(CreateVmListCommand());
         command.Subcommands.Add(defaultCommand);
+        command.Subcommands.Add(CreateVmCreateDisksCommand());
         command.SetAction(_ => 0);
         return command;
     }
@@ -510,6 +514,75 @@ public static class CliCommandFactory
         return command;
     }
 
+    private static Command CreateVmCreateDisksCommand()
+    {
+        var configRootOption = ConfigRootOption();
+        var vmArgument = new Argument<string?>("id")
+        {
+            Description = "Only create the disks of this VM.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var qemuImgOption = new Option<string>("--qemu-img")
+        {
+            Description = "qemu-img executable used for qcow2 disks.",
+            DefaultValueFactory = _ => RetroBoxQemuBundle.DefaultImgBinaryPath,
+        };
+        var command = new Command("create-disks", "Create the missing disks declared in vms.yaml; existing disks are never touched.")
+        {
+            vmArgument,
+            configRootOption,
+            qemuImgOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            IEnumerable<KeyValuePair<string, RetroBoxVm>> vms;
+            try
+            {
+                var catalog = new RetroBoxConfigStore(
+                    parseResult.GetValue(configRootOption) ?? RetroBoxConfigStore.DefaultRootPath).Load();
+                var vmId = parseResult.GetValue(vmArgument);
+                if (vmId is not null && !catalog.Vms.ContainsKey(vmId))
+                {
+                    throw new RetroBoxCatalogException($"Unknown VM '{vmId}'.");
+                }
+
+                vms = catalog.Vms
+                    .Where(entry => vmId is null || entry.Key == vmId)
+                    .OrderBy(entry => entry.Key, StringComparer.Ordinal);
+            }
+            catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+            {
+                return WriteError(parseResult, ex);
+            }
+
+            var output = parseResult.InvocationConfiguration.Output;
+            var creator = new RetroBoxVmDiskCreator(
+                new RetroBoxProcessRunner(),
+                parseResult.GetValue(qemuImgOption) ?? RetroBoxQemuBundle.DefaultImgBinaryPath);
+            var exitCode = 0;
+            foreach (var (id, vm) in vms)
+            {
+                try
+                {
+                    foreach (var plan in RetroBoxVmDiskPlanner.Plan(id, vm))
+                    {
+                        output.WriteLine(creator.Create(plan) == RetroBoxVmDiskOutcome.Created
+                            ? $"{id}\tcreated\t{plan.Path}\t{plan.SizeBytes}"
+                            : $"{id}\tkept\t{plan.Path}");
+                    }
+                }
+                catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
+                {
+                    parseResult.InvocationConfiguration.Error.WriteLine($"{id}: {ex.Message}");
+                    exitCode = 1;
+                }
+            }
+
+            return exitCode;
+        });
+        return command;
+    }
+
     private static Command CreateBootCommand(
         Func<RetroBoxBootCommandRequest, int>? bootRunner,
         IRetroBoxBootHotkeyDetector? hotkeyDetector,
@@ -520,14 +593,19 @@ public static class CliCommandFactory
         var binaryOption = new Option<string>("--binary")
         {
             Description = "86Box executable path.",
-            DefaultValueFactory = _ => RetroBoxBoot.DefaultBinaryPath,
+            DefaultValueFactory = _ => RetroBox86BoxLauncher.DefaultBinaryPath,
         };
         var romPathOption = new Option<string>("--rompath")
         {
             Description = "86Box ROM directory.",
-            DefaultValueFactory = _ => RetroBoxBoot.DefaultRomPath,
+            DefaultValueFactory = _ => RetroBox86BoxLauncher.DefaultRomPath,
         };
-        var dryRunOption = new Option<bool>("--dry-run") { Description = "Show the VM without starting 86Box." };
+        var qemuBinaryOption = new Option<string>("--qemu-binary")
+        {
+            Description = "QEMU executable path for QEMU VMs.",
+            DefaultValueFactory = _ => RetroBoxQemuBundle.DefaultSystemBinaryPath,
+        };
+        var dryRunOption = new Option<bool>("--dry-run") { Description = "Show the VM without starting it." };
         var selectorOption = new Option<bool>("--selector") { Description = "Open the VM selector immediately." };
         var selectOption = new Option<string?>("--select") { Description = "Run this VM without changing the default." };
         var command = new Command("boot", "Start the configured VM, using F12 to open the selector.")
@@ -535,6 +613,7 @@ public static class CliCommandFactory
             configRootOption,
             binaryOption,
             romPathOption,
+            qemuBinaryOption,
             dryRunOption,
             selectorOption,
             selectOption,
@@ -581,17 +660,20 @@ public static class CliCommandFactory
                         throw new RetroBoxCatalogException($"VM '{vmId}' profile directory '{vm.Path}' does not exist.");
                     }
 
-                    var configPath = Path.Combine(vm.Path, "86box.cfg");
-                    if (!File.Exists(configPath))
+                    var profilePath = Path.Combine(vm.Path, RetroBoxVmEngines.ProfileFileName(vm.Engine));
+                    if (!File.Exists(profilePath))
                     {
-                        throw new RetroBoxCatalogException($"VM '{vmId}' profile is invalid: '{configPath}' does not exist.");
+                        throw new RetroBoxCatalogException($"VM '{vmId}' profile is invalid: '{profilePath}' does not exist.");
                     }
+
                     var request = new RetroBoxBootCommandRequest(
                         configRoot,
-                        parseResult.GetValue(binaryOption) ?? RetroBoxBoot.DefaultBinaryPath,
-                        parseResult.GetValue(romPathOption) ?? RetroBoxBoot.DefaultRomPath,
+                        parseResult.GetValue(binaryOption) ?? RetroBox86BoxLauncher.DefaultBinaryPath,
+                        parseResult.GetValue(romPathOption) ?? RetroBox86BoxLauncher.DefaultRomPath,
                         vmId,
-                        vm.Path);
+                        vm.Path,
+                        vm.Engine,
+                        parseResult.GetValue(qemuBinaryOption) ?? RetroBoxQemuBundle.DefaultSystemBinaryPath);
 
                     if (dryRun)
                     {
@@ -600,9 +682,7 @@ public static class CliCommandFactory
                     }
 
                     splash.Cover();
-                    var exitCode = bootRunner is null
-                        ? RetroBoxBoot.Run(new RetroBoxBootRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath))
-                        : bootRunner(request);
+                    var exitCode = (bootRunner ?? RunVm)(request);
 
                     if (explicitVmId is not null)
                     {
@@ -617,6 +697,53 @@ public static class CliCommandFactory
             catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
                 splash.Quit();
+                return WriteError(parseResult, ex);
+            }
+        });
+        return command;
+    }
+
+    private static int RunVm(RetroBoxBootCommandRequest request)
+    {
+        if (request.Engine != RetroBoxVmEngines.Qemu)
+        {
+            return RetroBox86BoxLauncher.Run(new RetroBox86BoxLaunchRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath));
+        }
+
+        return new RetroBoxQemuLauncher(new RetroBoxProcessRunner()).Run(new RetroBoxQemuLaunchRequest(
+            request.QemuBinaryPath,
+            request.VmPath,
+            Environment.ProcessPath ?? throw new InvalidOperationException("Cannot resolve the retrobox executable for the X session."))
+        {
+            OpticalDrivePath = RetroBoxHostHardware.ReadOpticalDrive(),
+            VirtualTerminal = RetroBoxQemuLauncher.VirtualTerminalFromTty(RetroBoxQemuLauncher.ReadStandardInputTty()),
+        });
+    }
+
+    /// <summary>The xinit client of a QEMU boot; internal plumbing, so hidden from help.</summary>
+    private static Command CreateQemuSessionCommand()
+    {
+        var binaryOption = new Option<string>("--binary") { Description = "QEMU executable path.", Required = true };
+        var argumentsFileOption = new Option<string>("--args-file") { Description = "QEMU arguments, one per line.", Required = true };
+        var vmPathOption = new Option<string>("--vm-path") { Description = "VM profile directory.", Required = true };
+        var command = new Command(RetroBoxQemuLauncher.SessionCommandName, "Run a QEMU VM inside the X session started by boot.")
+        {
+            binaryOption,
+            argumentsFileOption,
+            vmPathOption,
+        };
+        command.Hidden = true;
+        command.SetAction(parseResult =>
+        {
+            try
+            {
+                return new RetroBoxQemuSession(new RetroBoxProcessRunner()).Run(new RetroBoxQemuSessionRequest(
+                    parseResult.GetValue(binaryOption)!,
+                    parseResult.GetValue(argumentsFileOption)!,
+                    parseResult.GetValue(vmPathOption)!));
+            }
+            catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            {
                 return WriteError(parseResult, ex);
             }
         });

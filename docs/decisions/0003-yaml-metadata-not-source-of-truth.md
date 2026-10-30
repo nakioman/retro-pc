@@ -1,7 +1,7 @@
 # 0003. 86Box config is the hardware source of truth
 
 Date: 2026-07-28
-Status: Accepted
+Status: Accepted, amended by [0009](0009-native-profile-per-engine.md)
 
 ## Context
 

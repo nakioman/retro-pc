@@ -244,8 +244,8 @@ for profile in "$ISO/install"/profiles/*/; do
     found_profile=1
     vm="${profile%/}"
     vm="${vm##*/}"
-    [ -f "$profile/86box.cfg" ] \
-        || die "ISO payload profile $vm is missing 86box.cfg"
+    [ -f "$profile/86box.cfg" ] || [ -f "$profile/qemu.args" ] \
+        || die "ISO payload profile $vm has neither 86box.cfg nor qemu.args"
 done
 [ "$found_profile" = "1" ] || die "ISO payload contains no VM profiles"
 log "Staged runtime, ROMs, QEMU, VM catalog, and profiles"

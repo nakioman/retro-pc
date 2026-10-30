@@ -26,7 +26,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
 
     private readonly ISerializer serializer = new StaticSerializerBuilder(new RetroBoxYamlContext())
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitEmptyCollections)
             .Build();
 
     public RetroBoxCatalogData Load()
@@ -199,6 +199,7 @@ public sealed class RetroBoxConfigStore(string? rootPath = null)
             id.RequireCatalogId("VM ID");
             vm.Label.RequireCatalogValue($"VM '{id}' label");
             vm.Path.RequireCatalogValue($"VM '{id}' path");
+            RetroBoxVmCatalogRules.Validate(id, vm);
         }
 
         foreach (var (id, floppy) in data.Floppies)

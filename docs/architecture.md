@@ -23,9 +23,11 @@ power on
   -> retrobox boot
        F12 pressed? -> terminal VM selector (start / set default / cancel)
        otherwise    -> default VM
-  -> 86Box fullscreen (SDL, CRT shader)
+  -> engine per vms.yaml:
+       86box -> 86Box fullscreen (SDL, CRT shader)
+       qemu  -> xinit -> retrobox qemu-session -> QEMU fullscreen (GTK, bare Xorg + matchbox)
        VM exit -> selector returns, so another VM can start without rebooting
-  -> 86Box exits -> tty1 login
+  -> Esc in the selector -> tty1 login
 ```
 
 On the first boot with a USB WiFi NIC attached, `retrobox-wifi-firstboot`
@@ -64,8 +66,15 @@ YamlDotNet.
   validation and backup-then-restore on failed saves.
 - `RetroBoxCatalogModels` / `RetroBoxCatalogValidation` / `RetroBoxCatalogRules`
   — YAML data shapes and ID/mode/size validation rules.
-- `RetroBoxBoot` / `RetroBoxBootSelector` / `RetroBoxBootHotkey` — resolve and
-  launch the target VM; detect the F12 boot-window hotkey.
+- `RetroBoxBootSelector` / `RetroBoxBootHotkey` — resolve the target VM;
+  detect the F12 boot-window hotkey.
+- `RetroBox86BoxLauncher` / `RetroBoxQemuLauncher` / `RetroBoxQemuSession` —
+  per-engine launch. QEMU reads `qemu.args` (`RetroBoxQemuProfile`), adds the
+  host arguments, and runs under `xinit` with the retrobox binary as the X
+  client. Processes go through `IRetroBoxProcessRunner` so tests can record them.
+- `RetroBoxVmCatalogRules` / `RetroBoxVmDiskPlanner` / `RetroBoxVmDiskCreator` /
+  `RetroBox86BoxConfig` — validate `engine` and `disks`, size disks (86Box from
+  `.cfg` geometry), and create the missing ones.
 - `RetroBoxFloppyControlClient` / `RetroBoxEchoTransportStream` — client for the
   86Box floppy control socket; echo transport for `--echo`.
 - `RetroBoxFloppyImporter` — moves scratch images into the catalog and updates
@@ -80,7 +89,8 @@ YamlDotNet.
 ### src/RetroBox.Cli
 
 System.CommandLine root command (`Program.cs` → `CliCommandFactory.cs`).
-Subcommands: `boot`, `daemon`, `vm`, `floppy`, `import`, `nfc`. The factory
+Subcommands: `boot`, `daemon`, `vm` (`list`, `default`, `create-disks`),
+`floppy`, `import`, `nfc`, and the hidden `qemu-session` (the xinit client). The factory
 accepts injected runners/UIs so tests can drive commands in-process.
 
 ### src/RetroBox.Daemon
@@ -152,7 +162,7 @@ See [`appliance/README.md`](../appliance/README.md) and
 | --- | --- | --- |
 | Arduino serial protocol | `RetroBoxArduinoSerialProtocol` | `INIT`, `INSERT <id>,<mode>`, `EJECT`, `ERROR`; host `WRITE`/`TAGID`/`STATUS`/`PING`. |
 | 86Box floppy control socket | `docs/86box-floppy-control-socket-contract.md` | JSON Lines over Unix socket; `floppy.insert/eject/status`. |
-| VM hardware source of truth | `docs/vm-profiles.md` | The 86Box `.cfg` defines hardware; YAML is metadata only. |
+| VM hardware source of truth | `docs/vm-profiles.md` | Each engine's native profile (`86box.cfg`, `qemu.args`) defines hardware; YAML is metadata plus disk declarations. |
 | CD-ROM passthrough | `docs/cdrom-passthrough.md` | First active optical slot bound to `ioctl://<device>` at install. |
 
 ## Data model
@@ -173,6 +183,17 @@ vms:
   pentium100:
     label: "Pentium 100"
     path: "/data/vms/pentium100"
+    engine: 86box            # default; or qemu
+    disks:
+      - file: hdd.raw        # relative to path; size from 86box.cfg geometry
+  winxp:
+    label: "Windows XP"
+    path: "/data/vms/winxp"
+    engine: qemu
+    disks:
+      - file: xp.qcow2
+        size: 20G            # bytes or K/M/G/T; required for QEMU
+        format: qcow2        # raw (default) | qcow2
 ```
 
 ```yaml
@@ -217,6 +238,9 @@ The `nfc` field tracks whether a physical NFC tag has been assigned to this flop
 - The `retrobox` binary is published as a **Native AOT Linux x64** single file
   (`mise run publish-linux-x64`) and installed at `/opt/retrobox/retrobox`.
 - 86Box runs as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`.
+- QEMU runs as `/opt/qemu-retrobox/bin/qemu-system-i386` with
+  `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib` (dxvk-native); qcow2 disks are
+  created with `/opt/qemu-retrobox/bin/qemu-img`.
 - Systemd units under `appliance/installer/payload/units/` supervise boot and
   the daemon; the daemon runs whether or not the floppy controller is attached,
   serving the LAN panel in either case.
@@ -239,3 +263,4 @@ Recorded in [`docs/decisions/`](decisions/README.md). Notable entries:
 - `0004` — NFC tags carry raw bytes, not NDEF.
 - `0005` — appliance supports WiFi via `wpa_supplicant` + systemd-networkd (DHCP) and a first-boot dialog.
 - `0008` — QEMU (vmvga + dxvk-native) ships under `/opt/qemu-retrobox` with a bare Xorg + GTK display stack for the Windows XP VM.
+- `0009` — each engine's native profile is authoritative; disks are declared in `vms.yaml`.

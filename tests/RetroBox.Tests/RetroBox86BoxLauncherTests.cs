@@ -2,7 +2,7 @@ using RetroBox.Core;
 
 namespace RetroBox.Tests;
 
-public sealed class RetroBoxBootTests
+public sealed class RetroBox86BoxLauncherTests
 {
     [Fact]
     public void Run_passes_vm_and_rom_paths_and_uses_profile_as_working_directory()
@@ -21,7 +21,7 @@ public sealed class RetroBoxBootTests
 
         try
         {
-            Assert.Equal(0, RetroBoxBoot.Run(new RetroBoxBootRequest(
+            Assert.Equal(0, RetroBox86BoxLauncher.Run(new RetroBox86BoxLaunchRequest(
                 binary, "pentium100", vmPath, "/opt/86Box/roms")));
 
             var lines = File.ReadAllLines(output);

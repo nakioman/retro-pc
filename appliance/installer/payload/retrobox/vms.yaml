@@ -1,10 +1,24 @@
+# VM catalog (metadata only). Each profile's native file is the hardware source
+# of truth (ADR 0009): 86box.cfg for engine 86box (the default), qemu.args for
+# engine qemu. `retrobox vm create-disks` creates the missing disks listed here
+# and never touches existing ones. 86Box disk sizes come from the .cfg geometry
+# (hdd_NN_parameters), so they are not repeated here.
 vms:
   386sx16:
     label: "386SX-16"
     path: "/data/vms/386sx16"
+    engine: 86box
+    disks:
+      - file: hdd.raw
   pentium100:
     label: "Pentium 100"
     path: "/data/vms/pentium100"
+    engine: 86box
+    disks:
+      - file: hdd.raw
   pentium2-350:
     label: "Pentium II 350"
     path: "/data/vms/pentium2-350"
+    engine: 86box
+    disks:
+      - file: hdd.raw

@@ -142,8 +142,12 @@ Re-running the installer over an existing appliance asks whether to keep your da
   filesystem is rewritten (still gated by the typed `ERASE /dev/sdX` confirm).
 - Everything on `/data` survives: VMs (`hdd.raw`), the VM catalog (`vms.yaml`),
   floppies and snapshots.
-- OS-managed profile files (`86box.cfg`, EDID) **are** refreshed; `hdd.raw` and
-  `.yaml` files are never overwritten.
+- OS-managed profile files (`86box.cfg`, `qemu.args`, EDID) **are** refreshed;
+  disk images (`.raw`, `.vhd`, `.qcow2`) and `.yaml` files are never
+  overwritten.
+- Disks declared in `vms.yaml` are created with `retrobox vm create-disks`
+  after the profiles are staged; existing disks are kept. With a preserved
+  catalog a failure there only warns (rerun the command after boot).
 - Answer `n` (or press Enter) to the "Preserve /data?" prompt to fully wipe and
   refresh the installation. Set `RETROPC_WIPE_DATA=1` for unattended installs.
 

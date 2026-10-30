@@ -34,9 +34,15 @@ then writes `cdrom_XX_image_path = ioctl://<detected-device>`. Other optical
 slots are left untouched. A malformed or unreadable profile is warned about and
 skipped without failing installation.
 
+QEMU profiles are not edited: `/etc/retrobox/hardware.env` records
+`CDROM_DEVICE` and `CDROM_STATUS`, and `retrobox boot` attaches the device to a
+QEMU VM (`-drive file=<device>,if=ide,index=2,media=cdrom`) only when the
+status is `DETECTED` and the device still exists at launch.
+
 When no drive is found, installed profiles are unchanged. `/dev/sr0` remains
-only the diagnostic placeholder in `hardware.env` and the install report;
-it is never written into a profile. Payload profile templates are likewise
+only the diagnostic placeholder in `hardware.env` (with
+`CDROM_STATUS=NOT_DETECTED`) and the install report; it is never written into a
+profile or attached to a VM. Payload profile templates are likewise
 host-neutral. Follow [the physical CD-ROM validation procedure](../../docs/cdrom-passthrough.md)
 on the target appliance.
 
