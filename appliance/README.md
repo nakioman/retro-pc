@@ -19,6 +19,23 @@ deployed as `/opt/86Box/86box.AppImage` with ROMs in `/opt/86Box/roms`, while
 `/opt/retrobox/retrobox` is the self-contained Native AOT Linux x64 binary
 produced by the repository's publish task. Versions and checksums are pinned in
 [`86box.env`](86box.env).
+
+QEMU for the upcoming Windows XP VM is installed under `/opt/qemu-retrobox`
+(see [ADR 0008](../docs/decisions/0008-qemu-xorg-gtk-on-the-appliance.md)).
+It is our [qemu-vmvga](https://github.com/nakioman/qemu-vmvga) build (QEMU
+11.1.1 with the VMware SVGA II device, GTK + OpenGL display, dxvk-native in
+`lib/`), pinned in the same `86box.env` (`QEMU_*`). QEMU dlopens DXVK, so it
+must run with `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. Its host stack is a
+bare Xorg (started through the setuid `Xorg.wrap`, since the appliance has no
+logind sessions), `matchbox-window-manager`, GTK 3 with `dbus-x11`, and Vulkan
+trimmed to Intel's driver. KVM loads with `enable_vmware_backdoor=1`
+(`/etc/modprobe.d/retrobox-kvm.conf`), which the guest's VMware driver needs
+for Direct3D. Nothing launches QEMU yet; that lands with multi-engine boot. The
+user supplies VMware's SVGA II driver for XP; RetroBox does not ship it.
+
+The root partition is 3 GiB on fresh installs (2 GiB before the QEMU stack);
+everything else on the disk is `/data`. The target rootfs is built without
+Recommends.
 This document defines the base layout. The bootable USB installer that turns it
 into an installed, read-only-root system on the appliance disk lives under
 [`installer/`](installer/README.md); the installer is the authoritative source
@@ -73,7 +90,8 @@ The appliance uses a single account, `retrobox`.
 `root` is locked (`passwd -l root`): there is no interactive root login on the
 console or over SSH. `retrobox` is both the service runtime user (it owns the
 application state under `/data/retrobox`) and the maintenance login. It is a
-member of the `sudo` and `gpio` groups. The installer creates the `gpio` group
+member of the `sudo` and `gpio` groups, plus `kvm` and `render` for QEMU's KVM
+acceleration and the GPU. The installer creates the `gpio` group
 and installs a udev rule granting `retrobox` access to GPIO chip devices.
 There is no separate administrator account.
 

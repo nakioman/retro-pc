@@ -104,7 +104,7 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
 - Catalog files under `configRoot` (default `/data/retrobox`): `config.yaml`,
   `vms.yaml`, `floppies.yaml`. Each VM has an `engine` (`86box` default, or
   `qemu`); the engine's native profile (`86box.cfg` / `qemu.args`) is the
-  hardware source of truth (ADR 0008). `vms.yaml` also declares disks, which
+  hardware source of truth (ADR 0009). `vms.yaml` also declares disks, which
   `retrobox vm create-disks` creates; 86Box disk sizes come from the `.cfg`
   geometry.
 - Serial protocol (115200 baud, newline lines): `INIT <v>`, `INSERT <id>,<mode>`,

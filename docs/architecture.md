@@ -262,4 +262,5 @@ Recorded in [`docs/decisions/`](decisions/README.md). Notable entries:
 - `0003` — the 86Box `.cfg` is the hardware source of truth; YAML is metadata.
 - `0004` — NFC tags carry raw bytes, not NDEF.
 - `0005` — appliance supports WiFi via `wpa_supplicant` + systemd-networkd (DHCP) and a first-boot dialog.
-- `0008` — each engine's native profile is authoritative; disks are declared in `vms.yaml`.
+- `0008` — QEMU (vmvga + dxvk-native) ships under `/opt/qemu-retrobox` with a bare Xorg + GTK display stack for the Windows XP VM.
+- `0009` — each engine's native profile is authoritative; disks are declared in `vms.yaml`.

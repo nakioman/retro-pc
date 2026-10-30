@@ -14,7 +14,7 @@ public static class RetroBoxVmDiskPlanner
 {
     /// <summary>
     /// Resolves a VM's declared disks to paths and sizes. For 86Box the .cfg geometry is
-    /// authoritative (ADR 0008): a declared size must match it.
+    /// authoritative (ADR 0009): a declared size must match it.
     /// </summary>
     public static IReadOnlyList<RetroBoxVmDiskPlan> Plan(string vmId, RetroBoxVm vm)
     {

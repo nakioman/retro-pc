@@ -5,9 +5,10 @@ sound and real hardware-accelerated OpenGL and Direct3D (Glide is a bonus),
 uses the physical CD-ROM, has guest networking, and — as a stretch — works
 with the NFC floppy drive.
 
-**Status:** Draft. Phase 2 (multi-engine boot, declared disks) is
-implemented. Phase 0 (the hardware spike) is in progress; Direct3D works
-on the vmvga path described below. The PR plans for phases 1–5 are written
+**Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
+on the vmvga path described below. Phase 1 (QEMU package on the appliance) and
+Phase 2 (multi-engine boot, declared disks) are implemented; see their
+sections. The PR plans for phases 1–5 are written
 after it, and Phase 1's fork content changes accordingly.
 
 ## Why not 86Box
@@ -184,8 +185,9 @@ second-GPU fallback.
   CI builds `qemu-retrobox-<qemu>-<rev>-linux-x86_64.tar.gz` (QEMU 11.1.1 with
   GTK + OpenGL, no SDL, plus dxvk-native) and releases it for `retrobox-*`
   tags. `nakioman/qemu-3dfx` stays as plan B.
-- `appliance/qemu.env` pins the release and its SHA-256; the installer unpacks
-  it to `/opt/qemu-retrobox`.
+- `appliance/86box.env` pins the release and its SHA-256 (`QEMU_*`, next to
+  the 86Box artifacts, rather than a separate `qemu.env`); the installer
+  unpacks it to `/opt/qemu-retrobox`.
 - Appliance packages: a bare Xorg (`xserver-xorg-core`,
   `xserver-xorg-input-libinput`, `xserver-xorg-legacy`, `xinit`),
   `matchbox-window-manager`, GTK 3 with `dbus-x11` (not `dbus-user-session`,
@@ -196,6 +198,28 @@ second-GPU fallback.
 - No guest tools are shipped: the user supplies VMware's SVGA II driver for
   XP, like the XP media.
 
+**Status (2026-10-30): implemented.** Plan:
+[`2026-10-30-windows-xp-qemu-phase-1.md`](../plans/2026-10-30-windows-xp-qemu-phase-1.md);
+decision record: ADR 0008.
+
+- First release: `retrobox-11.1.1-1` (fork commit `c894e78`), asset
+  `qemu-retrobox-11.1.1-c894e78-linux-x86_64.tar.gz`.
+- `ldd` on Debian 13 found one missing library, `libslirp0` (user-mode NAT),
+  now in `packages.txt`.
+- The package is a full install prefix (489 MB unpacked, ~290 MB of it other
+  architectures' EDK2 images). The installer unpacks only `qemu-system-i386`,
+  `qemu-img`, dxvk-native, and `share/qemu` without those images: 145 MB.
+  Follow-up: drop them (and strip the binary) in the fork's package.
+- `mesa-vulkan-drivers` is trimmed to Intel's ICD with dpkg `path-exclude`
+  filters (79 MB -> 21 MB).
+- Measured root cost without Recommends: +283 MB (Xorg 27, GTK 3 + matchbox
+  + dbus-x11 90, Vulkan 21, QEMU 145). Fresh installs get a 3 GiB root
+  partition (was 2 GiB); most of the disk stays on `/data`.
+- `retrobox` joins `kvm` and `render` here, ahead of Phase 4.
+- Left for Phase 2: `/etc/X11/Xwrapper.config` for starting Xorg from the
+  boot service, the `xinit` session, and
+  `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib` on the QEMU process.
+
 ### Phase 2 — Multi-engine boot (`feat(core)`, `feat(cli)`)
 
 - `vms.yaml` gains `engine: 86box | qemu`, default `86box`; validated in
@@ -205,7 +229,7 @@ second-GPU fallback.
 - A QEMU profile's `qemu.args` (one argument per line) is its hardware source
   of truth; the launcher appends only host-specific arguments (KVM, CD
   device, QMP socket, audiodev).
-- ADR 0008 extends ADR 0003: each engine's native profile is the hardware
+- ADR 0009 extends ADR 0003: each engine's native profile is the hardware
   source of truth.
 - Tests first: catalog parsing, engine selection, argument building.
 
@@ -214,8 +238,9 @@ second-GPU fallback.
 - `RetroBoxBoot` became `RetroBox86BoxLauncher`; `RetroBoxQemuLauncher` reads
   `qemu.args` and appends only the QMP socket and the installer-detected
   optical drive (`CDROM_DEVICE` in `/etc/retrobox/hardware.env`, now with
-  `CDROM_STATUS`) on IDE index 2, when detected and still present. KVM and the audiodev stay in the profile (they are the VM's
-  hardware, like the spike's command line).
+  `CDROM_STATUS`) on IDE index 2, when detected and still present. KVM and
+  the audiodev stay in the profile (they are the VM's hardware, like the
+  spike's command line).
 - QEMU starts with `xinit <retrobox> qemu-session --binary ... --args-file
   /run/retrobox/qemu-session.args --vm-path ... -- :0 vt<N> -keeptty -nolisten
   tcp`. The argv goes through a file because xinit splits client and server
@@ -223,9 +248,12 @@ second-GPU fallback.
   matchbox, and runs QEMU with `NO_AT_BRIDGE=1` and
   `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. The splash is covered before
   xinit and quit before the selector, as for 86Box.
+- `/etc/X11/Xwrapper.config` (payload `x11/Xwrapper.config`):
+  `allowed_users=anybody`, `needs_root_rights=yes`, so the boot service can
+  start Xorg without a logind session.
 - Disks moved into `vms.yaml` for every engine (`disks: [{file, size,
   format}]`); `retrobox vm create-disks` replaces `retrobox-hdd-creation` in
-  the installer. 86Box sizes come from the `.cfg` geometry (ADR 0008).
+  the installer. 86Box sizes come from the `.cfg` geometry (ADR 0009).
 
 ### Phase 3 — XP profile, audio, networking (`feat(appliance)`)
 
@@ -244,8 +272,8 @@ second-GPU fallback.
 - Done in Phase 2: `lib/hardware-detect.sh` records the detected drive and
   its status in `/etc/retrobox/hardware.env`, and the QEMU launcher attaches
   it (alongside today's `ioctl://` 86Box setup); QEMU profiles stay portable.
-- `retrobox` joins the `kvm` group; the installer checks that VT-x is enabled
-  and reports it in `install-report.txt`.
+- The installer checks that VT-x is enabled and reports it in
+  `install-report.txt` (`retrobox` already joined `kvm` in Phase 1).
 - `docs/cdrom-passthrough.md` covers the QEMU path.
 - QEMU does not notice a disc swap in the host drive: the guest keeps the old
   disc until the drive is reopened (QMP `blockdev-change-medium` on

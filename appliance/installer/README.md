@@ -75,9 +75,12 @@ sudo bash appliance/installer/build-usb-installer.sh
 ### Embedding the runtime
 
 The build always embeds the published RetroBox binary and downloads the pinned
-86Box AppImage, ROM tarball, and the pinned libretro GLSL shader archive from
-`appliance/86box.env`, validating all three
-SHA256 values. To build locally:
+86Box AppImage, ROM tarball, the pinned libretro GLSL shader archive, and the
+pinned QEMU package (`qemu-retrobox-*.tar.gz` from our qemu-vmvga fork) from
+`appliance/86box.env`, validating all four SHA256 values. Local copies can
+replace the downloads with `BOX86_APPIMAGE`, `BOX86_ROMS_ARCHIVE`,
+`GLSL_SHADERS_ARCHIVE`, and `QEMU_ARCHIVE`; they are checksum-verified too.
+To build locally:
 
 ```bash
 mise run publish-linux-x64   # produces the retrobox linux-x64 single-file binary
@@ -90,6 +93,19 @@ statically link `System.IO.Ports`); the build stages it next to the binary and
 installs it to `/opt/retrobox/` when the publish output provides it. The publish
 workflow asserts it exists; an installer built from a stale runtime artifact
 warns instead of failing.
+
+The QEMU tarball is staged on the ISO as `install/qemu-retrobox.tar.gz` (a
+tarball keeps DXVK's symlinks). The installer unpacks the parts the x86 VM
+uses (`qemu-system-i386`, `qemu-img`, dxvk-native, x86 firmware) to
+`/opt/qemu-retrobox` and records `qemu.package=installed` in
+`install-report.txt`. It also installs `/etc/modprobe.d/retrobox-kvm.conf`
+(`kvm enable_vmware_backdoor=1`) and adds `retrobox` to `kvm` and `render`.
+
+The target rootfs is built without Recommends, and
+`appliance/debian/dpkg-vulkan-intel-only.cfg` trims `mesa-vulkan-drivers` to
+Intel's Vulkan driver. Fresh installs get a 3 GiB root partition
+(`RETROPC_ROOT_GIB`); a reinstall that preserves `/data` keeps the existing
+partition sizes.
 
 The installer copies the runtime to `/opt`, the 86Box shaders to
 `/opt/86Box/shaders`, and `vms.yaml` to
@@ -211,9 +227,9 @@ preservation (existing `/data`, `hdd.raw`, and `.yaml` are kept unless
 
 Deferred and recorded in `install-report.txt` rather than failing the install:
 
-- **RetroBox binary / 86Box AppImage / ROMs** — required at build time; the
-  AppImage and ROM tarball are downloaded and checksum-verified from
-  `appliance/86box.env`.
+- **RetroBox binary / 86Box AppImage / ROMs / QEMU** — required at build
+  time; the AppImage, ROM tarball, and QEMU package are downloaded and
+  checksum-verified from `appliance/86box.env`.
 - **ESP8266 serial** — detected when present; otherwise the daemon config
   keeps a documented placeholder path. Electronics validation is tracked in
   #22 / #35.

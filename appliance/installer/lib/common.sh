@@ -16,6 +16,7 @@ RETROBOX_SRC="$INSTALL_SRC/retrobox"
 BOX86_SRC="$INSTALL_SRC/86box.AppImage"
 BOX86_ROMS_SRC="$INSTALL_SRC/roms"
 BOX86_SHADERS_SRC="$INSTALL_SRC/shaders"
+QEMU_SRC="$INSTALL_SRC/qemu-retrobox.tar.gz"
 
 # Where the target root filesystem is assembled during install.
 TARGET_MNT="/mnt/target"
@@ -23,6 +24,7 @@ TARGET_MNT="/mnt/target"
 # Target-side paths (inside TARGET_MNT).
 RETROBOX_OPT="/opt/retrobox"
 BOX86_OPT="/opt/86Box"
+QEMU_OPT="/opt/qemu-retrobox"
 DATA_DIR="/data"
 
 # EFI System Partition (GPT p1): mounted at /boot/efi inside the target, which

@@ -3,7 +3,7 @@
 # out the mutable /data tree. Offline: the OS comes from the squashfs carried on
 # the USB, not from the network.
 #
-# Sets globals RETROBOX_STATUS and BOX86_STATUS ("installed").
+# Sets globals RETROBOX_STATUS, BOX86_STATUS, and QEMU_STATUS ("installed").
 
 extract_rootfs() {
     [ -f "$TARGET_SQUASHFS" ] || die "Target rootfs not found on medium: $TARGET_SQUASHFS"
@@ -63,6 +63,8 @@ stage_binaries() {
     cp -a "$BOX86_SHADERS_SRC/." "$TARGET_MNT$BOX86_OPT/shaders/"
     ok "Staged GLSL shaders -> $BOX86_OPT/shaders"
 
+    stage_qemu
+
     [ -f "$PAYLOAD_DIR/retrobox/vms.yaml" ] || die "VM catalog payload is missing"
     # On a reinstall that preserves /data, keep the existing catalog so user
     # edits (and any VMs they added) survive; otherwise (re)write the payload.
@@ -112,4 +114,25 @@ create_vm_disks() {
     else
         die "Could not create the VM disks declared in /data/retrobox/vms.yaml"
     fi
+}
+
+# The package is a full QEMU install prefix. Keep only what the x86 VM uses:
+# the emulator, qemu-img, dxvk-native, and the firmware. The other targets'
+# EDK2 images alone are ~290 MB, on a root partition kept small for /data.
+stage_qemu() {
+    local dest="$TARGET_MNT$QEMU_OPT"
+
+    [ -f "$QEMU_SRC" ] || die "QEMU package not on medium: $QEMU_SRC"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    tar -xzf "$QEMU_SRC" --no-same-owner -C "$dest" --wildcards \
+        --exclude='./share/qemu/edk2-aarch64-*' \
+        --exclude='./share/qemu/edk2-arm-*' \
+        --exclude='./share/qemu/edk2-loongarch64-*' \
+        --exclude='./share/qemu/edk2-riscv-*' \
+        ./bin/qemu-system-i386 ./bin/qemu-img './lib/libdxvk_*' './share/qemu/*'
+    [ -x "$dest/bin/qemu-system-i386" ] \
+        || die "QEMU package did not install $QEMU_OPT/bin/qemu-system-i386"
+    QEMU_STATUS="installed"
+    ok "Staged QEMU -> $QEMU_OPT"
 }

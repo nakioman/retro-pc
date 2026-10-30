@@ -3,7 +3,7 @@
 Retro PC VM profiles are native emulator profiles. Each VM in `vms.yaml` names
 its `engine` (`86box`, the default, or `qemu`), and that engine's native file
 in the profile directory is the hardware source of truth
-([ADR 0008](decisions/0008-native-profile-per-engine.md)):
+([ADR 0009](decisions/0009-native-profile-per-engine.md)):
 
 | Engine | Profile file | Launched as |
 | --- | --- | --- |
@@ -77,7 +77,10 @@ on the boot console's VT. Inside X, `qemu-session` turns off blanking
 (`xset s off -dpms`), starts `matchbox-window-manager -use_titlebar no
 -use_cursor no`, and runs `/opt/qemu-retrobox/bin/qemu-system-i386` with
 `NO_AT_BRIDGE=1` and `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. When QEMU exits,
-X exits and the selector returns, as with 86Box. QEMU's and Xorg's stderr go
+X exits and the selector returns, as with 86Box. Xorg starts through the
+setuid `Xorg.wrap`, allowed by `/etc/X11/Xwrapper.config`
+(`allowed_users=anybody`, `needs_root_rights=yes`) because the appliance has
+no logind session. QEMU's and Xorg's stderr go
 to the `retrobox-boot` journal.
 
 The appliance installs the catalog at `/data/retrobox/vms.yaml` and profiles at

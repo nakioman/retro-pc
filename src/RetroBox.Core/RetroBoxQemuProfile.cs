@@ -2,7 +2,7 @@ namespace RetroBox.Core;
 
 /// <summary>
 /// A QEMU profile's qemu.args: one argument per line, no shell quoting; blank lines and lines
-/// starting with '#' are ignored. It is the VM's hardware source of truth (ADR 0008).
+/// starting with '#' are ignored. It is the VM's hardware source of truth (ADR 0009).
 /// </summary>
 public static class RetroBoxQemuProfile
 {

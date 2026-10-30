@@ -59,7 +59,7 @@ Load-time validation (`RetroBoxVmCatalogRules`, called from
 
 86Box needs the geometry (`hdd_NN_parameters = S, H, C, ...`) and the disk
 file must match it exactly, so the `.cfg` stays the authority (ADR 0003 and
-the new ADR 0008). For an 86Box disk:
+the new ADR 0009). For an 86Box disk:
 
 - the declared `file` must match an `hdd_NN_fn` in the profile's `86box.cfg`
   (paths resolved against the profile directory);
@@ -208,7 +208,7 @@ tests `RetroBox86BoxLauncherTests.cs` (renamed), `RetroBoxQemuLauncherTests.cs`.
 
 ### Task 7: Docs and ADR
 
-- [x] ADR 0008 (each engine's native profile is the hardware source of
+- [x] ADR 0009 (each engine's native profile is the hardware source of
   truth; disk declarations in `vms.yaml`, `.cfg` authoritative for 86Box
   geometry); mark ADR 0003 amended; index.
 - [x] `docs/vm-profiles.md`, `docs/architecture.md`, `AGENTS.md` domain facts,

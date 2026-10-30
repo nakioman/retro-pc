@@ -1,4 +1,4 @@
-# 0008. Each engine's native profile is the hardware source of truth
+# 0009. Each engine's native profile is the hardware source of truth
 
 Date: 2026-10-30
 Status: Accepted (amends 0003)

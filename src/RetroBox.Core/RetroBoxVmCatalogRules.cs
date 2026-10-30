@@ -9,7 +9,7 @@ public static class RetroBoxVmEngines
 
     public static IReadOnlyList<string> All { get; } = [EightySixBox, Qemu];
 
-    /// <summary>The engine's native profile file, the VM's hardware source of truth (ADR 0008).</summary>
+    /// <summary>The engine's native profile file, the VM's hardware source of truth (ADR 0009).</summary>
     public static string ProfileFileName(string engine) =>
         engine == Qemu ? RetroBoxQemuProfile.FileName : RetroBox86BoxConfig.FileName;
 }
