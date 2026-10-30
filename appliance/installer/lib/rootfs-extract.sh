@@ -78,21 +78,38 @@ stage_binaries() {
         found_profile=1
         profile="${profile%/}"
         vm="${profile##*/}"
-        [ -f "$profile/86box.cfg" ] || die "VM profile $vm is missing 86box.cfg"
+        [ -f "$profile/86box.cfg" ] || [ -f "$profile/qemu.args" ] \
+            || die "VM profile $vm has neither 86box.cfg nor qemu.args"
         mkdir -p "$TARGET_MNT/data/vms/$vm"
         if [ "$PRESERVE_DATA" = "1" ] && [ -d "$TARGET_MNT/data/vms/$vm" ]; then
             # Reinstall: refresh the OS-managed files but never clobber the
-            # user's VM disks (.raw/.vhd) or catalog (.yaml).
-            rsync -a --exclude='*.raw' --exclude='*.vhd' --exclude='*.yaml' "$profile/." "$TARGET_MNT/data/vms/$vm/"
+            # user's VM disks (.raw/.vhd/.qcow2) or catalog (.yaml).
+            rsync -a --exclude='*.raw' --exclude='*.vhd' --exclude='*.qcow2' --exclude='*.yaml' "$profile/." "$TARGET_MNT/data/vms/$vm/"
         else
             cp -a "$profile/." "$TARGET_MNT/data/vms/$vm/"
         fi
-        [ -f "$TARGET_MNT/data/vms/$vm/86box.cfg" ] \
-            || die "Installed VM profile $vm is missing 86box.cfg"
+        [ -f "$TARGET_MNT/data/vms/$vm/86box.cfg" ] || [ -f "$TARGET_MNT/data/vms/$vm/qemu.args" ] \
+            || die "Installed VM profile $vm is missing its 86box.cfg or qemu.args"
     done
     [ "$found_profile" = "1" ] || die "VM profiles payload contains no profiles"
-    install -m 0755 "$PAYLOAD_DIR/scripts/retrobox-hdd-creation" \
-        "$TARGET_MNT/usr/local/sbin/retrobox-hdd-creation"
-    in_target /usr/local/sbin/retrobox-hdd-creation /data/vms
     ok "Staged VM catalog and profiles -> /data"
+}
+
+# Disks are declared in vms.yaml; the staged retrobox binary creates the missing
+# ones and keeps existing ones. It needs the chroot's /proc and /dev (run after
+# mount_target_binds) and must run before create_accounts hands /data/vms to
+# retrobox. qcow2 disks need qemu-img from /opt/qemu-retrobox.
+#
+# A fresh install's payload catalog must work. On a reinstall that preserves
+# /data the user's catalog is loaded instead, and a problem there (a missing
+# floppy image, a disk error) must not abort the OS install: warn and go on;
+# `retrobox vm create-disks` can be rerun after boot.
+create_vm_disks() {
+    if in_target "$RETROBOX_OPT/retrobox" vm create-disks --config-root /data/retrobox; then
+        ok "Created missing VM disks"
+    elif [ "$PRESERVE_DATA" = "1" ]; then
+        warn "Could not create every VM disk declared in the preserved /data/retrobox/vms.yaml; run 'retrobox vm create-disks' after boot"
+    else
+        die "Could not create the VM disks declared in /data/retrobox/vms.yaml"
+    fi
 }

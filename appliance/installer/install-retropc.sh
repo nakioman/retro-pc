@@ -99,6 +99,7 @@ main() {
     write_fstab
     setup_swap
     mount_target_binds
+    create_vm_disks
     create_accounts
     detect_and_record_hardware
     install_services

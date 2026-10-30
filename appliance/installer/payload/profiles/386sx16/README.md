@@ -53,9 +53,10 @@ state. Install DOS manually later if the VM needs to become bootable.
 
 ## Blank Disk
 
-`hdd.raw` is intentionally blank and is not committed to Git. The appliance
-installer (and `appliance/installer/payload/scripts/retrobox-hdd-creation`)
-creates it on first install from the geometry declared in the 86Box profile:
+`hdd.raw` is intentionally blank and is not committed to Git. The disk is
+declared in `vms.yaml` (`disks: [{ file: hdd.raw }]`) and the installer creates
+it with `retrobox vm create-disks`, sized from the geometry declared in the
+86Box profile:
 
 ```text
 hdd_01_parameters = 39, 4, 762, 0, ide
