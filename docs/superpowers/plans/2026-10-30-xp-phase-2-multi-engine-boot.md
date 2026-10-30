@@ -134,13 +134,13 @@ every change and which must not depend on profile files.
 `RetroBoxConfigStore.cs`, new `RetroBoxVmCatalogRules.cs`; tests in
 `RetroBoxConfigStoreTests.cs`, new `RetroBoxVmCatalogRulesTests.cs`.
 
-- [ ] Tests: missing `engine` loads as `86box`; `qemu` loads; unknown engine,
+- [x] Tests: missing `engine` loads as `86box`; `qemu` loads; unknown engine,
   absolute/escaping/duplicate disk file, bad format, `qcow2` on 86Box,
   unparsable size, and QEMU disk without size are rejected; disks round-trip
   through `Save`; size parsing (`20G`, `512M`, `1024`, rejects `0`, `1.5G`,
   `G`).
-- [ ] Add `Engine`, `Disks`, `RetroBoxVmDisk`, register it, validate.
-- [ ] Commit `feat(core): add VM engine and disk declarations to vms.yaml`.
+- [x] Add `Engine`, `Disks`, `RetroBoxVmDisk`, register it, validate.
+- [x] Commit `feat(core): add VM engine and disk declarations to vms.yaml`.
 
 ### Task 2: Disk planning and creation
 
@@ -149,24 +149,24 @@ every change and which must not depend on profile files.
 (`IRetroBoxProcessRunner`, `RetroBoxProcessSpec`, default implementation);
 tests `RetroBox86BoxConfigTests.cs`, `RetroBoxVmDisksTests.cs`.
 
-- [ ] Tests: geometry parsing of the three payload configs' lines; size
+- [x] Tests: geometry parsing of the three payload configs' lines; size
   derived from the `.cfg`; explicit matching size accepted; mismatch and
   undeclared-in-cfg rejected; raw creation is exact size; existing file
   untouched (content and length); qcow2 runs `qemu-img` with the expected
   argv and `LD_LIBRARY_PATH`; missing `qemu-img` reports clearly; failures
   on one VM don't stop others.
-- [ ] Implement.
-- [ ] Commit `feat(core): create declared VM disks`.
+- [x] Implement.
+- [x] Commit `feat(core): create declared VM disks`.
 
 ### Task 3: `retrobox vm create-disks`
 
 **Files:** `CliCommandFactory.cs`; tests `CliVmTests.cs`.
 
-- [ ] Tests: creates missing disks under a temp layout and prints
+- [x] Tests: creates missing disks under a temp layout and prints
   `Created`/`Keeping` lines; optional VM id limits the run; unknown id and
   disk errors exit 1.
-- [ ] Implement.
-- [ ] Commit `feat(cli): add vm create-disks command`.
+- [x] Implement.
+- [x] Commit `feat(cli): add vm create-disks command`.
 
 ### Task 4: Split the launchers and add QEMU
 
@@ -174,24 +174,24 @@ tests `RetroBox86BoxConfigTests.cs`, `RetroBoxVmDisksTests.cs`.
 `RetroBoxQemuProfile.cs`, `RetroBoxQemuLauncher.cs`, `RetroBoxQemuSession.cs`;
 tests `RetroBox86BoxLauncherTests.cs` (renamed), `RetroBoxQemuLauncherTests.cs`.
 
-- [ ] Tests: `qemu.args` parsing (comments, blanks, trimming, missing file);
+- [x] Tests: `qemu.args` parsing (comments, blanks, trimming, missing file);
   the spike's XP arguments as a fixture produce the expected QEMU argv with
   QMP and, only with a drive, `/dev/sr0`; xinit argv and args file content;
   session order (xset → WM start → QEMU with env/working directory → WM
   stop) and QEMU's exit code returned; VT detection fallback.
-- [ ] Implement; 86Box launcher test unchanged apart from the name.
-- [ ] Commit `feat(core): add QEMU launcher behind xinit`.
+- [x] Implement; 86Box launcher test unchanged apart from the name.
+- [x] Commit `feat(core): add QEMU launcher behind xinit`.
 
 ### Task 5: Boot command dispatch and `qemu-session`
 
 **Files:** `CliCommandFactory.cs`; tests `CliBootSessionTests.cs`.
 
-- [ ] Tests: QEMU VM boots through the runner with `Engine == "qemu"`; QEMU
+- [x] Tests: QEMU VM boots through the runner with `Engine == "qemu"`; QEMU
   VM without `qemu.args` and 86Box VM without `86box.cfg` fail with the
   splash quit; the selector loop and splash order hold for a mixed catalog;
   `qemu-session` is hidden from help.
-- [ ] Implement.
-- [ ] Commit `feat(cli): boot QEMU VMs`.
+- [x] Implement.
+- [x] Commit `feat(cli): boot QEMU VMs`.
 
 ### Task 6: Appliance migration
 
@@ -199,18 +199,18 @@ tests `RetroBox86BoxLauncherTests.cs` (renamed), `RetroBoxQemuLauncherTests.cs`.
 `appliance/installer/lib/rootfs-extract.sh`, delete
 `appliance/installer/payload/scripts/retrobox-hdd-creation`, profile READMEs.
 
-- [ ] Declare `hdd.raw` for the three profiles; add a test that loads the
+- [x] Declare `hdd.raw` for the three profiles; add a test that loads the
   payload catalog and plans exactly the three historical sizes.
-- [ ] Installer: run `retrobox vm create-disks`; accept profiles with
+- [x] Installer: run `retrobox vm create-disks`; accept profiles with
   `86box.cfg` or `qemu.args`; keep `*.qcow2` on reinstall.
-- [ ] Commit `feat(appliance): create VM disks from vms.yaml`.
+- [x] Commit `feat(appliance): create VM disks from vms.yaml`.
 
 ### Task 7: Docs and ADR
 
-- [ ] ADR 0008 (each engine's native profile is the hardware source of
+- [x] ADR 0008 (each engine's native profile is the hardware source of
   truth; disk declarations in `vms.yaml`, `.cfg` authoritative for 86Box
   geometry); mark ADR 0003 amended; index.
-- [ ] `docs/vm-profiles.md`, `docs/architecture.md`, `AGENTS.md` domain facts,
+- [x] `docs/vm-profiles.md`, `docs/architecture.md`, `AGENTS.md` domain facts,
   `appliance/installer/README.md`, `appliance/filesystem-layout.md`, design
   doc Phase 2/3 notes.
-- [ ] Commit `docs: record multi-engine VMs and declared disks`.
+- [x] Commit `docs: record multi-engine VMs and declared disks`.

@@ -40,6 +40,11 @@ and are not application state.
   swapfile        # disk swap backstop (see below)
 ```
 
+VM disks (`hdd.raw` above, or a QEMU VM's `qcow2`) are not shipped: they are
+declared under `disks:` in `vms.yaml` and the installer creates the missing
+ones with `retrobox vm create-disks` (raw as sparse files; qcow2 with
+`/opt/qemu-retrobox/bin/qemu-img`). Existing disks are never touched.
+
 `/data/retrobox/install-report.txt` is written by the USB installer and records
 the detected target disk, CD-ROM, and ESP8266 serial device (or explicit
 diagnostic placeholders when a device is absent). When a CD-ROM is detected,

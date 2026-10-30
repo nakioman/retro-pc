@@ -20,6 +20,7 @@ and maintainers can reconstruct *why* the code works the way it does.
 - [0004-nfc-raw-bytes-not-ndef.md](0004-nfc-raw-bytes-not-ndef.md) — tags carry raw bytes.
 - [0005-add-wifi-support.md](0005-add-wifi-support.md) — WiFi via systemd-networkd + first-boot dialog.
 - [0007-uefi-boot.md](0007-uefi-boot.md) — UEFI GPT/ESP target with hybrid BIOS/UEFI installer image.
+- [0008-native-profile-per-engine.md](0008-native-profile-per-engine.md) — per-engine native profile (`86box.cfg` / `qemu.args`) is authoritative; disks declared in `vms.yaml`.
 
 ## Template
 

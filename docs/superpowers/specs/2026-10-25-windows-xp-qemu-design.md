@@ -5,7 +5,8 @@ sound and real hardware-accelerated OpenGL and Direct3D (Glide is a bonus),
 uses the physical CD-ROM, has guest networking, and — as a stretch — works
 with the NFC floppy drive.
 
-**Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
+**Status:** Draft. Phase 2 (multi-engine boot, declared disks) is
+implemented. Phase 0 (the hardware spike) is in progress; Direct3D works
 on the vmvga path described below. The PR plans for phases 1–5 are written
 after it, and Phase 1's fork content changes accordingly.
 
@@ -208,10 +209,28 @@ second-GPU fallback.
   source of truth.
 - Tests first: catalog parsing, engine selection, argument building.
 
+**Implemented** (plan: `docs/superpowers/plans/2026-10-30-xp-phase-2-multi-engine-boot.md`):
+
+- `RetroBoxBoot` became `RetroBox86BoxLauncher`; `RetroBoxQemuLauncher` reads
+  `qemu.args` and appends only the QMP socket and, when present, `/dev/sr0`
+  on IDE index 2. KVM and the audiodev stay in the profile (they are the VM's
+  hardware, like the spike's command line).
+- QEMU starts with `xinit <retrobox> qemu-session --binary ... --args-file
+  /run/retrobox/qemu-session.args --vm-path ... -- :0 vt<N> -keeptty -nolisten
+  tcp`. The argv goes through a file because xinit splits client and server
+  arguments at `--`. `qemu-session` (hidden) runs `xset s off -dpms`, starts
+  matchbox, and runs QEMU with `NO_AT_BRIDGE=1` and
+  `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. The splash is covered before
+  xinit and quit before the selector, as for 86Box.
+- Disks moved into `vms.yaml` for every engine (`disks: [{file, size,
+  format}]`); `retrobox vm create-disks` replaces `retrobox-hdd-creation` in
+  the installer. 86Box sizes come from the `.cfg` geometry (ADR 0008).
+
 ### Phase 3 — XP profile, audio, networking (`feat(appliance)`)
 
-- `profiles/winxp` as described above, with a blank qcow2 created at install
-  time (same idea as `retrobox-hdd-creation`).
+- `profiles/winxp` as described above (`qemu.args`), with its 20 GB qcow2
+  declared under `disks:` in `vms.yaml` so `retrobox vm create-disks`
+  creates it at install time.
 - Boots like a real PC: SeaBIOS boot menu (`-boot order=cd,menu=on`, ESC at
   power-on to pick disk, CD, or floppy), optionally with a RetroBox POST
   logo (`-boot splash=`).
