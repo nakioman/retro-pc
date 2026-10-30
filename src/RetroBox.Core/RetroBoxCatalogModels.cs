@@ -30,6 +30,21 @@ public sealed record RetroBoxVm
     public string Label { get; set; } = string.Empty;
 
     public string Path { get; set; } = string.Empty;
+
+    public string Engine { get; set; } = RetroBoxVmEngines.EightySixBox;
+
+    public List<RetroBoxVmDisk> Disks { get; set; } = [];
+}
+
+public sealed record RetroBoxVmDisk
+{
+    /// <summary>Disk image path relative to the VM profile directory.</summary>
+    public string File { get; set; } = string.Empty;
+
+    /// <summary>Bytes, or a K/M/G/T binary multiple. Optional for 86Box, whose .cfg geometry is authoritative.</summary>
+    public string? Size { get; set; }
+
+    public string Format { get; set; } = RetroBoxVmDiskFormats.Raw;
 }
 
 public sealed record RetroBoxFloppy
