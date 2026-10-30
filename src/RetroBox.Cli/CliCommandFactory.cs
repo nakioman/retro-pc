@@ -590,12 +590,12 @@ public static class CliCommandFactory
         var binaryOption = new Option<string>("--binary")
         {
             Description = "86Box executable path.",
-            DefaultValueFactory = _ => RetroBoxBoot.DefaultBinaryPath,
+            DefaultValueFactory = _ => RetroBox86BoxLauncher.DefaultBinaryPath,
         };
         var romPathOption = new Option<string>("--rompath")
         {
             Description = "86Box ROM directory.",
-            DefaultValueFactory = _ => RetroBoxBoot.DefaultRomPath,
+            DefaultValueFactory = _ => RetroBox86BoxLauncher.DefaultRomPath,
         };
         var dryRunOption = new Option<bool>("--dry-run") { Description = "Show the VM without starting 86Box." };
         var selectorOption = new Option<bool>("--selector") { Description = "Open the VM selector immediately." };
@@ -658,8 +658,8 @@ public static class CliCommandFactory
                     }
                     var request = new RetroBoxBootCommandRequest(
                         configRoot,
-                        parseResult.GetValue(binaryOption) ?? RetroBoxBoot.DefaultBinaryPath,
-                        parseResult.GetValue(romPathOption) ?? RetroBoxBoot.DefaultRomPath,
+                        parseResult.GetValue(binaryOption) ?? RetroBox86BoxLauncher.DefaultBinaryPath,
+                        parseResult.GetValue(romPathOption) ?? RetroBox86BoxLauncher.DefaultRomPath,
                         vmId,
                         vm.Path);
 
@@ -671,7 +671,7 @@ public static class CliCommandFactory
 
                     splash.Cover();
                     var exitCode = bootRunner is null
-                        ? RetroBoxBoot.Run(new RetroBoxBootRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath))
+                        ? RetroBox86BoxLauncher.Run(new RetroBox86BoxLaunchRequest(request.BinaryPath, request.VmId, request.VmPath, request.RomPath))
                         : bootRunner(request);
 
                     if (explicitVmId is not null)
