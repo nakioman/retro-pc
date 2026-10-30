@@ -8,6 +8,10 @@ public static class RetroBoxVmEngines
     public const string Qemu = "qemu";
 
     public static IReadOnlyList<string> All { get; } = [EightySixBox, Qemu];
+
+    /// <summary>The engine's native profile file, the VM's hardware source of truth (ADR 0008).</summary>
+    public static string ProfileFileName(string engine) =>
+        engine == Qemu ? RetroBoxQemuProfile.FileName : RetroBox86BoxConfig.FileName;
 }
 
 public static class RetroBoxVmDiskFormats

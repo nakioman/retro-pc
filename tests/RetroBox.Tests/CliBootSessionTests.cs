@@ -154,6 +154,133 @@ public sealed class CliBootSessionTests
         Assert.Equal(["Quit"], log);
     }
 
+    [Fact]
+    public void Qemu_vm_boots_through_runner_with_engine_and_qemu_binary()
+    {
+        var root = CreateRoot("pentium100");
+        var winxp = AddQemuVm(root, writeArgs: true);
+        RetroBoxBootCommandRequest? captured = null;
+        var command = CliCommandFactory.CreateRootCommand(
+            bootRunner: request =>
+            {
+                captured = request;
+                return 0;
+            },
+            hotkeyDetector: new NoHotkey(),
+            selectorUi: new ScriptedSelectorUi(null),
+            bootSplash: new RecordingSplash([]));
+
+        var exitCode = command.Parse([
+            "boot", "--select", "winxp", "--config-root", root, "--qemu-binary", "/custom/qemu-system-i386",
+        ]).Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(captured);
+        Assert.Equal(RetroBoxVmEngines.Qemu, captured.Engine);
+        Assert.Equal("/custom/qemu-system-i386", captured.QemuBinaryPath);
+        Assert.Equal(winxp, captured.VmPath);
+    }
+
+    [Fact]
+    public void Eighty_six_box_vm_reports_engine_and_default_qemu_binary()
+    {
+        var root = CreateRoot("pentium100");
+        RetroBoxBootCommandRequest? captured = null;
+        var command = CliCommandFactory.CreateRootCommand(
+            bootRunner: request =>
+            {
+                captured = request;
+                return 0;
+            },
+            hotkeyDetector: new NoHotkey(),
+            selectorUi: new ScriptedSelectorUi(null),
+            bootSplash: new RecordingSplash([]));
+
+        Assert.Equal(0, command.Parse(["boot", "--select", "pentium100", "--config-root", root]).Invoke());
+        Assert.Equal(RetroBoxVmEngines.EightySixBox, captured?.Engine);
+        Assert.Equal(RetroBoxQemuBundle.DefaultSystemBinaryPath, captured?.QemuBinaryPath);
+    }
+
+    [Fact]
+    public void Qemu_vm_without_args_file_fails_and_quits_splash()
+    {
+        var root = CreateRoot("pentium100");
+        AddQemuVm(root, writeArgs: false);
+        var runs = new List<string>();
+        var log = new List<string>();
+        var error = new StringWriter();
+        var command = CreateBootCommand(runs, new ScriptedSelectorUi(log), new NoHotkey(), splashLog: log);
+        var parseResult = command.Parse(["boot", "--select", "winxp", "--config-root", root]);
+        parseResult.InvocationConfiguration.Error = error;
+
+        Assert.Equal(1, parseResult.Invoke());
+        Assert.Empty(runs);
+        Assert.Equal(["Quit"], log);
+        Assert.Contains("qemu.args", error.ToString());
+    }
+
+    [Fact]
+    public void Eighty_six_box_vm_without_config_fails()
+    {
+        var root = CreateRoot("pentium100");
+        File.Delete(Path.Combine(root, "pentium100", "86box.cfg"));
+        var error = new StringWriter();
+        var command = CreateBootCommand([], new ScriptedSelectorUi(null), new NoHotkey());
+        var parseResult = command.Parse(["boot", "--select", "pentium100", "--config-root", root]);
+        parseResult.InvocationConfiguration.Error = error;
+
+        Assert.Equal(1, parseResult.Invoke());
+        Assert.Contains("86box.cfg", error.ToString());
+    }
+
+    [Fact]
+    public void Selector_loop_runs_86box_and_qemu_vms_alike()
+    {
+        var root = CreateRoot("pentium100");
+        AddQemuVm(root, writeArgs: true);
+        var runs = new List<string>();
+        var log = new List<string>();
+        var ui = new ScriptedSelectorUi(log,
+            new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Run, "winxp"),
+            new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Cancel));
+        var command = CreateBootCommand(runs, ui, new NoHotkey(), splashLog: log);
+
+        Assert.Equal(0, command.Parse(["boot", "--config-root", root]).Invoke());
+        Assert.Equal(["pentium100", "winxp"], runs);
+        Assert.Equal(["Cover", "Quit", "Select", "Cover", "Quit", "Select"], log);
+    }
+
+    [Fact]
+    public void Qemu_session_command_is_hidden_and_requires_its_options()
+    {
+        var help = new StringWriter();
+        var root = CliCommandFactory.CreateRootCommand().Parse(["--help"]);
+        root.InvocationConfiguration.Output = help;
+        root.Invoke();
+
+        Assert.DoesNotContain("qemu-session", help.ToString());
+        Assert.NotEmpty(CliCommandFactory.CreateRootCommand().Parse(["qemu-session"]).Errors);
+    }
+
+    private static string AddQemuVm(string root, bool writeArgs)
+    {
+        var winxp = Path.Combine(root, "winxp");
+        Directory.CreateDirectory(winxp);
+        if (writeArgs)
+        {
+            File.WriteAllText(Path.Combine(winxp, "qemu.args"), "-m\n3072\n");
+        }
+
+        File.AppendAllText(Path.Combine(root, "vms.yaml"), $"""
+
+              winxp:
+                label: "Windows XP"
+                path: "{winxp}"
+                engine: qemu
+            """);
+        return winxp;
+    }
+
     private static RootCommand CreateBootCommand(
         List<string> runs,
         IRetroBoxBootSelectorUi ui,
