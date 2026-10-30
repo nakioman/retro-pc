@@ -20,6 +20,7 @@ and maintainers can reconstruct *why* the code works the way it does.
 - [0004-nfc-raw-bytes-not-ndef.md](0004-nfc-raw-bytes-not-ndef.md) — tags carry raw bytes.
 - [0005-add-wifi-support.md](0005-add-wifi-support.md) — WiFi via systemd-networkd + first-boot dialog.
 - [0007-uefi-boot.md](0007-uefi-boot.md) — UEFI GPT/ESP target with hybrid BIOS/UEFI installer image.
+- [0008-qemu-xorg-gtk-on-the-appliance.md](0008-qemu-xorg-gtk-on-the-appliance.md) — QEMU (vmvga + dxvk-native) with a bare Xorg + GTK for the XP VM.
 
 ## Template
 
