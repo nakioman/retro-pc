@@ -24,13 +24,13 @@ vms:
     path: "/data/vms/pentium100"
     disks:
       - file: hdd.raw      # relative to path
-  winxp:
-    label: "Windows XP"
-    path: "/data/vms/winxp"
+  core2duo:
+    label: "Core 2 Duo"
+    path: "/data/vms/core2duo"
     engine: qemu
     disks:
-      - file: xp.qcow2
-        size: 20G          # bytes, or a K/M/G/T binary multiple
+      - file: hdd.qcow2
+        size: 120G         # bytes, or a K/M/G/T binary multiple
         format: qcow2      # raw (default) | qcow2
 ```
 
@@ -52,17 +52,19 @@ must equal that value. 86Box disks are always raw. QEMU disks must declare a
 lines starting with `#` are ignored. A value with spaces is just one line:
 
 ```text
--name
-Windows XP
 -machine
 pc,accel=kvm,vmport=on
 -drive
-file=xp.qcow2,if=ide,index=0,media=disk,format=qcow2
+file=hdd.qcow2,if=ide,index=0,media=disk,format=qcow2
 ```
 
 QEMU runs with the profile as its working directory, so relative disk paths
 work. The launcher adds only host-specific arguments:
 
+- `-display gtk,gl=on,full-screen=on,show-menubar=off,show-tabs=off,zoom-to-fit=on,grab-on-hover=on,window-close=off`
+  and `-monitor none -serial none -parallel none`: the kiosk display, scaled
+  on the GPU, with no GTK text-console tabs that would cover the VM. Ctrl+Alt+G
+  releases the grabbed mouse and keyboard.
 - `-qmp unix:/run/retrobox/qemu-qmp.sock,server=on,wait=off`
 - `-drive file=<CDROM_DEVICE>,if=ide,index=2,media=cdrom` with the optical
   drive the installer detected (`/etc/retrobox/hardware.env`, the same
@@ -135,4 +137,25 @@ Profile files:
 - `86box.cfg`: native 86Box configuration and hardware source of truth.
 - `hdd.raw`: blank disk (declared in `vms.yaml`, sized from `hdd_01_parameters`).
 - `syncmaster3.edid`: 128-byte binary EDID for the CRT shader setup.
+- `README.md`: setup notes, hardware summary, and media policy.
+
+## Core 2 Duo
+
+Path: `profiles/core2duo`
+
+This is the Windows XP VM profile, the only QEMU one: an i440FX PC under KVM
+with a `core2duo` CPU model, 2 vCPUs, 3 GB RAM, VMware SVGA II video with
+Direct3D (`vmvga,hwcursor=off,gbobjects=off,vgpu=9`, rendered by dxvk-native on
+Vulkan), AC97 audio, an RTL8139 on user-mode NAT, an empty floppy drive, and a
+blank 120 GB qcow2 disk on IDE. SeaBIOS boots the disk first and then the CD,
+so a blank disk falls through to the XP CD in the physical drive (IDE index 2,
+added by the launcher); ESC during the 3-second prompt opens the boot menu.
+IDE index 3 is a second, empty CD drive for ISOs. Installing XP and its
+drivers is covered in [`windows-xp.md`](windows-xp.md).
+
+Profile files:
+
+- `qemu.args`: QEMU arguments and hardware source of truth, with a comment on
+  each option.
+- `hdd.qcow2`: blank disk (declared in `vms.yaml` as `120G`, `qcow2`).
 - `README.md`: setup notes, hardware summary, and media policy.

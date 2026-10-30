@@ -20,7 +20,8 @@ extend to QEMU's qcow2 disks.
   comments and blank lines ignored, no shell quoting). YAML still never
   describes hardware.
 - The QEMU launcher appends only host-specific arguments to `qemu.args`: the
-  QMP socket (`/run/retrobox/qemu-qmp.sock`) and the host optical drive on
+  kiosk display (fullscreen GTK with no text consoles, `-display gtk,...
+  -monitor none -serial none -parallel none`), the QMP socket (`/run/retrobox/qemu-qmp.sock`) and the host optical drive on
   IDE index 2. The drive is the one the installer detected and recorded in
   `/etc/retrobox/hardware.env` (`CDROM_DEVICE`, attached only when
   `CDROM_STATUS=DETECTED` and the device still exists), the same detection

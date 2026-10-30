@@ -7,8 +7,8 @@ with the NFC floppy drive.
 
 **Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
 on the vmvga path described below. Phase 1 (QEMU package on the appliance) and
-Phase 2 (multi-engine boot, declared disks) are implemented; see their
-sections. The PR plans for phases 1–5 are written
+Phase 2 (multi-engine boot, declared disks) and Phase 3 (the `core2duo` XP
+profile) are implemented; see their sections. The PR plans for phases 1–5 are written
 after it, and Phase 1's fork content changes accordingly.
 
 ## Why not 86Box
@@ -96,7 +96,11 @@ Open on this path:
 - OpenGL games through VMware's `vmwogl32` ICD, real games (D3D7-9), audio,
   and longer stability runs are untested.
 
-## Target VM (`profiles/winxp`)
+## Target VM (`profiles/winxp`, shipped as `profiles/core2duo`)
+
+Written before the spike. The shipped profile follows "the vmvga path" above
+and Phase 3 below: VMware SVGA II instead of std VGA + VBEMP, and no XP Tools
+ISO (the user supplies VMware's driver).
 
 - `-machine pc` (i440fx), `-accel kvm -cpu core2duo`, 2 vCPUs, 3 GB RAM
   (32-bit XP cannot use much more). With KVM the model only sets the CPUID
@@ -266,6 +270,25 @@ decision record: ADR 0008.
 - `vms.yaml` entry with `engine: qemu`.
 - `docs/vm-profiles.md` and `docs/qemu-xp.md` (installing XP and the XP Tools,
   copying wrappers into each game's folder).
+
+**Implemented** (plan: `docs/superpowers/plans/2026-10-30-xp-phase-3-core2duo-profile.md`):
+
+- Named after its hardware like the other profiles: id `core2duo`, label
+  "Core 2 Duo", `profiles/core2duo/qemu.args` with the spike's hardware
+  (`pc,accel=kvm,vmport=on`, `core2duo`, 2 vCPUs, 3 GB, vmvga
+  `hwcursor=off,gbobjects=off,vgpu=9`, IDE disk, empty floppy, empty CD on IDE
+  index 3, AC97, rtl8139 on user NAT) and `hdd.qcow2` (120G qcow2; the pre-spike plan said 20 GB) in
+  `vms.yaml`.
+- The kiosk display (`-display gtk,gl=on,full-screen=on,...`) and `-monitor
+  none -serial none -parallel none` moved from the profile into
+  `RetroBoxQemuLauncher`: they are how the appliance presents QEMU, not VM
+  hardware (ADR 0009 updated).
+- User guide: `docs/windows-xp.md` (XP SP3 from the real CD, user-supplied
+  Realtek AC97 and VMware `SVGA2_X86_WINXP` drivers, display modes, the VMware
+  backdoor, Ctrl+Alt+G, known issues) instead of `docs/qemu-xp.md`; no XP
+  Tools ISO on the vmvga path.
+- Follow-up: a RetroBox POST logo (`-boot splash=`). The repository has no
+  logo asset fit for a 640x480 BIOS splash yet.
 
 ### Phase 4 — CD-ROM and installer host setup (`feat(appliance)`)
 

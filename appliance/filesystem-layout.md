@@ -25,6 +25,9 @@ and are not application state.
       86box.cfg
       hdd.raw
       syncmaster3.edid
+    core2duo/
+      qemu.args
+      hdd.qcow2
   floppies/
     scratch/
     cataloged/

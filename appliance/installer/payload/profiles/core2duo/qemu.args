@@ -1,0 +1,53 @@
+# Core 2 Duo (Windows XP) QEMU profile: the VM's hardware source of truth
+# (ADR 0009), one argument per line. The launcher appends the kiosk display,
+# the QMP socket, and the host optical drive on IDE index 2; keep index 2 free.
+
+# i440FX with KVM. vmport=on: VMware's SVGA II driver talks to the host
+# through the VMware backdoor port (also needs kvm.enable_vmware_backdoor=1).
+-machine
+pc,accel=kvm,vmport=on
+# The CPU model only sets the CPUID the guest sees; KVM runs at host speed.
+-cpu
+core2duo
+-smp
+2
+# 32-bit XP cannot use much more than 3 GB.
+-m
+3072
+-rtc
+base=localtime
+
+# Like a real PC: hard disk (c) first, then CD (d), so a blank disk falls
+# through to the XP CD. ESC during the 3-second prompt opens the boot menu.
+-boot
+order=cd,menu=on,splash-time=3000
+
+# VMware SVGA II, SVGA3D rendered by dxvk-native on the host's Vulkan driver.
+# hwcursor=off: VMware drivers only report cursor positions with an absolute
+# mouse; with the relative PS/2 mouse games need, XP draws its own pointer.
+# gbobjects=off: screen targets showed a stale buffer after mode switches.
+# vgpu=9: the legacy D3D9 SVGA3D path used by the XP driver.
+-vga
+none
+-device
+vmvga,hwcursor=off,gbobjects=off,vgpu=9
+
+# IDE: XP has no inbox AHCI driver. The disk is declared in vms.yaml.
+-drive
+file=hdd.qcow2,if=ide,index=0,media=disk,format=qcow2
+-drive
+if=floppy,index=0
+# Second, empty CD drive for ISOs (the physical drive is index 2).
+-drive
+if=ide,index=3,media=cdrom
+
+# AC97 (Realtek driver) and RTL8139 (XP inbox driver). User-mode NAT reaches
+# the LAN and internet but accepts no inbound connections.
+-audiodev
+alsa,id=snd0
+-device
+AC97,audiodev=snd0
+-netdev
+user,id=net0
+-device
+rtl8139,netdev=net0

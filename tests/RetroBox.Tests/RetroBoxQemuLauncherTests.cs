@@ -4,7 +4,8 @@ namespace RetroBox.Tests;
 
 public sealed class RetroBoxQemuLauncherTests : IDisposable
 {
-    // The Windows XP arguments proven in the Phase 0 spike (design doc, "the vmvga path").
+    // The Windows XP arguments proven in the Phase 0 spike (design doc, "the vmvga path"), minus the
+    // kiosk display the launcher adds.
     private const string SpikeProfile = """
         # Windows XP on vmvga (Phase 0 spike)
         -name
@@ -22,14 +23,6 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
         base=localtime
         -boot
         order=cd,menu=on,splash-time=3000
-        -display
-        gtk,gl=on,full-screen=on,show-menubar=off,show-tabs=off,zoom-to-fit=on,grab-on-hover=on,window-close=off
-        -monitor
-        none
-        -serial
-        none
-        -parallel
-        none
         -vga
         none
         -device
@@ -55,8 +48,6 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
         "-name", "Windows XP",
         "-machine", "pc,accel=kvm,vmport=on", "-cpu", "core2duo", "-smp", "2", "-m", "3072",
         "-rtc", "base=localtime", "-boot", "order=cd,menu=on,splash-time=3000",
-        "-display", "gtk,gl=on,full-screen=on,show-menubar=off,show-tabs=off,zoom-to-fit=on,grab-on-hover=on,window-close=off",
-        "-monitor", "none", "-serial", "none", "-parallel", "none",
         "-vga", "none", "-device", "vmvga,hwcursor=off,gbobjects=off,vgpu=9",
         "-drive", "file=xp.qcow2,if=ide,index=0,media=disk,format=qcow2",
         "-drive", "if=floppy,index=0",
@@ -97,12 +88,17 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
     }
 
     [Fact]
-    public void Qemu_arguments_append_qmp_socket_without_optical_drive()
+    public void Qemu_arguments_append_kiosk_display_and_qmp_socket_without_optical_drive()
     {
         var arguments = RetroBoxQemuLauncher.BuildQemuArguments(SpikeArguments, Request());
 
         Assert.Equal(
-            [.. SpikeArguments, "-qmp", $"unix:{Path.Combine(root, "run", "qemu-qmp.sock")},server=on,wait=off"],
+            [
+                .. SpikeArguments,
+                "-display", "gtk,gl=on,full-screen=on,show-menubar=off,show-tabs=off,zoom-to-fit=on,grab-on-hover=on,window-close=off",
+                "-monitor", "none", "-serial", "none", "-parallel", "none",
+                "-qmp", $"unix:{Path.Combine(root, "run", "qemu-qmp.sock")},server=on,wait=off",
+            ],
             arguments);
     }
 
