@@ -5,8 +5,9 @@ sound and real hardware-accelerated OpenGL and Direct3D (Glide is a bonus),
 uses the physical CD-ROM, has guest networking, and — as a stretch — works
 with the NFC floppy drive.
 
-**Status:** Draft. Phase 0 is a go/no-go spike on the reference hardware; the
-PR plans for phases 1–5 are written after it.
+**Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
+on the vmvga path described below. The PR plans for phases 1–5 are written
+after it, and Phase 1's fork content changes accordingly.
 
 ## Why not 86Box
 
@@ -34,6 +35,64 @@ looks in the game's folder before system32, so they install per game.
 
 Floppy and CD media changes use QEMU's stock QMP (`blockdev-change-medium`,
 `eject`, `query-block`), so the fork carries no media-control patches.
+
+## Spike update (2026-10-29): the vmvga path
+
+The spike found a better path than qemu-3dfx and now leads with it:
+[qemus/qemu-vmvga](https://github.com/qemus/qemu-vmvga) (GPL-2.0+), a full
+VMware SVGA II device for QEMU 11.1 with SVGA3D rendered through
+**dxvk-native → Vulkan**. XP uses VMware's own SVGA II driver (2D, Direct3D
+9, OpenGL ICD), which the user supplies like the XP media; RetroBox does not
+ship it.
+
+Working stack on the reference box (2D at 32-bit, mode switches, pointer,
+dxdiag D3D8/D3D9 tests fast):
+
+```text
+XP + VMware SVGA II driver
+  -> qemu 11.1.1 + vmvga (-device vmvga,hwcursor=off,gbobjects=off,vgpu=9)
+  -> dxvk-native 3.1.1 -> Vulkan (Mesa ANV, UHD 730)
+  -> QEMU GTK display, gl=on (GPU scaling, 4:3 patch)
+  -> bare Xorg + matchbox-window-manager (kiosk), started with xinit
+```
+
+Findings that shaped it:
+
+- **SDL on KMS/DRM was dropped.** SDL2's kmsdrm backend needed four patches
+  (frame re-present, opaque pixel formats, no-resize, UI-thread-only 2D work)
+  and still conflicted with vmvga: DXVK's headless WSI refuses to load next to
+  an already loaded SDL2, so 3D stayed off. QEMU's GTK display in a bare Xorg
+  avoids all of it. qemu-3dfx requires the SDL display, so this also retires
+  the qemu-3dfx + WineD3D plan; it stays as plan B in the fork.
+- **GTK must use `gl=on`.** With `gl=off` GTK scales every frame with cairo on
+  the CPU (1024x768 -> 2048x1536) and D3D9 stuttered; with `gl=on` the GPU
+  scales, like 86Box.
+- **`hwcursor=off`** (fork patch): VMware drivers only report hardware cursor
+  positions with an absolute pointer (vmmouse). With the relative PS/2 mouse
+  games need, the reported position stayed at 0,0. Without the capability XP
+  draws its own pointer.
+- **`gbobjects=off`** (fork patch): with guest-backed objects the driver uses
+  screen targets, and vmvga showed a stale buffer after every mode switch.
+  The classic framebuffer and screen-object model switches modes correctly.
+- **No logind on the appliance**, so Xorg runs through the setuid
+  `Xorg.wrap` (`xserver-xorg-legacy`). GTK's `dconf` must use `dbus-x11`;
+  `dbus-user-session` would pull in `libpam-systemd` and start logind sessions.
+- Root filesystem cost on top of the base appliance: Xorg ~58 MB, GTK3 +
+  matchbox ~79 MB, `mesa-vulkan-drivers` ~81 MB (all drivers; could be trimmed
+  to Intel's), plus QEMU and DXVK under `/opt`.
+- KVM must allow the VMware backdoor for 3D: `kvm.enable_vmware_backdoor=1`.
+
+Open on this path:
+
+- **16-bit modes:** the driver only lists 32-bit modes; DirectX 7's
+  640x480x16 test fails. Many games of the era use 16-bit fullscreen. Needs
+  vmvga to accept 16 bpp (fork patch).
+- **Guest vCPU spins at 100% during 3D:** the XP driver polls `SVGA_REG_BUSY`
+  instead of sleeping on fence interrupts.
+- 1024x768 monitor cap: the VMware card has no EDID; XP shows "Default
+  Monitor". Modes beyond 1024x768 are still offered.
+- OpenGL games through VMware's `vmwogl32` ICD, real games (D3D7-9), audio,
+  and longer stability runs are untested.
 
 ## Target VM (`profiles/winxp`)
 
@@ -114,26 +173,27 @@ are recorded in this document. **Go:** commit to qemu-3dfx +
 WineD3D. **No-go on D3D:** decide between patching Wine for XP and the VFIO
 second-GPU fallback.
 
-### Phase 1 — QEMU fork and guest tools (`ci`, `chore(appliance)`)
+### Phase 1 — QEMU package on the appliance (`ci`, `chore(appliance)`)
 
-- [`nakioman/qemu-3dfx`](https://github.com/nakioman/qemu-3dfx), branch
-  `retrobox`: a GitHub fork of qemu-3dfx (`master` mirrors upstream) with
-  RetroBox changes as commits and `retrobox/patches/` for QEMU-tree fixes,
-  maintained like the 86Box fork. `retrobox/build.sh` downloads the pinned
-  QEMU, applies everything, and produces the host tarball and the XP tools
-  ISO; CI releases them for `retrobox-*` tags.
-- CI that builds the host QEMU and the guest wrappers from the same commit
-  (the wrappers' signature has to match the host build) plus the mingw WineD3D
-  DLLs, and packages the XP Tools ISO.
-- Build the SDL GL context backend so QEMU runs on KMS/DRM without X, and
-  replace its GLX pbuffer path with FBOs or EGL pbuffers. Host Glide
-  (OpenGLide) gets the same treatment, or stays out of scope if no XP-era
-  Glide title matters.
-- Replace the prebuilt `FXPTL.SYS` (a binary-only build of the NT DDK
-  `MAPMEM` sample) with our own source-built driver: the same `\\.\MAPMEM`
-  IOCTL interface `fxlibnt.c` uses, compiled with mingw-w64's DDK headers.
-- `appliance/qemu.env` pins versions and SHA-256 sums; the installer unpacks
-  everything to `/opt/qemu`.
+- QEMU comes from [`nakioman/qemu-vmvga`](https://github.com/nakioman/qemu-vmvga),
+  branch `retrobox` (`master` mirrors qemus/qemu-vmvga). It carries the vmvga
+  fixes as commits (`hwcursor`/`gbobjects` options, 15/16 bpp, the vgpu9
+  performance work in `retrobox/PERFORMANCE.md`) and QEMU display patches in
+  `retrobox/patches/` (4:3 fullscreen for gl=off and gl=on, input capture).
+  CI builds `qemu-retrobox-<qemu>-<rev>-linux-x86_64.tar.gz` (QEMU 11.1.1 with
+  GTK + OpenGL, no SDL, plus dxvk-native) and releases it for `retrobox-*`
+  tags. `nakioman/qemu-3dfx` stays as plan B.
+- `appliance/qemu.env` pins the release and its SHA-256; the installer unpacks
+  it to `/opt/qemu-retrobox`.
+- Appliance packages: a bare Xorg (`xserver-xorg-core`,
+  `xserver-xorg-input-libinput`, `xserver-xorg-legacy`, `xinit`),
+  `matchbox-window-manager`, GTK 3 with `dbus-x11` (not `dbus-user-session`,
+  which pulls in `libpam-systemd`), `libvulkan1`, and Intel's Vulkan driver
+  (`mesa-vulkan-drivers`, trimmed to the Intel ICD if possible).
+- KVM loads with `enable_vmware_backdoor=1` (modprobe option), otherwise the
+  guest driver disables Direct3D.
+- No guest tools are shipped: the user supplies VMware's SVGA II driver for
+  XP, like the XP media.
 
 ### Phase 2 — Multi-engine boot (`feat(core)`, `feat(cli)`)
 
@@ -166,6 +226,11 @@ second-GPU fallback.
 - `retrobox` joins the `kvm` group; the installer checks that VT-x is enabled
   and reports it in `install-report.txt`.
 - `docs/cdrom-passthrough.md` covers the QEMU path.
+- QEMU does not notice a disc swap in the host drive: the guest keeps the old
+  disc until the drive is reopened (QMP `blockdev-change-medium` on
+  `ide1-cd0` with `/dev/sr0`, which the guest sees as eject + insert). The
+  daemon watches udev media-change events (`DISK_MEDIA_CHANGE`) for the
+  optical drive and issues that command while a QEMU VM runs.
 
 ### Phase 5 — NFC floppy over QMP (`feat(daemon)`)
 
