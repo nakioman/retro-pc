@@ -1,0 +1,12 @@
+# Disc changes for QEMU VMs. Installed to /etc/udev/rules.d/90-retrobox-cdrom.rules.
+#
+# The kernel reports optical media changes (DISK_MEDIA_CHANGE=1) only while the
+# drive is polled, and the appliance has no udisks to enable polling.
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ATTR{events_poll_msecs}="2000"
+
+# QEMU keeps the old disc until the drive is reopened. The refresh runs as a
+# systemd unit, not here: it may wait for the disc to spin up, and it must run
+# as retrobox, the owner of the QMP socket. "restart" (not "start") so an event
+# arriving while a refresh still runs is not merged into it and lost. The unit
+# is skipped when no QEMU VM runs; 86Box sees changes through ioctl:// itself.
+ACTION=="change", SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{DISK_MEDIA_CHANGE}=="1", RUN+="/usr/bin/systemctl --no-block restart retrobox-cdrom-refresh@%k.service"

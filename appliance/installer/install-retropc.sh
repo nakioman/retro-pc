@@ -36,6 +36,8 @@ PAYLOAD_DIR="$SELF_DIR/payload"
 . "$LIB_DIR/users.sh"
 # shellcheck source=lib/hardware-detect.sh
 . "$LIB_DIR/hardware-detect.sh"
+# shellcheck source=lib/host-checks.sh
+. "$LIB_DIR/host-checks.sh"
 # shellcheck source=lib/services.sh
 . "$LIB_DIR/services.sh"
 # shellcheck source=lib/grub-install.sh
@@ -103,6 +105,7 @@ main() {
     create_accounts
     detect_and_record_hardware
     install_services
+    check_qemu_host
     install_bootloader
     umount_target_binds
 

@@ -100,6 +100,15 @@ uses (`qemu-system-i386`, `qemu-img`, dxvk-native, x86 firmware) to
 `/opt/qemu-retrobox` and records `qemu.package=installed` in
 `install-report.txt`. It also installs `/etc/modprobe.d/retrobox-kvm.conf`
 (`kvm enable_vmware_backdoor=1`) and adds `retrobox` to `kvm` and `render`.
+`lib/host-checks.sh` then verifies VT-x (`vmx` in `/proc/cpuinfo`),
+`/dev/kvm`, that option, and those groups, and records them as `kvm.*` and
+`retrobox.group.*` in `install-report.txt`; a missing item is a warning, not a
+failure, since 86Box VMs need none of it (see [`hardware-detect.md`](hardware-detect.md)).
+
+For disc changes in QEMU VMs the installer adds
+`/etc/udev/rules.d/90-retrobox-cdrom.rules` and
+`retrobox-cdrom-refresh@.service` (started by the rule, never enabled); see
+[`../../docs/cdrom-passthrough.md`](../../docs/cdrom-passthrough.md#disc-changes).
 
 The target rootfs is built without Recommends, and
 `appliance/debian/dpkg-vulkan-intel-only.cfg` trims `mesa-vulkan-drivers` to
@@ -207,6 +216,9 @@ Manual (on real hardware / a spare disk):
 - `/data` is writable; `/etc/fstab` uses UUIDs; root is read-only.
 - CD-ROM and ESP8266 device choices are recorded in
   `/data/retrobox/install-report.txt`.
+- `install-report.txt` has `kvm.status=USABLE`,
+  `kvm.vmware_backdoor=CONFIGURED`, and both `retrobox.group.*=MEMBER`
+  (with VT-x enabled in the firmware).
 - With a detected CD-ROM drive, the installer configures the first active
   optical slot in each applicable installed profile with its `ioctl://` path;
   templates remain portable. See [`../../docs/cdrom-passthrough.md`](../../docs/cdrom-passthrough.md)

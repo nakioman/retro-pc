@@ -21,6 +21,8 @@ public sealed class CliHelpSmokeTests
             new[] { "nfc", "--help" },
             new[] { "nfc", "read", "--help" },
             new[] { "nfc", "write", "--help" },
+            new[] { "cdrom", "--help" },
+            new[] { "cdrom", "refresh", "--help" },
         };
 
     [Theory]

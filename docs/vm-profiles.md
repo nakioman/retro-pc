@@ -66,11 +66,13 @@ work. The launcher adds only host-specific arguments:
   on the GPU, with no GTK text-console tabs that would cover the VM. Ctrl+Alt+G
   releases the grabbed mouse and keyboard.
 - `-qmp unix:/run/retrobox/qemu-qmp.sock,server=on,wait=off`
-- `-drive file=<CDROM_DEVICE>,if=ide,index=2,media=cdrom` with the optical
-  drive the installer detected (`/etc/retrobox/hardware.env`, the same
+- `-drive file=<CDROM_DEVICE>,if=ide,index=2,media=cdrom,format=raw` with the
+  optical drive the installer detected (`/etc/retrobox/hardware.env`, the same
   detection that writes `ioctl://` into 86Box profiles). It is attached only
   when `CDROM_STATUS=DETECTED` and the device still exists, so a removed drive
-  never stops the VM from starting. Keep IDE index 2 free in the profile.
+  never stops the VM from starting. Keep IDE index 2 free in the profile:
+  QEMU names this drive `ide1-cd0`, and disc changes are reloaded into it over
+  QMP ([`cdrom-passthrough.md`](cdrom-passthrough.md#disc-changes)).
 
 `retrobox boot` writes the complete argument list to
 `/run/retrobox/qemu-session.args` and runs

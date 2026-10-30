@@ -21,8 +21,8 @@ RetroBox ships no Windows media and no guest drivers. You need:
 
 The VM has the physical CD-ROM drive (when the installer detected one), an
 empty floppy drive, and outbound networking. The simplest way to bring the
-drivers in is a CD-R with both driver folders: insert it **before** starting
-the VM (see [Known issues](#known-issues) about swapping discs). Once the
+drivers in is a CD-R with both driver folders; discs can be swapped while XP
+runs (see [Known issues](#known-issues)). Once the
 network works you can also download files or copy them from a LAN share
 inside XP.
 
@@ -132,10 +132,11 @@ and create its disk as the `retrobox` user:
 
 ## Known issues
 
-- **Disc swaps:** QEMU does not notice a disc swapped in the physical drive;
-  the guest keeps seeing the old disc (or none) until the VM restarts. To
-  change discs, shut XP down, swap, and start the VM again. Automatic refresh
-  is planned (Phase 4 of the design).
+- **Disc swaps:** QEMU itself does not notice a disc swapped in the physical
+  drive. RetroBox reloads the drive into the VM a few seconds after each swap
+  (XP sees an eject and an insert); see
+  [the CD-ROM doc](cdrom-passthrough.md#disc-changes). If XP still shows the
+  old disc, run `retrobox cdrom refresh` over SSH.
 - **3DMark03 "Mother Nature"** flickers.
 - The guest vCPU spins at 100% during 3D: the XP driver polls the device
   instead of waiting for interrupts.

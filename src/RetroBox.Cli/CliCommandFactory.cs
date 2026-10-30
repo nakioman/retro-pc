@@ -48,6 +48,7 @@ public static class CliCommandFactory
             "floppy",
             "Manage cataloged floppy images."));
         rootCommand.Subcommands.Add(CreateNfcCommand(nfcClientFactory));
+        rootCommand.Subcommands.Add(CreateCdromCommand());
         rootCommand.Subcommands.Add(CreateQemuSessionCommand());
 
         rootCommand.SetAction(_ => 0);
@@ -749,6 +750,89 @@ public static class CliCommandFactory
         });
         return command;
     }
+
+    private static Command CreateCdromCommand()
+    {
+        var deviceOption = new Option<string?>("--device")
+        {
+            Description = "Drive that reported the media change (udev's /dev/srN); other drives are ignored.",
+        };
+        var qmpSocketOption = new Option<string>("--qmp-socket")
+        {
+            Description = "QMP socket of the running QEMU VM.",
+            DefaultValueFactory = _ => RetroBoxQemuLauncher.DefaultQmpSocketPath,
+        };
+        var hardwareEnvOption = new Option<string>("--hardware-env")
+        {
+            Description = "Installer hardware file naming the VM's optical drive.",
+            DefaultValueFactory = _ => RetroBoxHostHardware.DefaultEnvPath,
+        };
+        var refreshCommand = new Command(
+            "refresh",
+            "Show the disc now in the optical drive to the running QEMU VM (run by udev on media changes).")
+        {
+            deviceOption,
+            qmpSocketOption,
+            hardwareEnvOption,
+        };
+        refreshCommand.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var output = parseResult.InvocationConfiguration.Output;
+            var drive = RetroBoxHostHardware.ReadOpticalDrive(parseResult.GetValue(hardwareEnvOption)!);
+            if (drive is null)
+            {
+                output.WriteLine("No installer-detected optical drive; nothing to refresh.");
+                return 0;
+            }
+
+            var device = parseResult.GetValue(deviceOption);
+            if (device is not null && !RetroBoxHostHardware.IsSameDevice(device, drive))
+            {
+                output.WriteLine($"{device} is not the VM's optical drive ({drive}); ignored.");
+                return 0;
+            }
+
+            // 86Box VMs read the drive through ioctl:// and see changes themselves.
+            var qmpSocket = parseResult.GetValue(qmpSocketOption)!;
+            if (!File.Exists(qmpSocket))
+            {
+                output.WriteLine("No QEMU VM is running; nothing to refresh.");
+                return 0;
+            }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(CdromRefreshTimeout);
+            try
+            {
+                var outcome = await new RetroBoxQemuCdromRefresher(
+                    new RetroBoxQmpClient(qmpSocket),
+                    new RetroBoxLinuxOpticalDriveProbe()).RefreshAsync(drive, timeout.Token);
+                output.WriteLine(outcome switch
+                {
+                    RetroBoxCdromRefreshOutcome.Changed => $"Reloaded {drive} into {RetroBoxQemuLauncher.OpticalDriveId}.",
+                    RetroBoxCdromRefreshOutcome.Ejected => $"Drive is empty; ejected {RetroBoxQemuLauncher.OpticalDriveId}.",
+                    _ => "No QEMU VM is running; nothing to refresh.",
+                });
+                return 0;
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                parseResult.InvocationConfiguration.Error.WriteLine("Timed out talking to the QEMU QMP socket.");
+                return 1;
+            }
+            catch (Exception ex) when (ex is RetroBoxQmpException or IOException)
+            {
+                return WriteError(parseResult, ex);
+            }
+        });
+
+        var command = new Command("cdrom", "Physical CD-ROM drive integration.") { refreshCommand };
+        command.SetAction(_ => 0);
+        return command;
+    }
+
+    /// <summary>Covers the spin-up wait plus the QMP round trips; the systemd unit allows longer.</summary>
+    private static readonly TimeSpan CdromRefreshTimeout = RetroBoxQemuCdromRefresher.SpinUpTimeout + TimeSpan.FromSeconds(10);
 
     private static Option<string> ConfigRootOption()
     {

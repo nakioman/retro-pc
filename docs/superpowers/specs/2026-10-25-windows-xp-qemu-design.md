@@ -6,9 +6,10 @@ uses the physical CD-ROM, has guest networking, and — as a stretch — works
 with the NFC floppy drive.
 
 **Status:** Draft. Phase 0 (the hardware spike) is in progress; Direct3D works
-on the vmvga path described below. Phase 1 (QEMU package on the appliance) and
-Phase 2 (multi-engine boot, declared disks) and Phase 3 (the `core2duo` XP
-profile) are implemented; see their sections. The PR plans for phases 1–5 are written
+on the vmvga path described below. Phase 1 (QEMU package on the appliance),
+Phase 2 (multi-engine boot, declared disks), Phase 3 (the `core2duo` XP
+profile), and Phase 4 (CD-ROM and installer host checks) are implemented; see
+their sections. The PR plans for phases 1–5 are written
 after it, and Phase 1's fork content changes accordingly.
 
 ## Why not 86Box
@@ -303,6 +304,38 @@ decision record: ADR 0008.
   `ide1-cd0` with `/dev/sr0`, which the guest sees as eject + insert). The
   daemon watches udev media-change events (`DISK_MEDIA_CHANGE`) for the
   optical drive and issues that command while a QEMU VM runs.
+
+**Implemented** (plan: `docs/superpowers/plans/2026-10-30-xp-phase-4-cdrom-host.md`;
+decision record: ADR 0010):
+
+- The drive: Phase 2's launcher already attached the installer-detected
+  drive from `hardware.env`. It now adds `format=raw` (no format probing of
+  each disc; matches the refresh), names the drive once
+  (`RetroBoxQemuLauncher.OpticalDriveId = ide1-cd0`), and the install report
+  records `cdrom.qemu=ATTACHED|NONE`.
+- Disc changes: **a udev rule and a systemd unit instead of the daemon.**
+  `90-retrobox-cdrom.rules` turns on kernel media polling for `sr*`
+  (`events_poll_msecs=2000`; it is off by default and the appliance has no
+  udisks) and, on `DISK_MEDIA_CHANGE=1`, runs only
+  `systemctl --no-block restart retrobox-cdrom-refresh@%k.service`. The
+  oneshot runs as `retrobox` (the QMP socket's owner) while
+  `/run/retrobox/qemu-qmp.sock` exists, and calls
+  `retrobox cdrom refresh --device /dev/%I`: other drives are ignored, a
+  spinning-up disc is waited for (up to 15 s, `CDROM_DRIVE_STATUS` ioctl),
+  then `blockdev-change-medium` (raw, read-only) with a disc or a forced
+  `eject` without one. `restart` keeps a quick eject + insert from being
+  merged into one run. The daemon stays the floppy controller's process and
+  needs no netlink code.
+- `RetroBoxQmpClient` (Core, injectable stream like the floppy control
+  client) does the greeting, `qmp_capabilities`, commands, and skips
+  events; Phase 5 reuses it for `floppy0`.
+- Installer: `lib/host-checks.sh` reports `kvm.cpu_flag` (`vmx`/`svm`),
+  `kvm.device` (`/dev/kvm`), `kvm.status`, `kvm.vmware_backdoor` (the
+  Phase 1 modprobe option on the target), and `retrobox.group.kvm`/`render`,
+  warning but never failing.
+- Still to validate on the reference box: the swap/eject/spin-up checks in
+  `docs/cdrom-passthrough.md`, including that a refresh does not trigger
+  another media-change event.
 
 ### Phase 5 — NFC floppy over QMP (`feat(daemon)`)
 

@@ -10,7 +10,8 @@ hardware integrates through two channels:
   glued inside each floppy shell and reports insert/eject to the host over USB
   serial.
 - A **physical CD-ROM** — passed through to the guest via `ioctl://` device
-  paths configured at install time.
+  paths configured at install time (86Box), or attached as a host drive by
+  the QEMU launcher and refreshed over QMP when the disc changes.
 
 Everything else (Linux, systemd, the emulator) is an implementation detail the
 user should never notice.
@@ -85,12 +86,17 @@ YamlDotNet.
 - `RetroBoxNfcClient` / `RetroBoxNfcWriter` — `PING`/`PONG` connectivity and
   tag writing for a cataloged floppy.
 - `RetroBoxVmSelection` — list VMs, get/set the default VM.
+- `RetroBoxQmpClient` — QEMU QMP over the launcher's Unix socket
+  (greeting, `qmp_capabilities`, commands; events skipped).
+  `RetroBoxQemuCdromRefresher` uses it to reload the host drive after a disc
+  change; Phase 5's floppy control reuses it.
 
 ### src/RetroBox.Cli
 
 System.CommandLine root command (`Program.cs` → `CliCommandFactory.cs`).
 Subcommands: `boot`, `daemon`, `vm` (`list`, `default`, `create-disks`),
-`floppy`, `import`, `nfc`, and the hidden `qemu-session` (the xinit client). The factory
+`floppy`, `import`, `nfc`, `cdrom refresh` (run by udev on disc changes), and
+the hidden `qemu-session` (the xinit client). The factory
 accepts injected runners/UIs so tests can drive commands in-process.
 
 ### src/RetroBox.Daemon
@@ -163,7 +169,8 @@ See [`appliance/README.md`](../appliance/README.md) and
 | Arduino serial protocol | `RetroBoxArduinoSerialProtocol` | `INIT`, `INSERT <id>,<mode>`, `EJECT`, `ERROR`; host `WRITE`/`TAGID`/`STATUS`/`PING`. |
 | 86Box floppy control socket | `docs/86box-floppy-control-socket-contract.md` | JSON Lines over Unix socket; `floppy.insert/eject/status`. |
 | VM hardware source of truth | `docs/vm-profiles.md` | Each engine's native profile (`86box.cfg`, `qemu.args`) defines hardware; YAML is metadata plus disk declarations. |
-| CD-ROM passthrough | `docs/cdrom-passthrough.md` | First active optical slot bound to `ioctl://<device>` at install. |
+| CD-ROM passthrough | `docs/cdrom-passthrough.md` | 86Box: first active optical slot bound to `ioctl://<device>` at install. QEMU: drive from `hardware.env` on `ide1-cd0`, refreshed over QMP on disc changes (ADR 0010). |
+| QEMU QMP socket | `RetroBoxQmpClient` | `/run/retrobox/qemu-qmp.sock`, owned by `retrobox`; one client at a time. |
 
 ## Data model
 
