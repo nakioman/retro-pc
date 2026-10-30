@@ -164,11 +164,13 @@ EOF
 
 # iso9660 reads the kernel/initrd off the ISO; search_fs_file backs
 # `search --file`; fat/part_gpt/part_msdos cover the ESP and both hybrid tables.
+# No efi_uga: GRUB 2.14 (Ubuntu 26.04 runners) dropped it, and efi_gop covers
+# every UEFI machine without pre-GOP firmware.
 grub-mkimage -O x86_64-efi -o "$WORK/BOOTX64.EFI" -p /boot/grub \
     -c "$WORK/grub-early.cfg" \
     part_gpt part_msdos fat ext2 iso9660 udf normal search search_fs_uuid \
     search_fs_file search_label configfile linux loopback echo test true \
-    minicmd chain halt reboot all_video gfxterm font terminal efi_gop efi_uga
+    minicmd chain halt reboot all_video gfxterm font terminal efi_gop
 
 EFI_IMG="$ISO/boot/grub/efi.img"
 # Headroom beyond the payload for the boot sector, FATs, and root directory.
