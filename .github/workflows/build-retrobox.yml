@@ -70,6 +70,14 @@ jobs:
           "$artifact" boot --dry-run --config-root "$fixture" --select pentium100
           test ! -e "$fixture/config.yaml"
 
+      - name: Smoke test published binary without ICU
+        # The appliance root has no libicu (ubuntu-latest does); the installer
+        # runs the binary in its chroot, so it must start on a bare Debian 13.
+        run: |
+          docker run --rm \
+            -v "$PWD/src/RetroBox.Cli/bin/Release/net10.0/linux-x64/publish:/opt/retrobox:ro" \
+            debian:trixie-slim /opt/retrobox/retrobox --help
+
       - name: Upload RetroBox artifact
         uses: actions/upload-artifact@v4
         with:
