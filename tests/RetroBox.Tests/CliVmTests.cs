@@ -7,7 +7,7 @@ namespace RetroBox.Tests;
 public sealed class CliVmTests
 {
     [Fact]
-    public void Vm_list_prints_ids_and_labels_in_stable_order()
+    public void Vm_list_prints_ids_and_labels_in_catalog_order()
     {
         var layout = CreateVmLayout();
         var output = new StringWriter();
@@ -16,7 +16,7 @@ public sealed class CliVmTests
         parseResult.InvocationConfiguration.Output = output;
 
         Assert.Equal(0, parseResult.Invoke());
-        Assert.Equal("386sx16\t386SX-16\npentium100\tPentium 100\n", output.ToString());
+        Assert.Equal("pentium100\tPentium 100\n386sx16\t386SX-16\n", output.ToString());
     }
 
     [Fact]

@@ -31,6 +31,18 @@ public sealed class RetroBoxBootSelectorTests
     }
 
     [Fact]
+    public void Selector_lists_vms_in_catalog_order()
+    {
+        var root = CreateRoot("");
+        var ui = new FakeSelectorUi(new RetroBoxBootSelectionDecision(
+            RetroBoxBootSelectionAction.Run, "386sx16"));
+
+        new RetroBoxBootSelector(new RetroBoxConfigStore(root), ui).Resolve();
+
+        Assert.Equal(["pentium100", "386sx16"], ui.VmIds);
+    }
+
+    [Fact]
     public void Missing_config_file_forces_selector()
     {
         var root = CreateRoot("pentium100");
@@ -176,11 +188,14 @@ public sealed class RetroBoxBootSelectorTests
     {
         public int Calls { get; private set; }
 
+        public IReadOnlyList<string> VmIds { get; private set; } = [];
+
         public RetroBoxBootSelectionDecision Select(
             IReadOnlyList<KeyValuePair<string, RetroBoxVm>> virtualMachines,
             string? defaultVmId)
         {
             Calls++;
+            VmIds = virtualMachines.Select(entry => entry.Key).ToArray();
             return decision;
         }
     }

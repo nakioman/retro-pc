@@ -95,6 +95,11 @@ public sealed partial class RetroBoxQemuLauncher(IRetroBoxProcessRunner runner)
                 "-keeptty",
                 "-nolisten",
                 "tcp",
+                // Kiosk: no screen saver or DPMS blanking. Set on the server so the appliance
+                // needs no xset (x11-xserver-utils).
+                "-s",
+                "0",
+                "-dpms",
             ])
         {
             DiscardStandardOutput = true,
@@ -135,7 +140,6 @@ public sealed class RetroBoxQemuSession(IRetroBoxProcessRunner runner)
     {
         var arguments = RetroBoxQemuProfile.ReadArguments(request.ArgumentsFile);
 
-        runner.Run(new RetroBoxProcessSpec("xset", ["s", "off", "-dpms"]));
         using (runner.Start(new RetroBoxProcessSpec(
             "matchbox-window-manager",
             ["-use_titlebar", "no", "-use_cursor", "no"])))
