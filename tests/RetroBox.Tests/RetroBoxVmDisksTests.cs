@@ -146,7 +146,7 @@ public sealed class RetroBoxVmDisksTests : IDisposable
         Assert.Equal(RetroBoxVmDiskOutcome.Created, outcome);
         var run = Assert.Single(runner.Runs);
         Assert.Equal(qemuImg, run.FileName);
-        Assert.Equal(["create", "-f", "qcow2", path, "21474836480"], run.Arguments);
+        Assert.Equal(["create", "-f", "qcow2", "-o", "preallocation=falloc", path, "21474836480"], run.Arguments);
         Assert.Equal(Path.Combine(root, "opt", "lib"), run.Environment["LD_LIBRARY_PATH"]);
         Assert.True(run.DiscardStandardOutput);
     }

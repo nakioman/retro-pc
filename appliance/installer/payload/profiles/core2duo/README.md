@@ -57,7 +57,8 @@ disks:
 ```
 
 and the installer creates it with `retrobox vm create-disks`, which runs
-`/opt/qemu-retrobox/bin/qemu-img`. The qcow2 file grows as XP writes to it.
+`/opt/qemu-retrobox/bin/qemu-img`. The qcow2 file is preallocated (`preallocation=falloc`), so the full 120 GB
+is reserved on `/data` up front.
 Do not replace this file with an installed OS image in the repository.
 
 ## Generated State
