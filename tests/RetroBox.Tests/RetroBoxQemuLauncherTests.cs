@@ -139,7 +139,7 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
                 "--binary", "/opt/qemu-retrobox/bin/qemu-system-i386",
                 "--args-file", argumentsFile,
                 "--vm-path", Path.Combine(root, "winxp"),
-                "--", ":0", "vt2", "-keeptty", "-nolisten", "tcp",
+                "--", ":0", "vt2", "-keeptty", "-nolisten", "tcp", "-s", "0", "-dpms",
             ],
             run.Arguments);
         Assert.True(run.DiscardStandardOutput);
@@ -166,11 +166,10 @@ public sealed class RetroBoxQemuLauncherTests : IDisposable
 
         Assert.Equal(0, exitCode);
         Assert.Equal(
-            ["run xset", "start matchbox-window-manager", "run qemu-system-i386", "stop matchbox-window-manager"],
+            ["start matchbox-window-manager", "run qemu-system-i386", "stop matchbox-window-manager"],
             runner.Log);
-        Assert.Equal(["s", "off", "-dpms"], runner.Runs[0].Arguments);
-        Assert.Equal(["-use_titlebar", "no", "-use_cursor", "no"], runner.Runs[1].Arguments);
-        var qemu = runner.Runs[2];
+        Assert.Equal(["-use_titlebar", "no", "-use_cursor", "no"], runner.Runs[0].Arguments);
+        var qemu = runner.Runs[1];
         Assert.Equal("/opt/qemu-retrobox/bin/qemu-system-i386", qemu.FileName);
         Assert.Equal(SpikeArguments, qemu.Arguments);
         Assert.Equal(Path.Combine(root, "winxp"), qemu.WorkingDirectory);
