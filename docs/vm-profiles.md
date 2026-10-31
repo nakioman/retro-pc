@@ -11,7 +11,9 @@ in the profile directory is the hardware source of truth
 | `qemu` | `qemu.args` | `qemu-system-i386 <qemu.args> <host args>` inside a bare Xorg |
 
 RetroBox YAML refers to a profile for display and selection and declares the
-VM's disks; it never describes hardware.
+VM's disks; it never describes hardware. The F12 selector and
+`retrobox vm list` show VMs in `vms.yaml` order, so the shipped catalog lists
+them from slowest to fastest (386SX-16 first, Core 2 Duo last).
 
 ## Disks
 

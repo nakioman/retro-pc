@@ -548,8 +548,7 @@ public static class CliCommandFactory
                 }
 
                 vms = catalog.Vms
-                    .Where(entry => vmId is null || entry.Key == vmId)
-                    .OrderBy(entry => entry.Key, StringComparer.Ordinal);
+                    .Where(entry => vmId is null || entry.Key == vmId);
             }
             catch (Exception ex) when (ex is RetroBoxCatalogException or IOException or UnauthorizedAccessException)
             {
