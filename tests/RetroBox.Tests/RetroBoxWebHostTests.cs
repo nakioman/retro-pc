@@ -59,6 +59,27 @@ public sealed class RetroBoxWebHostTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_system_reports_free_space_of_the_data_filesystem()
+    {
+        var source = new RetroBoxStaticCatalogSource(
+            FloppyControlTestCatalogs.CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadOnlyMode));
+        await using var host = await RetroBoxWebHost.StartAsync(new RetroBoxWebOptions { Port = 0, ConfigRoot = root }, source);
+        using var client = new HttpClient { BaseAddress = host.BaseAddress };
+
+        using var body = JsonDocument.Parse(await client.GetStringAsync("/api/system"));
+
+        Assert.True(body.RootElement.GetProperty("dataFreeBytes").GetInt64() > 0);
+    }
+
+    [Fact]
+    public void System_view_reports_null_free_space_for_a_missing_path()
+    {
+        var view = RetroBoxSystemEndpoints.BuildView(Path.Combine(root, "missing", "deeper"));
+
+        Assert.Null(view.DataFreeBytes);
+    }
+
+    [Fact]
     public async Task Get_root_serves_the_embedded_panel()
     {
         var source = new RetroBoxStaticCatalogSource(

@@ -26,6 +26,26 @@ public sealed class RetroBoxConsoleSelectorTests
     }
 
     [Fact]
+    public void Renders_the_machine_ip_addresses()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => ["192.168.1.42", "10.0.0.5"]).Select(VirtualMachines, null);
+
+        Assert.Contains("IP: 192.168.1.42, 10.0.0.5", terminal.Output);
+    }
+
+    [Fact]
+    public void Renders_not_connected_when_the_machine_has_no_ip()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Contains("IP: not connected", terminal.Output);
+    }
+
+    [Fact]
     public void Number_starts_selected_vm_without_changing_default()
     {
         var terminal = new FakeConsole(Key('2'));
@@ -46,6 +66,39 @@ public sealed class RetroBoxConsoleSelectorTests
         Assert.Equal(RetroBoxBootSelectionAction.RunAndSetDefault, result.Action);
         Assert.Equal("386sx16", result.VmId);
         Assert.Contains("Set default VM", terminal.Output);
+    }
+
+    [Fact]
+    public void Selecting_a_vm_shows_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Key('2'));
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Equal(2, terminal.ClearCalls);
+        Assert.Contains("Starting 386SX-16...", terminal.Output);
+        Assert.Contains("Please wait while the emulator loads.", terminal.Output);
+    }
+
+    [Fact]
+    public void Setting_a_default_shows_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Key('d'), Key('1'));
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Contains("Starting Pentium 100...", terminal.Output);
+    }
+
+    [Fact]
+    public void Escape_does_not_show_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Equal(1, terminal.ClearCalls);
+        Assert.DoesNotContain("Starting", terminal.Output);
     }
 
     [Fact]

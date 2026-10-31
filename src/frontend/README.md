@@ -1,6 +1,6 @@
 # RetroBox frontend
 
-The Vite development server proxies `/api` to `http://localhost:8080` by
+The Vite development server proxies `/api` to `http://localhost` by
 default, so `npm run dev` works with the local RetroBox host without CORS
 configuration.
 

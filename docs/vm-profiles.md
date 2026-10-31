@@ -38,8 +38,9 @@ vms:
 
 `retrobox vm create-disks [id]` creates every missing disk and never opens an
 existing one, so installed systems are safe; the installer runs it on every
-install. `raw` disks are sparse files of the exact size; `qcow2` disks need
-`/opt/qemu-retrobox/bin/qemu-img` (override with `--qemu-img`), and the
+install. `raw` disks are sparse files of the exact size; `qcow2` disks are
+preallocated (`preallocation=falloc`), so their full size is reserved on
+`/data` when they are created. They need `/opt/qemu-retrobox/bin/qemu-img` (override with `--qemu-img`), and the
 command says so when it is missing.
 
 For 86Box the `.cfg` geometry is authoritative: each declared file must match

@@ -117,7 +117,7 @@ the events it observes.
 
 The daemon hosts a floppy management panel (Minimal API with embedded static
 assets, preserved in the AOT single-file binary) on the port specified by
-`WEB_PORT` (default 8080), listening on every interface. It is hosted inside the
+`WEB_PORT` (default 80), listening on every interface. It is hosted inside the
 daemon process because the daemon owns the serial port exclusively. The panel
 runs without a floppy controller attached, allowing catalog management with no
 hardware dependencies. It is **unauthenticated and openly writable**: anyone on

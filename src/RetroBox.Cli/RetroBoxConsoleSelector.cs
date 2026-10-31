@@ -20,7 +20,9 @@ public sealed class SystemRetroBoxConsole : IRetroBoxConsole
     public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);
 }
 
-public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : IRetroBoxBootSelectorUi
+public sealed class RetroBoxConsoleSelector(
+    IRetroBoxConsole? console = null,
+    Func<IReadOnlyList<string>>? ipAddresses = null) : IRetroBoxBootSelectorUi
 {
     private const string Banner = """
          ██████  ███████ ████████ ██████   ██████  ██████   ██████  ██   ██
@@ -31,6 +33,7 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         """;
 
     private readonly IRetroBoxConsole terminal = console ?? new SystemRetroBoxConsole();
+    private readonly Func<IReadOnlyList<string>> getIpAddresses = ipAddresses ?? RetroBoxNetworkAddresses.GetLanIPv4Addresses;
 
     public RetroBoxBootSelectionDecision Select(
         IReadOnlyList<KeyValuePair<string, RetroBoxVm>> virtualMachines,
@@ -60,7 +63,7 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
 
             if (TryGetVmIndex(key, virtualMachines.Count, out var index))
             {
-                return new RetroBoxBootSelectionDecision(RetroBoxBootSelectionAction.Run, virtualMachines[index].Key);
+                return Starting(RetroBoxBootSelectionAction.Run, virtualMachines[index]);
             }
 
             terminal.WriteLine("Invalid selection. Press a listed number, D, or Esc.");
@@ -79,13 +82,26 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
 
             if (TryGetVmIndex(key, virtualMachines.Count, out var index))
             {
-                return new RetroBoxBootSelectionDecision(
-                    RetroBoxBootSelectionAction.RunAndSetDefault,
-                    virtualMachines[index].Key);
+                return Starting(RetroBoxBootSelectionAction.RunAndSetDefault, virtualMachines[index]);
             }
 
             terminal.WriteLine("Invalid default VM. Press a listed number, or Esc to cancel.");
         }
+    }
+
+    // The splash was quit to show this menu, so nothing else covers the console while the
+    // emulator loads; without this screen the menu just sits there looking unresponsive.
+    private RetroBoxBootSelectionDecision Starting(
+        RetroBoxBootSelectionAction action,
+        KeyValuePair<string, RetroBoxVm> selected)
+    {
+        terminal.Clear();
+        terminal.WriteLine(Banner);
+        terminal.WriteLine();
+        terminal.WriteLine($"Starting {selected.Value.Label}...");
+        terminal.WriteLine();
+        terminal.WriteLine("Please wait while the emulator loads.");
+        return new RetroBoxBootSelectionDecision(action, selected.Key);
     }
 
     private void Render(IReadOnlyList<KeyValuePair<string, RetroBoxVm>> virtualMachines, string? defaultVmId)
@@ -93,6 +109,8 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         terminal.WriteLine(Banner);
         terminal.WriteLine();
         terminal.WriteLine("                          Machine Selector");
+        terminal.WriteLine();
+        terminal.WriteLine(FormatIpLine(getIpAddresses()));
         terminal.WriteLine();
         terminal.WriteLine("================================================");
         for (var index = 0; index < virtualMachines.Count; index++)
@@ -105,6 +123,9 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         terminal.WriteLine("================================================");
         terminal.WriteLine("Press a number to start. Press D to set the default VM. Esc cancels.");
     }
+
+    private static string FormatIpLine(IReadOnlyList<string> addresses) =>
+        addresses.Count == 0 ? "IP: not connected" : $"IP: {string.Join(", ", addresses)}";
 
     private static bool TryGetVmIndex(ConsoleKeyInfo key, int count, out int index)
     {

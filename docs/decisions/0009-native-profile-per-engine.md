@@ -30,7 +30,7 @@ extend to QEMU's qcow2 disks.
   Xorg started by `xinit`, with `retrobox qemu-session` as the X client.
 - `vms.yaml` declares each VM's disks (`disks: [{file, size, format}]`), for
   every engine. `retrobox vm create-disks` creates the missing ones (raw:
-  sparse file; qcow2: `qemu-img`) and never touches an existing path. The
+  sparse file; qcow2: `qemu-img` with `preallocation=falloc`) and never touches an existing path. The
   installer runs it instead of `retrobox-hdd-creation`, which is removed.
 - For 86Box disks the `.cfg` geometry (`hdd_NN_parameters`, S×H×C×512) stays
   authoritative, because 86Box must agree with the file: `size` may be

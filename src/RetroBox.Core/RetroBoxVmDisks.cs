@@ -95,6 +95,8 @@ public sealed class RetroBoxVmDiskCreator(IRetroBoxProcessRunner runner, string 
         return RetroBoxVmDiskOutcome.Created;
     }
 
+    // falloc reserves the full virtual size on /data up front (near-instant via fallocate), so a
+    // guest can never hit ENOSPC on the host mid-install the way a growing qcow2 can.
     private void CreateQcow2(RetroBoxVmDiskPlan plan)
     {
         if (!File.Exists(qemuImgPath))
@@ -105,7 +107,7 @@ public sealed class RetroBoxVmDiskCreator(IRetroBoxProcessRunner runner, string 
 
         var exitCode = runner.Run(new RetroBoxProcessSpec(
             qemuImgPath,
-            ["create", "-f", RetroBoxVmDiskFormats.Qcow2, plan.Path, plan.SizeBytes.ToString(CultureInfo.InvariantCulture)])
+            ["create", "-f", RetroBoxVmDiskFormats.Qcow2, "-o", "preallocation=falloc", plan.Path, plan.SizeBytes.ToString(CultureInfo.InvariantCulture)])
         {
             Environment = new Dictionary<string, string>(StringComparer.Ordinal)
             {

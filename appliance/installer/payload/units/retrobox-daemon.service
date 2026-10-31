@@ -11,9 +11,13 @@ ConditionKernelCommandLine=!retropc.norun
 Type=simple
 User=retrobox
 Group=retrobox
+# The panel listens on port 80 as the unprivileged retrobox user; this grants only
+# the right to bind ports below 1024.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 # Fallback WEB_PORT in case daemon.env is from an older install (pre-panel).
 # EnvironmentFile below may override it.
-Environment=WEB_PORT=8080
+Environment=WEB_PORT=80
 # Written by the installer (lib/hardware-detect.sh + lib/services.sh). Provides
 # SERIAL_DEVICE, SERIAL_BAUD, FLOPPY_CONTROL_SOCKET, and WEB_PORT.
 EnvironmentFile=/etc/retrobox/daemon.env

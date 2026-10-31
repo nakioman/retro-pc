@@ -5,3 +5,4 @@ export * from "./Floppy";
 export * from "./Game";
 export * from "./ScraperResult";
 export * from "./ScraperSettings";
+export * from "./System";

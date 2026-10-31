@@ -61,7 +61,7 @@ catalog. Once the appliance is running, open this address from a computer on
 the same network:
 
 ```text
-http://<appliance-hostname-or-ip>:8080
+http://<appliance-hostname-or-ip>
 ```
 
 The panel's main library view and cover-art workflow:
@@ -76,7 +76,7 @@ write a catalog entry to the tag inside a floppy. The panel is hosted by the
 daemon and remains available even when the floppy controller is disconnected;
 the NFC actions are simply disabled in that case.
 
-The default port is `8080` and can be changed with the daemon's `--web-port`
+The default port is `80` and can be changed with the daemon's `--web-port`
 option. Set `WEB_PORT=0` in `/etc/retrobox/daemon.env` to disable the panel.
 The panel intentionally has no authentication or TLS and is designed for a
 trusted home LAN. Do not expose it directly to the internet.

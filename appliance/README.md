@@ -49,6 +49,11 @@ the VM's displayed number to start it, or press `D` and then a number to set
 that VM as the default and start it immediately. `Esc` cancels; when a default
 already exists, cancellation starts that default.
 
+The selector also shows the appliance's LAN IPv4 address (or `not connected`),
+so the web panel at `http://<ip>` is easy to find.
+After a VM is chosen the screen switches to a "Starting <VM>..." message
+until the emulator takes over the display.
+
 When a VM is closed, the selector returns so another VM can be started without
 rebooting the appliance. `Esc` on that returned selector ends the session and
 returns to the tty1 login; it does not restart the previous VM.
@@ -65,7 +70,8 @@ while the VM was off are loaded when it powers on.
 ## Web panel
 
 The appliance hosts an unauthenticated floppy management panel on the LAN at
-`http://<appliance>:8080`. The panel lists, uploads, renames, re-modes, and
+`http://<appliance>` (port 80). Its status bar shows the free space on `/data`.
+The panel lists, uploads, renames, re-modes, and
 deletes cataloged floppies, and creates, edits, and deletes game groups; it
 runs whether or not the floppy controller is attached. A group records an
 ordered set of cataloged floppies in `/data/retrobox/games.yaml`; a floppy can
