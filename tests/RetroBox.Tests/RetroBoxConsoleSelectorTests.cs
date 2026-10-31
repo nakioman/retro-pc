@@ -26,6 +26,26 @@ public sealed class RetroBoxConsoleSelectorTests
     }
 
     [Fact]
+    public void Renders_the_machine_ip_addresses()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => ["192.168.1.42", "10.0.0.5"]).Select(VirtualMachines, null);
+
+        Assert.Contains("IP: 192.168.1.42, 10.0.0.5", terminal.Output);
+    }
+
+    [Fact]
+    public void Renders_not_connected_when_the_machine_has_no_ip()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Contains("IP: not connected", terminal.Output);
+    }
+
+    [Fact]
     public void Number_starts_selected_vm_without_changing_default()
     {
         var terminal = new FakeConsole(Key('2'));

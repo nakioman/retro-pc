@@ -79,5 +79,6 @@ export const es = {
   accept: "Aceptar",
   close: "Cerrar",
   loading: "Cargando…",
+  dataFreeSpace: "{size} libres",
   about: "Administración de disquetes NFC y máquinas virtuales 86Box.",
 } as const;

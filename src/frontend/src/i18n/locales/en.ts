@@ -81,5 +81,6 @@ export const en: Record<keyof typeof es, string> = {
   accept: "Accept",
   close: "Close",
   loading: "Loading…",
+  dataFreeSpace: "{size} Free",
   about: "NFC floppy and 86Box virtual-machine management.",
 };

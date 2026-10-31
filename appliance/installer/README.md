@@ -175,6 +175,9 @@ console. Press a VM's displayed number to start it. Press `D`, then a VM number,
 to save it as the default and start it immediately. `Esc` cancels; if a default
 is already configured, cancellation starts that VM.
 
+The selector also shows the appliance's LAN IPv4 address (or `not connected`),
+so the web panel at `http://<ip>` is easy to find.
+
 Closing a VM returns to the selector so another VM can be started without a
 reboot. `Esc` on that returned selector ends the session and returns to the
 tty1 login; it does not restart the VM that just closed.

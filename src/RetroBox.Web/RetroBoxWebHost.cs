@@ -90,6 +90,7 @@ public sealed class RetroBoxWebHost : IAsyncDisposable
         RetroBoxGameEndpoints.Map(app, catalogSource, library);
         RetroBoxDriveEndpoints.Map(app, driveState, nfcChannel, driveEventsWaitForNextPoll);
         RetroBoxNfcEndpoints.Map(app, catalogSource, nfcChannel, library, driveState);
+        RetroBoxSystemEndpoints.Map(app, options);
         app.MapGet("/", ServeApplication);
 
         // A catch-all rather than "/{asset}": the panel's own assets sit at the root today, but a

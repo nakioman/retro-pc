@@ -4,7 +4,7 @@ namespace RetroBox.Web;
 
 public sealed record RetroBoxWebOptions
 {
-    public const int DefaultPort = 8080;
+    public const int DefaultPort = 80;
 
     public int Port { get; init; } = DefaultPort;
 

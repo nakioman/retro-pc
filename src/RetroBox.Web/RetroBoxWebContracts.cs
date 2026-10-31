@@ -74,6 +74,8 @@ public sealed record RetroBoxNfcWriteResult(
     string? Message,
     string? TagUid);
 
+public sealed record RetroBoxSystemView(long? DataFreeBytes);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RetroBoxCatalogView))]
 [JsonSerializable(typeof(RetroBoxGameView))]
@@ -89,4 +91,5 @@ public sealed record RetroBoxNfcWriteResult(
 [JsonSerializable(typeof(RetroBoxCoverView))]
 [JsonSerializable(typeof(RetroBoxNfcWriteRequest))]
 [JsonSerializable(typeof(RetroBoxNfcWriteResult))]
+[JsonSerializable(typeof(RetroBoxSystemView))]
 public sealed partial class RetroBoxWebJsonContext : JsonSerializerContext;

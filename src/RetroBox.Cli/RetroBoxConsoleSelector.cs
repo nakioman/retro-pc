@@ -20,7 +20,9 @@ public sealed class SystemRetroBoxConsole : IRetroBoxConsole
     public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);
 }
 
-public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : IRetroBoxBootSelectorUi
+public sealed class RetroBoxConsoleSelector(
+    IRetroBoxConsole? console = null,
+    Func<IReadOnlyList<string>>? ipAddresses = null) : IRetroBoxBootSelectorUi
 {
     private const string Banner = """
          ██████  ███████ ████████ ██████   ██████  ██████   ██████  ██   ██
@@ -31,6 +33,7 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         """;
 
     private readonly IRetroBoxConsole terminal = console ?? new SystemRetroBoxConsole();
+    private readonly Func<IReadOnlyList<string>> getIpAddresses = ipAddresses ?? RetroBoxNetworkAddresses.GetLanIPv4Addresses;
 
     public RetroBoxBootSelectionDecision Select(
         IReadOnlyList<KeyValuePair<string, RetroBoxVm>> virtualMachines,
@@ -94,6 +97,8 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         terminal.WriteLine();
         terminal.WriteLine("                          Machine Selector");
         terminal.WriteLine();
+        terminal.WriteLine(FormatIpLine(getIpAddresses()));
+        terminal.WriteLine();
         terminal.WriteLine("================================================");
         for (var index = 0; index < virtualMachines.Count; index++)
         {
@@ -105,6 +110,9 @@ public sealed class RetroBoxConsoleSelector(IRetroBoxConsole? console = null) : 
         terminal.WriteLine("================================================");
         terminal.WriteLine("Press a number to start. Press D to set the default VM. Esc cancels.");
     }
+
+    private static string FormatIpLine(IReadOnlyList<string> addresses) =>
+        addresses.Count == 0 ? "IP: not connected" : $"IP: {string.Join(", ", addresses)}";
 
     private static bool TryGetVmIndex(ConsoleKeyInfo key, int count, out int index)
     {
