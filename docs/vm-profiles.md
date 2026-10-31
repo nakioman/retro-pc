@@ -11,7 +11,9 @@ in the profile directory is the hardware source of truth
 | `qemu` | `qemu.args` | `qemu-system-i386 <qemu.args> <host args>` inside a bare Xorg |
 
 RetroBox YAML refers to a profile for display and selection and declares the
-VM's disks; it never describes hardware.
+VM's disks; it never describes hardware. The F12 selector and
+`retrobox vm list` show VMs in `vms.yaml` order, so the shipped catalog lists
+them from slowest to fastest (386SX-16 first, Core 2 Duo last).
 
 ## Disks
 
@@ -76,9 +78,10 @@ work. The launcher adds only host-specific arguments:
 
 `retrobox boot` writes the complete argument list to
 `/run/retrobox/qemu-session.args` and runs
-`xinit /opt/retrobox/retrobox qemu-session ... -- :0 vt<N> -keeptty -nolisten tcp`
-on the boot console's VT. Inside X, `qemu-session` turns off blanking
-(`xset s off -dpms`), starts `matchbox-window-manager -use_titlebar no
+`xinit /opt/retrobox/retrobox qemu-session ... -- :0 vt<N> -keeptty -nolisten tcp -s 0 -dpms`
+on the boot console's VT; `-s 0 -dpms` turns off screen blanking on the server,
+so the appliance needs no `xset`. Inside X, `qemu-session` starts
+`matchbox-window-manager -use_titlebar no
 -use_cursor no`, and runs `/opt/qemu-retrobox/bin/qemu-system-i386` with
 `NO_AT_BRIDGE=1` and `LD_LIBRARY_PATH=/opt/qemu-retrobox/lib`. When QEMU exits,
 X exits and the selector returns, as with 86Box. Xorg starts through the

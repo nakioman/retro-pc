@@ -4,9 +4,8 @@ public sealed class RetroBoxVmSelection(RetroBoxConfigStore store)
 {
     public IReadOnlyList<KeyValuePair<string, RetroBoxVm>> List()
     {
-        return store.Load().Vms
-            .OrderBy(entry => entry.Key, StringComparer.Ordinal)
-            .ToArray();
+        // Catalog (vms.yaml) order, as in the boot selector.
+        return store.Load().Vms.ToArray();
     }
 
     public string GetDefaultVmId()

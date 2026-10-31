@@ -3,6 +3,7 @@
 # engine qemu. `retrobox vm create-disks` creates the missing disks listed here
 # and never touches existing ones. 86Box disk sizes come from the .cfg geometry
 # (hdd_NN_parameters), so they are not repeated here.
+# The boot selector lists VMs in this file's order: keep them by performance.
 vms:
   386sx16:
     label: "386SX-16"

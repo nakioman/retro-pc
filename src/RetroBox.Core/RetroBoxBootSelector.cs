@@ -36,9 +36,9 @@ public sealed class RetroBoxBootSelector(RetroBoxConfigStore store, IRetroBoxBoo
         bool persistDefault = true,
         bool quitOnCancel = false)
     {
-        var virtualMachines = catalog.Vms
-            .OrderBy(entry => entry.Key, StringComparer.Ordinal)
-            .ToArray();
+        // vms.yaml order is the display order (the catalog lists VMs by performance). The
+        // loaded dictionary is only ever added to, so it enumerates in file order.
+        var virtualMachines = catalog.Vms.ToArray();
 
         if (virtualMachines.Length == 0)
         {
