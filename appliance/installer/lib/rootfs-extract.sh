@@ -134,5 +134,5 @@ stage_qemu() {
     [ -x "$dest/bin/qemu-system-i386" ] \
         || die "QEMU package did not install $QEMU_OPT/bin/qemu-system-i386"
     QEMU_STATUS="installed"
-    ok "Staged QEMU -> $QEMU_OPT"
+    ok "Staged QEMU -> $QEMU_OPT/bin/qemu-system-i386"
 }
