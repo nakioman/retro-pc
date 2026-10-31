@@ -177,6 +177,8 @@ is already configured, cancellation starts that VM.
 
 The selector also shows the appliance's LAN IPv4 address (or `not connected`),
 so the web panel at `http://<ip>` is easy to find.
+After a VM is chosen the screen switches to a "Starting <VM>..." message
+until the emulator takes over the display.
 
 Closing a VM returns to the selector so another VM can be started without a
 reboot. `Esc` on that returned selector ends the session and returns to the

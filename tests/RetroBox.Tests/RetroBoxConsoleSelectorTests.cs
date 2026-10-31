@@ -69,6 +69,39 @@ public sealed class RetroBoxConsoleSelectorTests
     }
 
     [Fact]
+    public void Selecting_a_vm_shows_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Key('2'));
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Equal(2, terminal.ClearCalls);
+        Assert.Contains("Starting 386SX-16...", terminal.Output);
+        Assert.Contains("Please wait while the emulator loads.", terminal.Output);
+    }
+
+    [Fact]
+    public void Setting_a_default_shows_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Key('d'), Key('1'));
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Contains("Starting Pentium 100...", terminal.Output);
+    }
+
+    [Fact]
+    public void Escape_does_not_show_a_starting_screen()
+    {
+        var terminal = new FakeConsole(Escape());
+
+        _ = new RetroBoxConsoleSelector(terminal, () => []).Select(VirtualMachines, null);
+
+        Assert.Equal(1, terminal.ClearCalls);
+        Assert.DoesNotContain("Starting", terminal.Output);
+    }
+
+    [Fact]
     public void Invalid_key_retries_before_selection()
     {
         var terminal = new FakeConsole(Key('9'), Key('1'));
