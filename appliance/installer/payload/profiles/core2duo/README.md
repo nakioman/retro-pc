@@ -19,8 +19,7 @@ selection (ADR 0009). Installing and setting up XP is covered in
   qcow2
 - Floppy: one empty 1.44 MB drive
 - CD-ROM: the host's physical drive on IDE index 2 (secondary master), added
-  by the launcher when the installer detected one, plus an empty CD drive on
-  index 3 for ISOs
+  by the launcher when the installer detected one (the only CD drive)
 - BIOS: SeaBIOS; boots the disk first, then the CD; ESC during the 3-second
   prompt opens the boot menu
 - Expected OS: Windows XP SP3, installed manually from the real CD
