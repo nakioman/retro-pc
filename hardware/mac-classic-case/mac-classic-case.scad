@@ -51,7 +51,8 @@ insert_d = 4.0;
 //Printable parts (each renders in its print orientation):
 //  front-lower, front-upper, back-lower-left, back-lower-right,
 //  back-upper-left, back-upper-right, drive-cage, cage-pedestals, hdd-cradle,
-//  lcd-frame, dvd-tray-cover, fdd-funnel, dvd-funnel, eject-cap, tpu-feet
+//  lcd-frame, dvd-tray-cover, dvd-eject-button, fdd-funnel, dvd-funnel,
+//  eject-cap, tpu-feet
 part = "assembly";
 
 show_hardware = false; //ghost motherboard/PSU/drives in the views (preview only)
@@ -124,7 +125,8 @@ odd_y_front = -13;         //front face of the drive. Limit ~-14.9: the top
 odd_slot_cx = 157.4;       //center X: chosen so the RIGHT end of mouth and bevel aligns with the floppy's
 odd_slot_z  = 132.5;       //slot center Z (25 above the floppy slot; lower hits the classic bezel)
 odd_slot_w = 130; odd_slot_h = 12;  //narrow through mouth (128 x ~10 tray + printed face)
-odd_bezel_h = 18;                   //bevel height; widths reuse the floppy margins (10.4/8.5)
+odd_bezel_h = 18;                   //bevel height
+odd_bezel_ml = 10.4; odd_bezel_mr = 8.5; //bevel margins left/right of the slot (as the floppy's)
 odd_bottom_z = odd_slot_z - 7;      //the tray axis sits ~7 above the drive base
 //Side M2 screws into the drive's threaded side holes (2 per side). Instead of
 //fixed holes, ONE sliding slot per bay wall at this z lets the drive move in
@@ -133,56 +135,119 @@ odd_side_screw_d = 2.3;                                       //M2 free pass (= 
 odd_side_screws  = [[odd_y_front+24, odd_bottom_z+9.6], [odd_y_front+104, odd_bottom_z+9.6]];
 
 
-// ========================= DVD tray cover ("dvd-tray-cover") =========================
-//Solid funnel-shaped plug glued to the tray face: the same shape as the
-//front's funnel cutout (148.9 x 18 mouth tapering to 130 x 12 over 8 deep,
-//mouth center shifted -0.95 by the asymmetric 10.4/8.5 margins) minus ~0.3
-//clearance per side. The front face sits flush with the skin, leaving only a
-//~0.5 perimeter line, and the cone self-centers the cover as the tray closes.
-//It glues (CA) to the tray face by two pads that dodge the tray's bezel
-//clips: the LEFT pad on the top half, the RIGHT pad on the bottom half.
-//Invisible eject: a recess from behind leaves a 0.6 MEMBRANE in front of the
-//tray's microswitch (measured: 45 from the tray's right edge, at tray
-//mid-height) with a nub in the middle. Pressing there flexes the membrane
-//~0.5 and clicks the switch; the rest of the plug is rigid, so pushing the
-//tray shut does not trigger it. Local coordinates: origin at the mouth
-//center on the front's outer skin; +y inward (toward the tray).
-odd_cover_gap = 9.96;   //outer skin -> tray face; if the cover sits proud or
-                        //sunken, tune HERE.
-odd_switch_c = [64-45, 0]; //microswitch center relative to the tray center
-odd_nub_gap = 0.25;     //how short the nub stops before the pad glue plane.
-                        //Tune on the real part: if it doesn't click, lower to
-                        //0.1; if it self-triggers, raise.
+// ============ DVD tray cover ("dvd-tray-cover", "dvd-eject-button") ============
+//Funnel-shaped plug that replaces the tray's original bezel: the front's slot
+//cutout (dvd_cutout) shrunk by odd_cover_clr per side, so its face sits flush
+//with the skin and the cone self-centers it as the tray closes. Its flat back
+//rests on the tray face.
+//It snaps into the original bezel's clip slots (127 x 13 footprint, centered
+//on the tray) with two 1 thick tabs, each with a barb hooking outward:
+//  left clip:  vertical, 2.5 from the left border, centered
+//  right clip: horizontal, far end 17 from the right border, top face 2.5
+//              below the top border
+//Eject: a separate push button in a hole in front of the tray's eject switch
+//(centered 45 from the right border, at mid-height). It drops in from the
+//back; its flange stops on a pocket step, and the clipped-on cover traps it
+//against the tray. A printed membrane instead is too stiff to press.
+//Local coordinates: origin at the mouth center on the front's outer skin; +y
+//inward (toward the tray).
+odd_cover_gap = 8;      //outer skin -> tray face (= the plug's flat back); tune
+                        //if the cover sits proud or sunken
+odd_cover_clr = 0.3;    //cover -> slot cutout clearance per side
+odd_cover_w = 127; odd_cover_h = 13;  //original bezel footprint on the tray
+odd_switch_c = [odd_cover_w/2-45, 0]; //eject switch center from the tray center
+
+odd_clip_t = 1;         //clip tab thickness
+odd_clip_l = 5;         //clip tab length
+odd_clip_depth = 6;     //reach past the tray face
+odd_clip_barb = 0.6;    //outward hook
+odd_clip_barb_l = 1.4;  //barb ramp length (catch face at depth - this)
+odd_clip_left_x  = -odd_cover_w/2 + 2.5;              //left clip, outer face
+odd_clip_right_x =  odd_cover_w/2 - 17;               //right clip, left end
+odd_clip_right_z =  odd_cover_h/2 - 2.5 - odd_clip_t; //right clip, bottom face
+
+odd_button_w = 13; odd_button_h = 7;  //visible button (= hole in the cover)
+odd_button_clr = 0.2;   //button -> hole clearance per side
+odd_button_flange = 1;  //flange width around the button
+odd_button_flange_t = 1; //pocket step depth for the flange
+odd_button_play = 0.2;  //flange prints one 0.2 layer thinner than its pocket,
+                        //otherwise it binds
+odd_button_travel = 1;  //free room behind the pocket step before the tray face
+odd_plunger_d = 5;      //round plunger, centered on the button
+odd_plunger_gap = -0.1; //plunger tip -> tray face; negative presses slightly
+                        //into the switch. Lower if it doesn't click, raise if
+                        //it self-triggers.
+
+//Cover cross-section at depth d, th deep. Mirrors dvd_cutout: the bezel at
+//the skin tapers linearly to the slot over odd_taper_d, then runs straight.
+odd_taper_d = 8;
+module odd_cover_section(d, th) {
+    k = min(d, odd_taper_d) / odd_taper_d;
+    x0 = -odd_slot_w/2 - odd_bezel_ml*(1-k) + odd_cover_clr;
+    x1 =  odd_slot_w/2 + odd_bezel_mr*(1-k) - odd_cover_clr;
+    h  = odd_bezel_h - (odd_bezel_h - odd_slot_h)*k - 2*odd_cover_clr;
+    translate([x0, d+th, -h/2]) rotate([90,0,0]) flatroundedcube(x1-x0, h, th, 1-0.5*k);
+}
+//Tray face frame: vertical in world = 5 degrees in the front's local frame.
+module odd_tray_frame() { translate([0, odd_cover_gap, 0]) rotate([5,0,0]) children(); }
+//Everything from the tray face plane inward, minus gap.
+module odd_beyond_tray(gap=0) {
+    translate([0, -gap, 0]) odd_tray_frame() translate([-100, 0, -50]) cube([200, 50, 100]);
+}
+//Rounded block centered on the eject switch, from depth d0 to d1.
+module odd_button_block(w, h, d0, d1, r) {
+    translate([odd_switch_c[0]-w/2, d1, odd_switch_c[1]-h/2])
+        rotate([90,0,0]) flatroundedcube(w, h, d1-d0, r);
+}
+//Depth of the pocket step the button flange rests on.
+function odd_button_pocket_d() = odd_cover_gap - odd_button_flange_t - odd_button_travel;
+
+module odd_clips() {
+    d = odd_clip_depth; b = odd_clip_barb; bl = odd_clip_barb_l; t = odd_clip_t;
+    odd_tray_frame() {
+        //left: vertical tab, barb toward -x
+        translate([odd_clip_left_x, -0.5, -odd_clip_l/2]) cube([t, d+0.5, odd_clip_l]);
+        translate([0, 0, -odd_clip_l/2]) linear_extrude(odd_clip_l)
+            polygon([[odd_clip_left_x+0.01, d-bl], [odd_clip_left_x-b, d-bl],
+                     [odd_clip_left_x+0.01, d]]);
+        //right: horizontal tab, barb toward +z
+        translate([odd_clip_right_x, -0.5, odd_clip_right_z]) cube([odd_clip_l, d+0.5, t]);
+        translate([odd_clip_right_x, 0, 0]) rotate([90,0,90]) linear_extrude(odd_clip_l)
+            polygon([[d-bl, odd_clip_right_z+t-0.01], [d-bl, odd_clip_right_z+t+b],
+                     [d, odd_clip_right_z+t-0.01]]);
+    }
+}
+
 module dvd_cover() {
     union() {
         difference() {
             union() {
-                //conical plug: hull between the mouth section (at 0.2 depth,
-                //shrunk by taper + 0.3 clearance) and the rear section
                 hull() {
-                    translate([-0.95-147.8/2, 0.7, -17.2/2])
-                        rotate([90,0,0]) flatroundedcube(147.8, 17.2, 0.5, 1);
-                    translate([-130.6/2, 8, -11.8/2])
-                        rotate([90,0,0]) flatroundedcube(130.6, 11.8, 0.5, 1);
+                    odd_cover_section(0.2, 0.01);
+                    odd_cover_section(odd_taper_d, 0.01);
                 }
-                //glue pads: left on the top half, right on the bottom half
-                translate([-50, 7.8, -1]) cube([14, 3.5, 5]);
-                translate([40, 7.8, -4])  cube([14, 3.5, 5]);
+                odd_cover_section(odd_taper_d, odd_cover_gap - odd_taper_d + 1.5);
             }
-            //membrane recess: leaves 0.6 of skin at the front and crosses
-            //the whole plug body
-            translate([odd_switch_c[0]-9, 0.8, odd_switch_c[1]-3.5]) cube([18, 7.4, 5.5]);
-            //tray face plane (vertical in world = 5 degrees in the front's
-            //local frame): leaves the pad backs flat and flush for gluing
-            translate([0, odd_cover_gap, 0]) rotate([5,0,0])
-                translate([-100, 0, -50]) cube([200, 50, 100]);
+            //button hole and, from the back, the flange pocket
+            odd_button_block(odd_button_w, odd_button_h, -1, odd_cover_gap+2, 1);
+            odd_button_block(odd_button_w+2*odd_button_flange, odd_button_h+2*odd_button_flange,
+                             odd_button_pocket_d(), odd_cover_gap+2, 1);
+            odd_beyond_tray();
         }
-        //eject nub: grows from the membrane and stops odd_nub_gap short of
-        //the pad plane (the switch is flush with the tray face)
+        odd_clips();
+    }
+}
+
+module dvd_eject_button() {
+    c = odd_button_clr; f = odd_button_flange; pd = odd_button_pocket_d();
+    ft = odd_button_flange_t - odd_button_play;
+    union() {
+        //face, flush with the cover's front (0.2 deep)
+        odd_button_block(odd_button_w-2*c, odd_button_h-2*c, 0.2, pd+0.01, 1-c);
+        odd_button_block(odd_button_w+2*f-2*c, odd_button_h+2*f-2*c, pd, pd+ft, 1);
         difference() {
-            translate([odd_switch_c[0]-3, 0.7, odd_switch_c[1]-1.5]) cube([6, 10.5, 3]);
-            translate([0, odd_cover_gap-odd_nub_gap, 0]) rotate([5,0,0])
-                translate([-100, 0, -50]) cube([200, 50, 100]);
+            odd_button_block(odd_plunger_d, odd_plunger_d, pd+ft-0.01, odd_cover_gap+1, odd_plunger_d/2);
+            odd_beyond_tray(odd_plunger_gap);
         }
     }
 }
@@ -525,9 +590,11 @@ if (part == "cutaway") {
     //prints as a 1.1 internal bridge, no support)
     translate([-195, -90, -12.5]) rotate([-90,0,0]) eject_cap();
 } else if (part == "dvd-tray-cover") {
-    //face down: smooth face on the bed, pads and nub up (the membrane is the
-    //recess's first 3 layers, no support)
+    //face down: smooth face on the bed, clips up, no support
     translate([0, 0, -0.2]) rotate([90,0,0]) dvd_cover();
+} else if (part == "dvd-eject-button") {
+    //face down, flange and plunger up, no support
+    translate([-odd_switch_c[0], 0, -0.2]) rotate([90,0,0]) dvd_eject_button();
 } else if (part == "back-lower-left") {
     render() back_lower_left();
 } else if (part == "back-lower-right") {
@@ -1745,7 +1812,8 @@ module dvd_cutout() {
     dvd_slot_inner();
     hull() {
         translate([0,0,4]) dvd_slot_inner();
-        translate([-odd_slot_w/2-10.4, -odd_bezel_h/2, 0]) flatroundedcube(odd_slot_w+18.9, odd_bezel_h, 10, 1);
+        translate([-odd_slot_w/2-odd_bezel_ml, -odd_bezel_h/2, 0])
+            flatroundedcube(odd_slot_w+odd_bezel_ml+odd_bezel_mr, odd_bezel_h, 10, 1);
     }
 }
 

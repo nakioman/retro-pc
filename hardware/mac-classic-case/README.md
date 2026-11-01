@@ -27,7 +27,8 @@ horizontally, and the back pieces additionally split vertically.
   standing on two pedestals screwed to floor bosses. The drives slide in from
   the front and separate guide funnels bridge the gap to the sloped front
   slots. A printed cap replaces the floppy's eject button and a funnel-shaped
-  cover glues to the DVD tray, with an invisible press-to-eject membrane.
+  cover snaps onto the DVD tray with two clips, holding a separate push
+  button in front of the tray's eject switch.
 - **Screen** — a 9.7" iPad 3/4 retina panel rests against the front's inner
   face, clamped by a printed frame that doubles as the structural bridge
   between the two front pieces. The HDMI driver board mounts on the right
@@ -60,7 +61,7 @@ horizontally, and the back pieces additionally split vertically.
 | M2 screws | 4, into the DVD drive's threaded side holes. |
 | M2.5 self-tapping screws | 2–3 for the OSD strip. |
 | #6-32 screws | 4 for the PSU (usually included with it). |
-| Cyanoacrylate glue | Funnels, eject cap, DVD tray cover, speakers, LED, TPU feet, front seam. |
+| Cyanoacrylate glue | Funnels, eject cap, speakers, LED, TPU feet, front seam. |
 | PETG filament | Case parts. |
 | TPU filament | The 4 feet. |
 
@@ -85,7 +86,8 @@ Anycubic Kobra S1 (feet in TPU).
 | `fdd-funnel` / `dvd-funnel` | Front slot guides | Mouth down; supports touching the outside only, so the guiding interior stays clean. |
 | `hdd-cradle` | 2.5" drive carrier with clip | Flat, no supports. |
 | `lcd-frame` | Panel clamp frame | Flat, no supports. |
-| `dvd-tray-cover` | Tray plug with eject membrane | Face down; the membrane prints as the first layers of the recess, no supports. |
+| `dvd-tray-cover` | Tray plug with snap clips and eject button hole | Face down, clips up, no supports. |
+| `dvd-eject-button` | Push button for the tray's eject switch | Face down, flange and plunger up, no supports. |
 | `eject-cap` | Floppy eject button | As rendered; the hook slot prints as an internal bridge. |
 | `tpu-feet` | 4 floor feet | TPU, desk face on the bed. |
 
@@ -110,8 +112,9 @@ hardware in place).
    Slide both drives in from the front and fix them with their side screws
    (sliding slots let you set the depth). Glue the DVD funnel, then the
    floppy funnel, onto the bay mouths by their hug plates. With a diskette
-   inserted, press the eject cap onto the bare eject lever and glue it. Glue
-   the tray cover to the DVD tray by its two pads.
+   inserted, press the eject cap onto the bare eject lever and glue it. Drop
+   the eject button into the tray cover from the back, then snap the cover
+   onto the DVD tray's original bezel clip slots (it traps the button).
 5. **Front shell.** Glue the two front pieces at the seam. Drop the panel
    into the LCD frame's centering pocket and screw the frame to the 6 bosses
    — it clamps the panel and bridges the front seam (the press bar also
@@ -133,8 +136,12 @@ hardware in place).
 | `lcd_w/lcd_h/lcd_th/lcd_bottom_border` | LQ097L1JY01Z | Measure your panel before printing the front. |
 | `hdd_sata_off` / `hdd_sata_from_bottom` | `10` / `true` | Align the cradle window with your drive's SATA block. |
 | `fdd_latch` | FD1231T | Eject lever position; re-measure for another drive. |
-| `odd_cover_gap` | `9.96` | Outer skin to DVD tray face; tune if the cover sits proud or sunken. |
-| `odd_nub_gap` | `0.25` | Eject nub reach; lower if it doesn't click, raise if it self-triggers. |
+| `odd_cover_gap` | `8` | Outer skin to DVD tray face (the cover's flat back); tune if the cover sits proud or sunken. |
+| `odd_cover_clr` | `0.3` | DVD tray cover gap per side in the front's slot; raise if it rubs, lower if it rattles. |
+| `odd_button_clr` | `0.2` | Eject button gap per side in its hole; raise if it sticks. |
+| `odd_plunger_gap` | `-0.1` | Eject button plunger tip to tray face (negative presses into the switch); lower if it doesn't click, raise if it self-triggers. |
+| `odd_button_play` | `0.2` | How much thinner the button flange is than its pocket; raise if the button binds. |
+| `odd_clip_*` | original bezel | Tray cover snap clip positions, reach and barb; tune if it doesn't latch. |
 
 ## License
 
