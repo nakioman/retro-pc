@@ -26,9 +26,9 @@ horizontally, and the back pieces additionally split vertically.
 - **Drives** — a printed cage holds the floppy below and the slim DVD above,
   standing on two pedestals screwed to floor bosses. The drives slide in from
   the front and separate guide funnels bridge the gap to the sloped front
-  slots. A printed cap replaces the floppy's eject button and a funnel-shaped
-  cover snaps onto the DVD tray with two clips, holding a separate push
-  button in front of the tray's eject switch.
+  slots. A snap-in plunger replaces the floppy's eject button and a
+  funnel-shaped cover snaps onto the DVD tray with two clips, holding a
+  separate push button in front of the tray's eject switch.
 - **Screen** — a 9.7" iPad 3/4 retina panel rests against the front's inner
   face, clamped by a printed frame that doubles as the structural bridge
   between the two front pieces. The HDMI driver board mounts on the right
@@ -46,7 +46,7 @@ horizontally, and the back pieces additionally split vertically.
 | --- | --- |
 | micro-ATX motherboard, 244 × 200 | Verified: Biostar H55 HD and MSI PRO H610M-S DDR4 (i3-14100, stock cooler). Check your board's holes against `mobo_hole_on`. |
 | ATX (PS/2) power supply | Default fits up to 140 mm deep (`psu_depth` accepts more). Verified: EVGA 600W. |
-| 3.5" PC floppy drive | Modeled on the NEC FD1231T **with its eject button removed** — the printed cap grips the bare eject lever (`fdd_latch`). |
+| 3.5" PC floppy drive | Modeled on the NEC FD1231T **with its eject button removed** — a printed plunger in the front's eject hole pushes the bare eject lever. |
 | Slim SATA optical drive, 12.7 mm tray-load | Plus a slimline-SATA to SATA adapter cable. |
 | 2.5" drive | HDD or SSD; the cradle takes 7–9.5 mm heights. |
 | 9.7" iPad 3/4 retina panel (2048 × 1536) | Verified: Sharp LQ097L1JY01Z; LG LP097QX1 dimensions are the defaults. Measure `lcd_w/lcd_h/lcd_th/lcd_bottom_border` against your panel. |
@@ -61,7 +61,7 @@ horizontally, and the back pieces additionally split vertically.
 | M2 screws | 4, into the DVD drive's threaded side holes. |
 | M2.5 self-tapping screws | 2–3 for the OSD strip. |
 | #6-32 screws | 4 for the PSU (usually included with it). |
-| Cyanoacrylate glue | Funnels, eject cap, speakers, LED, TPU feet, front seam. |
+| Cyanoacrylate glue | Funnels, speakers, LED, TPU feet, front seam. |
 | PETG filament | Case parts. |
 | TPU filament | The 4 feet. |
 
@@ -88,7 +88,7 @@ Anycubic Kobra S1 (feet in TPU).
 | `lcd-frame` | Panel clamp frame | Flat, no supports. |
 | `dvd-tray-cover` | Tray plug with snap clips and eject button hole | Face down, clips up, no supports. |
 | `dvd-eject-button` | Push button for the tray's eject switch | Face down, flange and plunger up, no supports. |
-| `eject-cap` | Floppy eject button | As rendered; the hook slot prints as an internal bridge. |
+| `eject-plunger` | Floppy eject button | Standing on its front face, leaves up; no supports. |
 | `tpu-feet` | 4 floor feet | TPU, desk face on the bed. |
 
 The `assembly`, `cutaway` and `cage-assembly` values of the `part` variable
@@ -111,10 +111,9 @@ hardware in place).
    base onto the pedestal flanges through the access holes in the DVD shelf.
    Slide both drives in from the front and fix them with their side screws
    (sliding slots let you set the depth). Glue the DVD funnel, then the
-   floppy funnel, onto the bay mouths by their hug plates. With a diskette
-   inserted, press the eject cap onto the bare eject lever and glue it. Drop
-   the eject button into the tray cover from the back, then snap the cover
-   onto the DVD tray's original bezel clip slots (it traps the button).
+   floppy funnel, onto the bay mouths by their hug plates. Drop the eject
+   button into the tray cover from the back, then snap the cover onto the
+   DVD tray's original bezel clip slots (it traps the button).
 5. **Front shell.** Glue the two front pieces at the seam. Drop the panel
    into the LCD frame's centering pocket and screw the frame to the 6 bosses
    — it clamps the panel and bridges the front seam (the press bar also
@@ -123,7 +122,9 @@ hardware in place).
 6. **Close.** Route the PSU harness and USB cable through the left pedestal
    window, connect the panel, seat the front (the retainers center the cage)
    and screw it: 2 countersunk M3 from under the floor into the tabs, then
-   the 6 seam flap screws (2 top, 2 low sides, 2 high sides).
+   the 6 seam flap screws (2 top, 2 low sides, 2 high sides). With the
+   case closed, push the eject plunger into the floppy eject hole from
+   outside, leaves first, until the bumps click behind the wall.
 7. **Feet.** Glue the TPU feet under the floor; the front pair pockets hide
    the floor screw heads.
 
@@ -135,7 +136,10 @@ hardware in place).
 | `psu_depth` | `140` | Deeper PSUs exist (125–180). |
 | `lcd_w/lcd_h/lcd_th/lcd_bottom_border` | LQ097L1JY01Z | Measure your panel before printing the front. |
 | `hdd_sata_off` / `hdd_sata_from_bottom` | `10` / `true` | Align the cradle window with your drive's SATA block. |
-| `fdd_latch` | FD1231T | Eject lever position; re-measure for another drive. |
+| `ejp_hole` / `ejp_wall` | `[9.8, 7.0]` / `5.2` | Effective eject hole (width, height) and wall of the PRINTED front; the plunger is `ejp_hole - 2*ejp_clr`. Paint shrinks the hole. |
+| `ejp_leaf_t` / `ejp_bump_d` | `1.0` / `1.6` | Eject plunger snap: thinner leaves or smaller bumps if it won't go in, larger bumps if it falls out. |
+| `ejp_leaf_root` | `0.5` | Where the leaf slots end; lower (more negative) gives a stiffer snap and a shorter visible slot. |
+| `ejp_tail` | `2.0` | Plunger length behind the wall; raise it if the plunger doesn't reach the eject lever. |
 | `odd_cover_gap` | `8` | Outer skin to DVD tray face (the cover's flat back); tune if the cover sits proud or sunken. |
 | `odd_cover_clr` | `0.3` | DVD tray cover gap per side in the front's slot; raise if it rubs, lower if it rattles. |
 | `odd_button_clr` | `0.2` | Eject button gap per side in its hole; raise if it sticks. |
