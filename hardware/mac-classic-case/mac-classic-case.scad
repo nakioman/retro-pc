@@ -52,7 +52,7 @@ insert_d = 4.0;
 //  front-lower, front-upper, back-lower-left, back-lower-right,
 //  back-upper-left, back-upper-right, drive-cage, cage-pedestals, hdd-cradle,
 //  lcd-frame, dvd-tray-cover, dvd-eject-button, fdd-funnel, dvd-funnel,
-//  eject-cap, tpu-feet
+//  eject-plunger, tpu-feet
 part = "assembly";
 
 show_hardware = false; //ghost motherboard/PSU/drives in the views (preview only)
@@ -94,9 +94,9 @@ mobo_hole_on = [true, true, true, true, true, false, true];
 //guide funnel bridges the difference). Dimensions: NEC FD1231T.
 fdd_w = 101.6; fdd_h = 25.4; fdd_d = 146;
 fdd_y_front = -12;         //front face of the drive. Limit ~-12.5: the eject
-                           //button (~6 mm proud) plus the cap wall must stay
+                           //lever (5 mm proud with a disk in) must stay
                            //>=1 mm off the sloped front's inner face. The
-                           //funnel and eject cap derive from this value.
+                           //funnel derives from this value.
 fdd_slot_cx = 175.7;       //slot center X (129 + 93.4/2)
 fdd_slot_z  = 107.5;       //slot center Z, fixed by the classic front
 fdd_slot_below_top = 8.7;  //FD1231T: disk door axis 8.7 below the drive top
@@ -105,14 +105,8 @@ fdd_top_z = fdd_slot_z + fdd_slot_below_top;
 //[x from the slot's left end, z from the slot axis (negative=down), w, h]
 fdd_eject = [74.8, -13.5, 11, 8];
 //Physical button position on the drive, relative to the disk slot (used by
-//the ghost and the cage channel only; the cap uses fdd_latch)
+//the ghost and the cage channel)
 fdd_button = [74.8, -10.1];
-//This FD1231T has its original button removed: the face keeps a 19.5 wide x
-//8 high x ~5 deep pocket with the bare eject lever inside — a 7 x 1 hook,
-//vertically centered, starting 5 from the pocket's left edge. Flush with the
-//face when empty; protrudes 5 (the eject travel) with a disk in.
-fdd_latch = [73.4, 16];   //[hook left edge from the slot, hook top face from
-                          //the drive top]
 
 // ========================= Slim optical drive (SATA, tray-load) =========================
 //Mounted ABOVE the floppy slot: below it the drive body (126 deep) hits the
@@ -556,6 +550,7 @@ if (part == "cutaway") {
     }
     color("tomato") drive_cage();
     color("red") { fdd_funnel(); odd_funnel(); }
+    color("orange") eject_plunger_in_case();
     color("orange") { cage_pedestal(-1); cage_pedestal(1); }
     color("orange") hdd_cradle();
     //the frame plate rests on the boss tips (they protrude lcd_boss_h-0.5)
@@ -585,10 +580,9 @@ if (part == "cutaway") {
     render() front_lower();
 } else if (part == "front-upper") {
     render() translate([0, 0, -front_split_z]) front_upper(); //resting on the split plane
-} else if (part == "eject-cap") {
-    //standing on the plug's back (chamfer down, plunger up; the hook slot
-    //prints as a 1.1 internal bridge, no support)
-    translate([-195, -90, -12.5]) rotate([-90,0,0]) eject_cap();
+} else if (part == "eject-plunger") {
+    //standing on its front face, leaves up: no supports
+    translate([0, 0, ejp_protrusion]) rotate([180,0,0]) eject_plunger();
 } else if (part == "dvd-tray-cover") {
     //face down: smooth face on the bed, clips up, no support
     translate([0, 0, -0.2]) rotate([90,0,0]) dvd_cover();
@@ -1066,8 +1060,8 @@ module drive_cage() {
 //plus side plates that hug the bay walls from OUTSIDE (0.25 clearance per
 //side): they self-align the piece and cover the cut scar. GLUE (a drop of
 //CA) at the side plates against the bay walls — screws weakened the piece.
-//Install the DVD one FIRST, then the floppy's (the eject cap goes in through
-//its channel last).
+//Install the DVD one FIRST, then the floppy's (the eject plunger snaps in
+//from outside once the front is closed).
 
 //Floppy funnel
 module fdd_funnel() {
@@ -1079,7 +1073,7 @@ module fdd_funnel() {
     bz  = fzb - cage_wall - 2;
     union() {
             //the original cage funnel, cut at y=0. Keeps the eject channel
-            //(the cap enters from the front once mounted)
+            //(room for the eject plunger's tail)
             intersection() {
                 difference() {
                     hull() {
@@ -1237,44 +1231,57 @@ module ghost_hardware() {
 }
 
 
-// ========================= Floppy eject cap =========================
-//This FD1231T is missing its original button (see fdd_latch). The cap FILLS
-//the 19.5x8 pocket: a 19.1x7.6 plug with a chamfered back (to re-enter the
-//pocket when pressed), a slot at the bottom that bites the 7x1 hook (0.1
-//clearance: gentle press fit + a drop of CA, the hook has no tooth) and a
-//plunger exiting through the front hole. Mounted WITH a diskette in (hook
-//out 5): slip on and glue. Drawn in that position, in case coordinates.
-//Pressing travels 5 and the plug enters the pocket (0.5 left at the bottom);
-//the body front stays 1.5 off the sloped front's inner face at its most
-//protruded point.
-module eject_cap() {
-    gx0 = fdd_slot_cx - 93.4/2 + fdd_latch[0];   //hook's left edge
-    gzt = fdd_top_z - fdd_latch[1];              //hook's top face
-    hx0 = gx0 - 5;                               //bottom-left corner of the 19.5x8 pocket
-    hz0 = gzt - 0.5 - 4;                         //(hook centered in the height)
-    difference() {
-        union() {
-            //plug: fills the pocket with 0.2 clearance per side; the back's
-            //last mm chamfered by hull so it re-enters without snagging
-            hull() {
-                translate([hx0+0.2, -19, hz0+0.2]) cube([19.1, 5.5, 7.6]);
-                translate([hx0+1.0, -19, hz0+1.0]) cube([17.5, 6.5, 6.0]);
-            }
-            //plunger through the front hole (11x8 -> 9x5.5 centered in the
-            //hole, with margin because the hole leans 5 degrees; long enough
-            //to protrude as a proper button). The hook sits 5.7 ABOVE the
-            //hole center, so the plunger hangs below the body...
-            translate([fdd_slot_cx-93.4/2+fdd_eject[0]-4.5, -31.4, fdd_slot_z+fdd_eject[1]-2.75])
-                cube([9, 12.5, 5.5]);
-            //...and this chin joins them: fills the plunger->body step in
-            //the front stretch. Ends at y=-17.5: pressed (+5) it stays 0.5
-            //off the drive face, which is solid there (outside the pocket).
-            translate([fdd_slot_cx-93.4/2+fdd_eject[0]-4.5, -19, fdd_slot_z+fdd_eject[1]-2.75])
-                cube([9, 1.5, (hz0+0.7)-(fdd_slot_z+fdd_eject[1]-2.75)]);
+// ========================= Floppy eject plunger =========================
+//This FD1231T is missing its original button. A SOLID rectangular plunger fills
+//the front's eject hole and snaps in FROM OUTSIDE with the case closed. Two
+//horizontal slots, open at the back, split its back part into a full-length
+//center core (which pushes the eject lever) and a top and a bottom leaf spring,
+//each with a bump. Pushing it in bends the leaves into the slots so the bumps
+//pass the hole. Behind the wall they spring back and stop it from coming out.
+//It slides freely inward: with a disk in, the eject lever pushes it out until
+//the bumps hit the wall's inner face, leaving ejp_protrusion proud. Pressing it
+//flush ejects the disk.
+//Drawn in the eject hole's frame: hole axis = z, z=0 at the front's outer
+//face, the wall at z in [-ejp_wall, 0], +z out of the case.
+//Sized from the PRINTED hole, not the model's 11x8 (paint and print shrink
+//closed it up). The plunger section is ejp_hole - 2*ejp_clr. Fit-tested:
+//9.4 x 6.6 plunger.
+ejp_hole       = [9.8, 7.0];  //effective eject hole [width, height]
+ejp_hole_r     = 1.5;   //hole corner radius
+ejp_wall       = 5.2;   //wall thickness at the hole (fp_th by design)
+ejp_clr        = 0.2;   //clearance per side in the hole
+ejp_protrusion = 5;     //proud of the outer face when pushed out (= eject travel)
+ejp_leaf_t     = 1.0;   //leaf thickness: thinner = easier to snap in
+ejp_slot       = 0.8;   //slot under each leaf (room for the leaf to bend)
+ejp_leaf_root  = 0.5;   //where the slots end (z): longer leaves bend easier
+ejp_bump_d     = 1.6;   //bump diameter (protrudes d/2 past the leaf)
+ejp_tail       = 2.0;   //length past the wall's inner face (bump + margin)
+module eject_plunger() {
+    w  = ejp_hole[0] - 2*ejp_clr;
+    h  = ejp_hole[1] - 2*ejp_clr;
+    r  = ejp_hole_r - ejp_clr;
+    z0 = -ejp_wall - ejp_tail;                   //back end
+    z1 = ejp_protrusion;                         //front end
+    zb = -ejp_wall - ejp_clr - ejp_bump_d/2;     //bump centers, just behind the wall
+    assert(ejp_slot >= ejp_bump_d/2 - ejp_clr, "leaves can't bend enough for the bumps to pass");
+    assert(h - 2*(ejp_leaf_t + ejp_slot) >= 2, "core too thin: lower ejp_leaf_t or ejp_slot");
+    union() {
+        difference() {
+            translate([-w/2, -h/2, z0]) flatroundedcube(w, h, z1-z0, r);
+            //the two slots that free the leaves (through the full width)
+            for (sy=[-1,1])
+                translate([-w/2-1, sy > 0 ? h/2-ejp_leaf_t-ejp_slot : -h/2+ejp_leaf_t, z0-1])
+                    cube([w+2, ejp_slot, ejp_leaf_root-z0+1]);
         }
-        //hook slot (7x1 -> 7.3x1.2, open to the back)
-        translate([gx0-0.15, -17.15, gzt-1.1]) cube([7.3, 5.1, 1.2]);
+        //one bump centered on each leaf
+        for (sy=[-1,1]) translate([0, sy*h/2, zb]) sphere(d=ejp_bump_d, $fn=24);
     }
+}
+
+//Eject plunger placed in the case (same transform as the front's eject hole)
+module eject_plunger_in_case() {
+    translate([0, -25.4, 44.5]) rotate([-5,0,0]) translate([129, -5.2, 62.8]) rotate([90,0,0])
+        translate([fdd_eject[0], fdd_eject[1], 0]) eject_plunger();
 }
 
 // ========================= Split geometry =========================

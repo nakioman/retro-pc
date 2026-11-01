@@ -14,7 +14,7 @@ all_parts=(
   front-lower front-upper
   back-lower-left back-lower-right back-upper-left back-upper-right
   drive-cage cage-pedestals fdd-funnel dvd-funnel
-  hdd-cradle lcd-frame dvd-tray-cover dvd-eject-button eject-cap tpu-feet
+  hdd-cradle lcd-frame dvd-tray-cover dvd-eject-button eject-plunger tpu-feet
 )
 
 if [ $# -gt 0 ]; then
