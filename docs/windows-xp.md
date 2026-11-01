@@ -141,7 +141,7 @@ and create its disk as the `retrobox` user:
 - The guest vCPU spins at 100% during 3D: the XP driver polls the device
   instead of waiting for interrupts.
 - CD audio (Redbook) tracks do not play through the emulated IDE drive.
-- The second CD drive (IDE index 3) and the floppy drive start empty; loading
-  images into them (and NFC floppies) comes with later phases.
+- The floppy drive starts empty; loading images into it (and NFC floppies)
+  comes with later phases.
 - Hosting LAN games needs port forwarding or a bridge, which the profile does
   not set up.
