@@ -19,8 +19,8 @@ RetroBox ships no Windows media and no guest drivers. You need:
 
 ## Getting files into the guest
 
-The VM has the physical CD-ROM drive (when the installer detected one), an
-empty floppy drive, and outbound networking. The simplest way to bring the
+The VM has the physical CD-ROM drive (when the installer detected one), the
+NFC floppy drive (see [Floppies](#floppies)), and outbound networking. The simplest way to bring the
 drivers in is a CD-R with both driver folders; discs can be swapped while XP
 runs (see [Known issues](#known-issues)). Once the
 network works you can also download files or copy them from a LAN share
@@ -130,6 +130,15 @@ and create its disk as the `retrobox` user:
 /opt/retrobox/retrobox vm create-disks core2duo
 ```
 
+## Floppies
+
+The A: drive works with NFC floppies exactly as on the 86Box VMs: put a
+tagged floppy in the RetroBox drive and its image from `floppies.yaml` shows
+up in A: (read-only or writable, as the catalog says); take it out and A: is
+empty. A floppy already in the drive when the VM starts is loaded at
+power-on. Untagged floppies (`nfc: false`, for example a fresh upload in the
+web panel) are not mounted until a tag is written for them from the panel.
+
 ## Known issues
 
 - **Disc swaps:** QEMU itself does not notice a disc swapped in the physical
@@ -141,7 +150,5 @@ and create its disk as the `retrobox` user:
 - The guest vCPU spins at 100% during 3D: the XP driver polls the device
   instead of waiting for interrupts.
 - CD audio (Redbook) tracks do not play through the emulated IDE drive.
-- The floppy drive starts empty; loading images into it (and NFC floppies)
-  comes with later phases.
 - Hosting LAN games needs port forwarding or a bridge, which the profile does
   not set up.

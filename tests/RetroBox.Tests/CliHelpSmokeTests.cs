@@ -64,6 +64,23 @@ public sealed class CliHelpSmokeTests
     }
 
     [Fact]
+    public void Daemon_talks_to_the_launcher_qmp_socket_unless_overridden()
+    {
+        var requests = new List<RetroBoxDaemonCommandRequest>();
+        var command = CliCommandFactory.CreateRootCommand(daemonRunner: captured =>
+        {
+            requests.Add(captured);
+            return 0;
+        });
+
+        Assert.Equal(0, command.Parse(["daemon"]).Invoke());
+        Assert.Equal(0, command.Parse(["daemon", "--qmp-socket", "/tmp/qemu-qmp.sock"]).Invoke());
+
+        Assert.Equal(RetroBoxQemuLauncher.DefaultQmpSocketPath, requests[0].QmpSocketPath);
+        Assert.Equal("/tmp/qemu-qmp.sock", requests[1].QmpSocketPath);
+    }
+
+    [Fact]
     public void Daemon_invokes_configured_runner_with_serial_options_and_echo()
     {
         RetroBoxDaemonCommandRequest? request = null;

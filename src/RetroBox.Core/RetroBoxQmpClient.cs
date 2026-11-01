@@ -22,11 +22,18 @@ public sealed class RetroBoxQmpUnavailableException(string message, Exception in
 /// </summary>
 public sealed class RetroBoxQmpClient
 {
-    private readonly Func<CancellationToken, Task<Stream>> streamFactory;
+    public static readonly TimeSpan BusyRetryInterval = TimeSpan.FromMilliseconds(100);
+    public static readonly TimeSpan BusyRetryTimeout = TimeSpan.FromSeconds(2);
 
-    internal RetroBoxQmpClient(Func<CancellationToken, Task<Stream>> streamFactory)
+    private readonly Func<CancellationToken, Task<Stream>> streamFactory;
+    private readonly Func<TimeSpan, CancellationToken, Task> delay = Task.Delay;
+
+    internal RetroBoxQmpClient(
+        Func<CancellationToken, Task<Stream>> streamFactory,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         this.streamFactory = streamFactory;
+        this.delay = delay ?? Task.Delay;
     }
 
     public RetroBoxQmpClient(string socketPath)
@@ -56,16 +63,7 @@ public sealed class RetroBoxQmpClient
     /// <summary>Connects and leaves capabilities negotiation mode, so commands can run.</summary>
     public async Task<RetroBoxQmpConnection> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        Stream stream;
-        try
-        {
-            stream = await streamFactory(cancellationToken);
-        }
-        catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
-        {
-            throw new RetroBoxQmpUnavailableException($"QEMU QMP socket is unavailable: {ex.Message}", ex);
-        }
-
+        var stream = await OpenStreamAsync(cancellationToken);
         var connection = new RetroBoxQmpConnection(stream);
         try
         {
@@ -78,6 +76,33 @@ public sealed class RetroBoxQmpClient
             throw;
         }
     }
+
+    /// <summary>
+    /// While another client holds the monitor QEMU stops accepting, and once its listen backlog
+    /// is full a connect fails with EAGAIN. That client (the CD refresh, or the daemon's floppy
+    /// control) only holds it for a few commands, so a busy socket is retried briefly.
+    /// </summary>
+    private async Task<Stream> OpenStreamAsync(CancellationToken cancellationToken)
+    {
+        for (var waited = TimeSpan.Zero; ; waited += BusyRetryInterval)
+        {
+            try
+            {
+                return await streamFactory(cancellationToken);
+            }
+            catch (SocketException ex) when (IsBusy(ex) && waited < BusyRetryTimeout)
+            {
+                await delay(BusyRetryInterval, cancellationToken);
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
+            {
+                throw new RetroBoxQmpUnavailableException($"QEMU QMP socket is unavailable: {ex.Message}", ex);
+            }
+        }
+    }
+
+    private static bool IsBusy(SocketException ex) =>
+        ex.SocketErrorCode is SocketError.WouldBlock or SocketError.TryAgain;
 }
 
 public sealed class RetroBoxQmpConnection : IAsyncDisposable

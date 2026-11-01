@@ -23,6 +23,7 @@ and maintainers can reconstruct *why* the code works the way it does.
 - [0008-qemu-xorg-gtk-on-the-appliance.md](0008-qemu-xorg-gtk-on-the-appliance.md) — QEMU (vmvga + dxvk-native) with a bare Xorg + GTK for the XP VM.
 - [0009-native-profile-per-engine.md](0009-native-profile-per-engine.md) — per-engine native profile (`86box.cfg` / `qemu.args`) is authoritative; disks declared in `vms.yaml`.
 - [0010-qemu-cdrom-refresh-via-udev.md](0010-qemu-cdrom-refresh-via-udev.md) — QEMU disc changes: udev rule restarts a `retrobox`-owned oneshot that reloads the drive over QMP.
+- [0011-floppy-client-per-live-vm-socket.md](0011-floppy-client-per-live-vm-socket.md) — the daemon routes NFC floppy commands to whichever VM socket answers (86Box or QMP), one short QMP connection per command.
 
 ## Template
 

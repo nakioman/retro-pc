@@ -46,13 +46,25 @@ session:
 NodeMCU/PN532 (USB serial, 115200)
   -> INSERT <id>,<mode> | EJECT | ERROR <msg>
   -> RetroBoxDaemon (RetroBox.Daemon)
-  -> RetroBoxFloppyControlClient (RetroBox.Core)
-  -> 86Box floppy control socket (JSON Lines over Unix socket)
+  -> RetroBoxLiveVmFloppyControlClient (RetroBox.Core): whichever VM answers
+       86box -> RetroBoxFloppyControlClient
+                -> 86Box floppy control socket (JSON Lines over Unix socket)
+       qemu  -> RetroBoxQmpFloppyControlClient
+                -> QEMU QMP socket: blockdev-change-medium / eject / query-block on floppy0
 ```
+
+Both engines behave the same: the tagged floppy's `floppies.yaml` image is
+mounted in A: with its catalog mode (`ro`/`rw`), and removing the floppy
+ejects it. Only one VM runs at a time, so at most one socket answers; the
+router asks the engine that answered last and falls through to the other only
+when its socket is unavailable (ADR 0011). QMP serves one client at a time
+(the CD refresh uses it too), so each QMP floppy command opens its own short
+connection and a busy socket is retried briefly.
 
 When a VM starts, the daemon re-syncs the drive: it asks the firmware for the
 current physical floppy (`STATUS` over serial) and applies it as soon as the
-86Box socket is ready, so swaps made while the VM was off are loaded on power-on.
+VM's socket (86Box's or QMP) answers, so swaps made while the VM was off are
+loaded on power-on.
 
 ## Components
 
@@ -78,6 +90,11 @@ YamlDotNet.
   `.cfg` geometry), and create the missing ones.
 - `RetroBoxFloppyControlClient` / `RetroBoxEchoTransportStream` — client for the
   86Box floppy control socket; echo transport for `--echo`.
+- `RetroBoxQmpFloppyControlClient` — the same `IRetroBoxFloppyControlClient`
+  for QEMU VMs over QMP (`floppy0`), one connection per command.
+- `RetroBoxLiveVmFloppyControlClient` — routes floppy commands to the engine
+  whose socket answers; `RetroBoxFloppyControlUnavailableException` tells
+  "no VM on this socket" apart from a refused command.
 - `RetroBoxFloppyImporter` — moves scratch images into the catalog and updates
   `floppies.yaml`.
 - `RetroBoxArduinoSerialProtocol` — parses `INSERT`/`EJECT`/`ERROR`/`INIT` and
@@ -89,7 +106,9 @@ YamlDotNet.
 - `RetroBoxQmpClient` — QEMU QMP over the launcher's Unix socket
   (greeting, `qmp_capabilities`, commands; events skipped).
   `RetroBoxQemuCdromRefresher` uses it to reload the host drive after a disc
-  change; Phase 5's floppy control reuses it.
+  change, and `RetroBoxQmpFloppyControlClient` for the floppy drive.
+  `ConnectAsync` retries for up to 2 s while another client holds the
+  monitor.
 
 ### src/RetroBox.Cli
 
@@ -102,8 +121,8 @@ accepts injected runners/UIs so tests can drive commands in-process.
 ### src/RetroBox.Daemon
 
 `RetroBoxDaemon` runs the event loop: it opens the serial device
-(`RetroBoxSerialDeviceRunner`), watches the floppy controller, probes for the
-86Box socket (`RetroBoxVmSocketProbe`), and applies floppy events through
+(`RetroBoxSerialDeviceRunner`), watches the floppy controller, probes for a
+running VM's floppy socket (`RetroBoxVmSocketProbe`, over the 86Box socket or QMP), and applies floppy events through
 `RetroBoxFloppyEventHandler`. Since a command reply and a floppy event can
 arrive on the same serial line in either order, `RetroBoxSerialLineRouter`
 splits the two apart; `RetroBoxSerialNfcCommandChannel` sits on top of it to
@@ -170,7 +189,7 @@ See [`appliance/README.md`](../appliance/README.md) and
 | 86Box floppy control socket | `docs/86box-floppy-control-socket-contract.md` | JSON Lines over Unix socket; `floppy.insert/eject/status`. |
 | VM hardware source of truth | `docs/vm-profiles.md` | Each engine's native profile (`86box.cfg`, `qemu.args`) defines hardware; YAML is metadata plus disk declarations. |
 | CD-ROM passthrough | `docs/cdrom-passthrough.md` | 86Box: first active optical slot bound to `ioctl://<device>` at install. QEMU: drive from `hardware.env` on `ide1-cd0`, refreshed over QMP on disc changes (ADR 0010). |
-| QEMU QMP socket | `RetroBoxQmpClient` | `/run/retrobox/qemu-qmp.sock`, owned by `retrobox`; one client at a time. |
+| QEMU QMP socket | `RetroBoxQmpClient` | `/run/retrobox/qemu-qmp.sock`, owned by `retrobox`; one client at a time. Users: the CD refresh (`ide1-cd0`) and the daemon's floppy control (`floppy0`, `retrobox daemon --qmp-socket`). |
 
 ## Data model
 
