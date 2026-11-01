@@ -156,8 +156,8 @@ Vulkan), AC97 audio, an RTL8139 on user-mode NAT, a floppy drive fed by NFC flop
 blank 120 GB qcow2 disk on IDE. SeaBIOS boots the disk first and then the CD,
 so a blank disk falls through to the XP CD in the physical drive (IDE index 2,
 added by the launcher); ESC during the 3-second prompt opens the boot menu.
-IDE index 3 is a second, empty CD drive for ISOs. Installing XP and its
-drivers is covered in [`windows-xp.md`](windows-xp.md).
+The physical drive is the only CD drive. Installing XP and its drivers is
+covered in [`windows-xp.md`](windows-xp.md).
 
 Profile files:
 

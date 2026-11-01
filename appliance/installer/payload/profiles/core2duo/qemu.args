@@ -37,9 +37,6 @@ vmvga,hwcursor=off,gbobjects=off,vgpu=9
 file=hdd.qcow2,if=ide,index=0,media=disk,format=qcow2
 -drive
 if=floppy,index=0
-# Second, empty CD drive for ISOs (the physical drive is index 2).
--drive
-if=ide,index=3,media=cdrom
 
 # AC97 (Realtek driver) and RTL8139 (XP inbox driver). User-mode NAT reaches
 # the LAN and internet but accepts no inbound connections.

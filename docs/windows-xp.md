@@ -19,8 +19,8 @@ RetroBox ships no Windows media and no guest drivers. You need:
 
 ## Getting files into the guest
 
-The VM has the physical CD-ROM drive (when the installer detected one), an
-empty floppy drive, and outbound networking. The simplest way to bring the
+The VM has the physical CD-ROM drive (when the installer detected one), the
+NFC floppy drive (see [Floppies](#floppies)), and outbound networking. The simplest way to bring the
 drivers in is a CD-R with both driver folders; discs can be swapped while XP
 runs (see [Known issues](#known-issues)). Once the
 network works you can also download files or copy them from a LAN share
@@ -150,7 +150,5 @@ web panel) are not mounted until a tag is written for them from the panel.
 - The guest vCPU spins at 100% during 3D: the XP driver polls the device
   instead of waiting for interrupts.
 - CD audio (Redbook) tracks do not play through the emulated IDE drive.
-- The second CD drive (IDE index 3) starts empty; loading ISOs into it is
-  not supported yet.
 - Hosting LAN games needs port forwarding or a bridge, which the profile does
   not set up.
