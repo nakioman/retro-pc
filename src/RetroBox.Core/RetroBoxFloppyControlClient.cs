@@ -33,7 +33,7 @@ public sealed record RetroBoxFloppyStatus(
     bool Busy,
     bool Changed);
 
-public sealed class RetroBoxFloppyControlException : Exception
+public class RetroBoxFloppyControlException : Exception
 {
     public RetroBoxFloppyControlException(string code, string message, string? detailsJson = null)
         : base(message)
@@ -46,6 +46,13 @@ public sealed class RetroBoxFloppyControlException : Exception
 
     public string? DetailsJson { get; }
 }
+
+/// <summary>
+/// No VM answers on this floppy control socket (it is missing, refuses, or dropped the
+/// connection), as opposed to a VM that answered and refused the command.
+/// </summary>
+public sealed class RetroBoxFloppyControlUnavailableException(string message)
+    : RetroBoxFloppyControlException("internal_failure", message);
 
 public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
 {
@@ -169,8 +176,7 @@ public sealed class RetroBoxFloppyControlClient : IRetroBoxFloppyControlClient
         }
         catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
         {
-            throw new RetroBoxFloppyControlException(
-                "internal_failure",
+            throw new RetroBoxFloppyControlUnavailableException(
                 $"86Box floppy control socket is unavailable: {ex.Message}");
         }
     }

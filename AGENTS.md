@@ -113,6 +113,9 @@ Also run `mise run format-check` before finishing any change; CI enforces it.
 - 86Box floppy control socket: JSON Lines over Unix socket
   (`/run/retrobox/86box-floppy.sock`); commands `floppy.insert/eject/status`.
   Contract in `docs/86box-floppy-control-socket-contract.md`.
+- QEMU VMs get the same floppy behaviour over QMP (`/run/retrobox/qemu-qmp.sock`,
+  `floppy0`, one short connection per command); the daemon routes to whichever
+  VM socket answers (`RetroBoxLiveVmFloppyControlClient`, ADR 0011).
 - NFC tags carry raw `<id>,<mode>` bytes (not NDEF) in pages 4–11, 32 bytes max.
 
 ## Documentation map

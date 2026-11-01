@@ -133,4 +133,66 @@ public sealed class RetroBoxQmpClientTests
 
         Assert.Equal("Disconnected", error.ErrorClass);
     }
+
+    [Fact]
+    public async Task ConnectAsync_retries_while_another_client_holds_the_monitor()
+    {
+        var socket = new ScriptedQmpSocket(Greeting, """{"return": {}}""");
+        var attempts = 0;
+        var delays = new List<TimeSpan>();
+        var client = new RetroBoxQmpClient(
+            cancellationToken =>
+            {
+                if (++attempts < 3)
+                {
+                    throw new SocketException((int)SocketError.WouldBlock);
+                }
+
+                return socket.OpenAsync(cancellationToken);
+            },
+            (delay, _) =>
+            {
+                delays.Add(delay);
+                return Task.CompletedTask;
+            });
+
+        await using var connection = await client.ConnectAsync();
+
+        Assert.Equal(3, attempts);
+        Assert.Equal([RetroBoxQmpClient.BusyRetryInterval, RetroBoxQmpClient.BusyRetryInterval], delays);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_gives_up_on_a_busy_monitor_after_the_retry_budget()
+    {
+        var attempts = 0;
+        var client = new RetroBoxQmpClient(
+            _ =>
+            {
+                attempts++;
+                throw new SocketException((int)SocketError.WouldBlock);
+            },
+            (_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<RetroBoxQmpUnavailableException>(() => client.ConnectAsync());
+
+        Assert.Equal((int)(RetroBoxQmpClient.BusyRetryTimeout / RetroBoxQmpClient.BusyRetryInterval) + 1, attempts);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_does_not_retry_a_refused_socket()
+    {
+        var attempts = 0;
+        var client = new RetroBoxQmpClient(
+            _ =>
+            {
+                attempts++;
+                throw new SocketException((int)SocketError.ConnectionRefused);
+            },
+            (_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<RetroBoxQmpUnavailableException>(() => client.ConnectAsync());
+
+        Assert.Equal(1, attempts);
+    }
 }

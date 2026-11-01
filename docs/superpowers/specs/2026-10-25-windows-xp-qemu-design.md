@@ -351,6 +351,28 @@ NFC; CDs are always real discs in the physical drive, never images.
 - The daemon picks the client for whichever socket is live, so the existing
   re-sync-on-VM-start behavior carries over.
 
+**Implemented** (plan: `docs/superpowers/plans/2026-11-01-xp-phase-5-qmp-floppy.md`;
+decision record: ADR 0011):
+
+- `RetroBoxQmpFloppyControlClient` (Core): `blockdev-change-medium` on
+  `floppy0` (raw, `read-only`/`read-write` from the catalog mode), forced
+  `eject`, and `query-block` mapped to `RetroBoxFloppyStatus`. Each command
+  opens its own QMP connection under a 5 s timeout. QMP errors map to the
+  86Box error codes (`missing_image`, `invalid_drive`, `internal_failure`).
+- `RetroBoxLiveVmFloppyControlClient` (Core) routes each command to the
+  engine that answered last and falls through to the other only when its
+  socket is unavailable (`RetroBoxFloppyControlUnavailableException`). The
+  daemon's probe and event handler are unchanged; they go through the
+  router, so re-sync on VM start works for both engines.
+- `RetroBoxQmpClient.ConnectAsync` retries a busy socket (`EAGAIN`, another
+  client holds the monitor) for up to 2 s; the CD refresh benefits too.
+- `retrobox daemon --qmp-socket` (default `/run/retrobox/qemu-qmp.sock`, the
+  launcher's fixed path), so no `config.yaml` key or `daemon.env` variable.
+  `--echo` stays 86Box-only.
+- The QMP commands were checked by hand on the reference box against the
+  running XP VM (XP sees the disk in A:); the daemon end to end is still to
+  validate there.
+
 ### Follow-up (not scheduled)
 
 - Bridged networking / `hostfwd` for hosting LAN games.

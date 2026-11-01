@@ -106,7 +106,7 @@ public sealed class RetroBoxFloppyControlClientTests
         var client = new RetroBoxFloppyControlClient(_ =>
             throw new SocketException((int)SocketError.ConnectionRefused));
 
-        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlUnavailableException>(() => client.StatusAsync(0));
 
         Assert.Equal("internal_failure", error.Code);
         Assert.Contains("unavailable", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -118,7 +118,7 @@ public sealed class RetroBoxFloppyControlClientTests
         var client = new RetroBoxFloppyControlClient(_ =>
             Task.FromResult<Stream>(new FailingWriteStream()));
 
-        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlException>(() => client.StatusAsync(0));
+        var error = await Assert.ThrowsAsync<RetroBoxFloppyControlUnavailableException>(() => client.StatusAsync(0));
 
         Assert.Equal("internal_failure", error.Code);
         Assert.Contains("unavailable", error.Message, StringComparison.OrdinalIgnoreCase);

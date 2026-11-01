@@ -130,6 +130,15 @@ and create its disk as the `retrobox` user:
 /opt/retrobox/retrobox vm create-disks core2duo
 ```
 
+## Floppies
+
+The A: drive works with NFC floppies exactly as on the 86Box VMs: put a
+tagged floppy in the RetroBox drive and its image from `floppies.yaml` shows
+up in A: (read-only or writable, as the catalog says); take it out and A: is
+empty. A floppy already in the drive when the VM starts is loaded at
+power-on. Untagged floppies (`nfc: false`, for example a fresh upload in the
+web panel) are not mounted until a tag is written for them from the panel.
+
 ## Known issues
 
 - **Disc swaps:** QEMU itself does not notice a disc swapped in the physical
@@ -141,7 +150,7 @@ and create its disk as the `retrobox` user:
 - The guest vCPU spins at 100% during 3D: the XP driver polls the device
   instead of waiting for interrupts.
 - CD audio (Redbook) tracks do not play through the emulated IDE drive.
-- The second CD drive (IDE index 3) and the floppy drive start empty; loading
-  images into them (and NFC floppies) comes with later phases.
+- The second CD drive (IDE index 3) starts empty; loading ISOs into it is
+  not supported yet.
 - Hosting LAN games needs port forwarding or a bridge, which the profile does
   not set up.

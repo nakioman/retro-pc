@@ -17,7 +17,8 @@ selection (ADR 0009). Installing and setting up XP is covered in
 - Input: PS/2 keyboard and mouse
 - Storage: IDE (XP has no inbox AHCI driver), hard disk `hdd.qcow2`, 120 GB
   qcow2
-- Floppy: one empty 1.44 MB drive
+- Floppy: one 1.44 MB drive (`floppy0`), loaded from NFC floppies over QMP
+  by the daemon
 - CD-ROM: the host's physical drive on IDE index 2 (secondary master), added
   by the launcher when the installer detected one, plus an empty CD drive on
   index 3 for ISOs

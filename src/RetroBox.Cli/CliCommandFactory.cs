@@ -17,7 +17,8 @@ public sealed record RetroBoxDaemonCommandRequest(
     string? SerialPort,
     int? SerialBaud,
     bool Echo,
-    int WebPort);
+    int WebPort,
+    string QmpSocketPath = RetroBoxQemuLauncher.DefaultQmpSocketPath);
 
 public sealed record RetroBoxBootCommandRequest(
     string ConfigRoot,
@@ -72,6 +73,11 @@ public static class CliCommandFactory
         {
             Description = "86Box floppy control Unix socket path.",
         };
+        var qmpSocketOption = new Option<string>("--qmp-socket")
+        {
+            Description = "QMP socket of a running QEMU VM, for its floppy drive.",
+            DefaultValueFactory = _ => RetroBoxQemuLauncher.DefaultQmpSocketPath,
+        };
         var serialPortOption = new Option<string?>("--serial-port")
         {
             Description = "Floppy controller USB serial port device path.",
@@ -101,6 +107,7 @@ public static class CliCommandFactory
             configRootOption,
             floppyRootOption,
             socketPathOption,
+            qmpSocketOption,
             serialPortOption,
             serialBaudOption,
             echoOption,
@@ -116,7 +123,8 @@ public static class CliCommandFactory
                 parseResult.GetValue(serialPortOption),
                 parseResult.GetValue(serialBaudOption),
                 parseResult.GetValue(echoOption),
-                ResolveWebPort(parseResult.GetValue(webPortOption)));
+                ResolveWebPort(parseResult.GetValue(webPortOption)),
+                parseResult.GetValue(qmpSocketOption) ?? RetroBoxQemuLauncher.DefaultQmpSocketPath);
 
             if (daemonRunner is not null)
             {
@@ -158,9 +166,12 @@ public static class CliCommandFactory
                     catalogSource.Current.Config.SerialPort,
                     catalogSource.Current.Config.SerialBaud);
 
+                // Only one VM runs at a time; floppy commands go to whichever engine answers.
                 IRetroBoxFloppyControlClient client = request.Echo
                     ? RetroBoxFloppyControlClient.CreateEcho(Console.Out)
-                    : new RetroBoxFloppyControlClient(socketPath);
+                    : new RetroBoxLiveVmFloppyControlClient(
+                        new RetroBoxFloppyControlClient(socketPath),
+                        new RetroBoxQmpFloppyControlClient(new RetroBoxQmpClient(request.QmpSocketPath)));
 
                 using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 Console.CancelKeyPress += (_, e) =>

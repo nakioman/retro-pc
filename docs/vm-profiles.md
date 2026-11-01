@@ -152,7 +152,7 @@ Path: `profiles/core2duo`
 This is the Windows XP VM profile, the only QEMU one: an i440FX PC under KVM
 with a `core2duo` CPU model, 2 vCPUs, 3 GB RAM, VMware SVGA II video with
 Direct3D (`vmvga,hwcursor=off,gbobjects=off,vgpu=9`, rendered by dxvk-native on
-Vulkan), AC97 audio, an RTL8139 on user-mode NAT, an empty floppy drive, and a
+Vulkan), AC97 audio, an RTL8139 on user-mode NAT, a floppy drive fed by NFC floppies (over QMP), and a
 blank 120 GB qcow2 disk on IDE. SeaBIOS boots the disk first and then the CD,
 so a blank disk falls through to the XP CD in the physical drive (IDE index 2,
 added by the launcher); ESC during the 3-second prompt opens the boot menu.

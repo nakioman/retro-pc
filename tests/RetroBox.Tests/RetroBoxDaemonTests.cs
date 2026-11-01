@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
 using RetroBox.Core;
@@ -241,6 +242,53 @@ public sealed class RetroBoxDaemonTests
         Assert.Equal("STATUS\n", serialOutput.ToString());
         Assert.Equal("insert:0:/data/floppies/disk1.img:True", Assert.Single(client.Calls));
     }
+
+    [Fact]
+    public async Task RunAsync_inserts_into_a_running_qemu_vm_over_qmp()
+    {
+        var qmp = new ScriptedQmpSocket(QmpGreeting, QmpOk, QmpOk, QmpEmptyFloppy);
+        var client = new RetroBoxLiveVmFloppyControlClient(
+            new RetroBoxFloppyControlClient(_ => throw new SocketException((int)SocketError.ConnectionRefused)),
+            new RetroBoxQmpFloppyControlClient(new RetroBoxQmpClient(qmp.OpenAsync)));
+        var output = new StringWriter();
+        var daemon = new RetroBoxDaemon(
+            CreateCatalog("disk1", "/data/floppies/disk1.img", RetroBoxFloppyCatalogRules.ReadWriteMode),
+            client,
+            new StringReader("INSERT disk1,rw\n"),
+            output);
+
+        var exitCode = await daemon.RunAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Inserted floppy 'disk1' into drive 0.", output.ToString(), StringComparison.Ordinal);
+        var arguments = qmp.Requests[1].GetProperty("arguments");
+        Assert.Equal("floppy0", arguments.GetProperty("device").GetString());
+        Assert.Equal("/data/floppies/disk1.img", arguments.GetProperty("filename").GetString());
+        Assert.Equal("read-write", arguments.GetProperty("read-only-mode").GetString());
+    }
+
+    [Fact]
+    public async Task WatchSocketAsync_resyncs_the_drive_when_a_qemu_vm_starts()
+    {
+        var client = new RetroBoxLiveVmFloppyControlClient(
+            new RetroBoxFloppyControlClient(_ => throw new SocketException((int)SocketError.ConnectionRefused)),
+            new RetroBoxQmpFloppyControlClient(new RetroBoxQmpClient(
+                ct => new ScriptedQmpSocket(QmpGreeting, QmpOk, QmpEmptyFloppy).OpenAsync(ct))));
+        using var cancellation = new CancellationTokenSource();
+        var channel = new StubNfcCommandChannel { OnSendStatus = cancellation.Cancel };
+
+        await RetroBoxDaemon.WatchSocketAsync(
+            new RetroBoxFloppyControlSocketProbe(client),
+            channel,
+            TimeSpan.FromMilliseconds(1),
+            cancellation.Token);
+
+        Assert.Equal(["STATUS"], channel.Calls);
+    }
+
+    private const string QmpGreeting = """{"QMP": {"version": {"qemu": {"micro": 1, "minor": 1, "major": 11}, "package": ""}, "capabilities": []}}""";
+    private const string QmpOk = """{"return": {}}""";
+    private const string QmpEmptyFloppy = """{"return": [{"device": "floppy0", "locked": false, "removable": true, "type": "unknown"}]}""";
 
     [Fact]
     public async Task RunAsync_without_serial_output_does_not_query_socket()

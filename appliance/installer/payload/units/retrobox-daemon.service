@@ -23,7 +23,8 @@ Environment=WEB_PORT=80
 EnvironmentFile=/etc/retrobox/daemon.env
 # The daemon runs even with no floppy controller attached, serving the web panel
 # on WEB_PORT. It opens the serial device itself (--serial-port/--serial-baud),
-# drives the 86Box floppy control socket, and hosts the LAN floppy panel.
+# drives the running VM's floppy drive (86Box floppy control socket or QEMU QMP),
+# and hosts the LAN floppy panel.
 ExecStart=/opt/retrobox/retrobox daemon --serial-port "$SERIAL_DEVICE" --serial-baud "$SERIAL_BAUD" --floppy-control-socket "$FLOPPY_CONTROL_SOCKET" --web-port "$WEB_PORT"
 Restart=on-failure
 RestartSec=2
