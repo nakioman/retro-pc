@@ -5,7 +5,7 @@ VM. The 86Box configuration is the source of truth for hardware selection.
 
 ## Hardware
 
-- Machine: `8500tuc`
+- Machine: `p54tp4xe` (ASUS P/I-P55TP4XE, Intel 430FX)
 - CPU: `pentium_p54c`, 100 MHz (1.5x multiplier), dynarec enabled
 - RAM: 8 MB
 - Video: Trident TGUI9440AGi PCI, 1 MB
